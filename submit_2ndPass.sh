@@ -18,8 +18,8 @@ FQ1=$FQDIR/${SAMPLE}_1.fastq.gz
 FQ2=$FQDIR/${SAMPLE}_2.fastq.gz
 
 INDEX=./star_index
-SJDB=$( find ./pass_1st -name "*SJ*" | grep -f ./samples.txt)
-OUT=./pass_2nd/${SAMPLE}
+SJDB=$( find ./output/pass_1st -name "*SJ*" | grep -f ./samples.txt)
+OUT=./output/pass_2nd/${SAMPLE}
 
 STAR --runMode alignReads \
     --runThreadN $PBS_NUM_PPN \

@@ -18,7 +18,7 @@ FQ1=$FQDIR/${SAMPLE}_1.fastq.gz
 FQ2=$FQDIR/${SAMPLE}_2.fastq.gz
 
 INDEX=./star_index
-OUT=./pass_1st/${SAMPLE}
+OUT=./output/pass_1st/${SAMPLE}
 
 STAR --runMode alignReads \
     --runThreadN $PBS_NUM_PPN \
