@@ -4,7 +4,7 @@
 #PBS -l mem=64gb
 #PBS -l walltime=24:00:00
 #PBS -q short
-#PBS -t 1-2
+#PBS -t 1
 #PBS -N GATK
 #PBS -j oe
 #PBS -o log/$PBS_JOBNAME
@@ -53,6 +53,12 @@ if [[ ! -f "$GENOME".dict ]]; then
     $GATK CreateSequenceDictionary -R $GENOME
 fi
 
+
+$GATK --java-options "-Xmx8g" SplitNCigarReads \
+    -R $GENOME \
+    -I $OUT2 \
+    -O $OUT3
+
 # The following options cannot be used with latest GATK
 # However, 255->60 quality transformer seems to be on by default
 #
@@ -61,28 +67,30 @@ fi
 #-RMQT 60 \
 #-U ALLOW_N_CIGAR_READS
 
-$GATK --java-options "-Xmx8g" SplitNCigarReads \
-    -R $GENOME \
-    -I $OUT2 \
-    -O $OUT3
-
 # Base Recalibration
 
-# I could not run this step because
-# need to decide what to use as "knownSites"
+# To check:
+# the knownSites files downloaded from GATK
+# have contig IDs that are different from the index
 
 $GATK --java-options "-Xmx8g" BaseRecalibrator \
-    -I $OUT3 \
     -R $GENOME \
-    -knownSites /humgen/gsa-hpprojects/GATK/bundle/current/hg19/dbsnp_138.hg19.vcf \
-    -knownSites /humgen/gsa-hpprojects/GATK/bundle/current/hg19/1000G_phase1.snps.high_confidence.hg19.vcf \
-    -knownSites /humgen/gsa-hpprojects/GATK/bundle/current/hg19/Mills_and_1000G_gold_standard.indels.hg19.vcf \
-    -o recal_data.table \
-    -nct 4
+    -I $OUT3 \
+    --known-sites ./data/Homo_sapiens_assembly38.dbsnp138.vcf \
+    --known-sites ./data/1000G_phase1.snps.high_confidence.hg38.vcf \
+    --known-sites ./data/Mills_and_1000G_gold_standard.indels.hg38.vcf \
+    -O ./output/gatk/${SAMPLE}_recal_data.table
 
-$GATK --java-options "-Xmx64g" PrintReads \
-    -I $OUT3 \
+# There is no -nct option in GATK4
+#-nct 4
+# Alternative would be to use SPARK,
+# but I couldn't make it work
+
+# Next: ApplyBQSR replaces PrintReads in GATK4
+
+$GATK --java-options "-Xmx64g" ApplyBQSR \
     -R $GENOME \
-    -BQSR recal_data.table \
-    -o split-BQSR.bam \
-    -nct 4
+    -I $OUT3 \
+    --bqsr-recal-file ./output/gatk/${SAMPLE}_recal_data.table \
+    -O ./output/gatk/${SAMPLE}_split_BQSR.bam
+
