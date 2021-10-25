@@ -1,26 +1,32 @@
 #!/usr/bin/env bash
 
-#PBS -l nodes=1:ppn=16
-#PBS -l mem=64gb
-#PBS -l walltime=24:00:00
-#PBS -q short
-#PBS -t 1
-#PBS -N GATK
-#PBS -j oe
-#PBS -o log/$PBS_JOBNAME
+#SBATCH -N 1
+#SBATCH -c 4
+#SBATCH --mem=64gb
+#SBATCH --time=24:00:00
+#SBATCH -p bch-compute
+#SBATCH --array=1
+#SBATCH --job-name=GATK
+#SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
+#SBATCH --mail-type=END,FAIL
+#SBATCH -o /home/ch229163/ase/log/GATK.%A.%a.out
 
-cd $PBS_O_WORKDIR
+source /programs/biogrids.shrc
+export PICARD_X=2.18.14
 
-SAMPLE=$( awk -v ARRID="$PBS_ARRAYID" 'FNR==ARRID { print $1 }' ./samples.txt )
 
-BAM=./output/pass_2nd/${SAMPLE}_Aligned.out.bam
-OUT=./output/gatk/${SAMPLE}_rg_added_sorted.bam 
+SAMPLELIST=/home/ch229163/ase/samples.txt
+SAMPLE=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $SAMPLELIST )
+
+LABSHARE=/lab-share/IM-Gutierrez-e2/Public/vitor
+BAM=$LABSHARE/pass_2nd/${SAMPLE}_Aligned.out.bam
+OUTDIR=$LABSHARE/gatk
+OUT=$OUTDIR/${SAMPLE}_rg_added_sorted.bam 
 
 PICARD=/home/vitor/Libraries/picard.jar
 GATK=/home/vitor/Libraries/gatk-4.2.2.0/gatk
 
-# Add read groups, sort, mark duplicates, and create index
-
+# Add a single read group to all reads in a file
 java -Xmx8g -jar $PICARD AddOrReplaceReadGroups \
     -I $BAM \
     -O $OUT \
