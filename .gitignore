@@ -3,3 +3,5 @@ bcell_samples.txt
 data
 indices
 log
+*gz
+*gz.tbi
