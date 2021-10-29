@@ -5,3 +5,4 @@ indices
 log
 *gz
 *gz.tbi
+*.tsv
