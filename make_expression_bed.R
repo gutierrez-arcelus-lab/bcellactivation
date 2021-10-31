@@ -1,61 +1,97 @@
 library(tidyverse)
 
+# Gencode annotations
 annotations <- 
-    "./data/gencode.v38.primary_assembly.annotation.gtf.gz" %>% 
+    "./data/gencode.v38.primary_assembly.annotation.gtf" %>% 
     read_tsv(comment = "#", col_names = FALSE, col_types = "c-cii-c-c")
 
-# make gene annotations as well to join with gene_bed at the end
+# Gene annotations
+gene_annot <- annotations %>%
+    filter(X2 == "gene") %>%
+    mutate(gene_id = str_extract(X6, "(?<=gene_id\\s\")[^\"]+"),
+	   gene_type = str_extract(X6, "(?<=gene_type\\s\")[^\"]+")) %>%
+    select(chr = X1, start = X3, end = X4, strand = X5, gene_id, gene_type)
 
 
+# Transcript annotations
 transcript_annot <- annotations %>%
     filter(X2 == "transcript") %>%
-    transmute(chr = X1,
-	      gene_id = str_extract(X6, "(?<=gene_id\\s\")[^\"]+"),
-	      transcript_id = str_extract(X6, "(?<=transcript_id\\s\")[^\"]+"),
-	      transcript_biotype = str_extract(X6, "(?<=transcript_type\\s\")[^\"]+"),
-	      start = X3, end = X4, strand = X5)
+    mutate(gene_id = str_extract(X6, "(?<=gene_id\\s\")[^\"]+"),
+	   transcript_id = str_extract(X6, "(?<=transcript_id\\s\")[^\"]+"),
+	   transcript_type = str_extract(X6, "(?<=transcript_type\\s\")[^\"]+")) %>%
+    select(chr = X1, start = X3, end = X4, strand = X5, 
+	   gene_id, transcript_id, transcript_type)
 
+# Sample annotations
 sample_info <- 
     tibble(sample_id = list.files("./bcell_quant")) %>%
     mutate(condition_id = gsub("^[^_]+_([^_]+)_([^_]+).*$", "\\1_\\2", sample_id))
 
+# Expression estimates
 quant_df <- 
     file.path("./bcell_quant", sample_info$sample_id, "quant.sf") %>% 
     setNames(sample_info$condition_id) %>%
     map_df(read_tsv, .id = "condition_id") %>%
     left_join(sample_info, by = "condition_id") %>%
-    select(condition_id, transcript_id = Name, tpm = TPM)
+    select(condition_id, transcript_id = Name, counts = NumReads, tpm = TPM)
 
+# Join annotations, compute CPM
 quant_annot_df <- quant_df %>%
+    group_by(condition_id) %>%
+    mutate(cpm = counts/sum(counts) * 1e6) %>%
+    ungroup() %>%
     left_join(transcript_annot) %>%
-    select(condition_id, transcript_id, transcript_biotype, gene_id, tpm)
+    select(condition_id, transcript_id, transcript_type, gene_id, cpm, tpm)
 
-quant_annot_df %>%
-    filter(is.na(gene_id))
-
+# Gene-level estimates
 gene_df <- quant_annot_df %>%
     group_by(condition_id, gene_id) %>%
-    summarise(tpm = sum(tpm)) %>%
+    summarise(cpm = sum(cpm),
+	      tpm = sum(tpm)) %>%
     ungroup()
 
+# Select expressed genes
 expressed_genes_df <- gene_df %>%
     group_by(gene_id) %>%
-    filter(any(tpm > 0)) %>%
+    filter(any(tpm > 10)) %>%
     ungroup()
 
+expressed_genes_df %>%
+    distinct(gene_id)
+
+# or:
 #expressed_genes <- gene_df %>%
 #    group_by(gene_id) %>%
 #    filter(mean(tpm>1) >= 0.5) %>%
 #    ungroup()
 #
+
+# Log Fold change
+logfc_df <- expressed_genes_df %>%
+    select(-tpm) %>%
+    pivot_wider(names_from = condition_id, values_from = cpm) %>%
+    pivot_longer(-(1:2), names_to = "condition_id", values_to = "cpm") %>%
+    select(gene_id, resting = 2, condition_id, cpm) %>%
+    mutate(cpm = cpm + 1e-23,
+	   log2fc = log2(cpm/resting)) %>%
+    left_join(gene_annot, by = "gene_id") %>%
+    select(gene_id, gene_type, condition_id, cpm, log2fc)
+
+
+# BED file of gene quantifications
 gene_bed <- gene_df %>%
+    select(-cpm) %>%
     pivot_wider(names_from = condition_id, values_from = tpm) %>%
-    left_join(transcript_annot, by = "gene_id") %>%
+    left_join(gene_annot, by = "gene_id") %>%
     mutate(gid = gene_id) %>%
     select(`#chr` = chr, start, end, id = gene_id, gid, strd = strand, 
 	   contains("hr_")) %>%
     arrange(`#chr`, start)
 
-write_tsv(quant_annot_df, "./transcript_quants.tsv")
-write_tsv(gene_bed, "./phenotypes.bed")
-system("bgzip phenotypes.bed && tabix -p bed phenotypes.bed.gz")
+# Write output files
+write_tsv(quant_annot_df, "./data/transcript_quants.tsv")
+write_tsv(gene_df, "./data/gene_quants.tsv")
+write_tsv(logfc_df, "./data/logfc.tsv")
+
+write_tsv(gene_bed, "./data/phenotypes.bed")
+system("bgzip ./data/phenotypes.bed && tabix -p bed ./data/phenotypes.bed.gz")
