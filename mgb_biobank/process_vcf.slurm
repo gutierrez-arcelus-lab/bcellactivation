@@ -2,10 +2,10 @@
 
 #SBATCH -N 1
 #SBATCH -c 1
-#SBATCH --mem=16gb
+#SBATCH --mem=12gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
-#SBATCH --array=1-20
+#SBATCH --array=1-22
 #SBATCH --job-name=vcf_process
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
@@ -19,10 +19,10 @@ export BCFTOOLS_X=1.12
 export R_X=4.1
 
 # Specify input data
-CHR=$SLURM_ARRAY_TASK_ID
 LABSHARE=/lab-share/IM-Gutierrez-e2/Public
 MGB=$LABSHARE/mgb_biobank/0401/vcf
 
+CHR=$SLURM_ARRAY_TASK_ID
 VCF=$MGB/chr${CHR}.dose.vcf.gz
 VCFOUT=$TEMP_WORK/chr${CHR}.filtered.vcf.gz
 VARS=$TEMP_WORK/chr${CHR}.variants.txt.gz
