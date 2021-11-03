@@ -2,7 +2,7 @@
 
 #SBATCH -N 1
 #SBATCH -c 1
-#SBATCH --mem=12gb
+#SBATCH --mem=8gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
 #SBATCH --array=1-22
@@ -21,11 +21,12 @@ export R_X=4.1
 # Specify input data
 LABSHARE=/lab-share/IM-Gutierrez-e2/Public
 MGB=$LABSHARE/mgb_biobank/0401/vcf
+OUTDIR=$TEMP_WORK/VCF
 
 CHR=$SLURM_ARRAY_TASK_ID
 VCF=$MGB/chr${CHR}.dose.vcf.gz
-VCFOUT=$TEMP_WORK/chr${CHR}.filtered.vcf.gz
-VARS=$TEMP_WORK/chr${CHR}.variants.txt.gz
+VCFOUT=$OUTDIR/chr${CHR}.filtered.vcf.gz
+VARS=$OUTDIR/chr${CHR}.variants.txt.gz
 
 # Select biallelic SNPs only, with MAF >= 1%;
 # remove variants with any missing genotypes;
@@ -44,10 +45,10 @@ zcat $VCFOUT |\
     bgzip -c > $VARS
 
 # Filter 1000G
-DIRKG=/reference_databases/1000G_VCF/GRCh38/Genotype_VCFs
-VCFKG=$DIRKG/20201028_CCDG_14151_B01_GRM_WGS_2020-08-05_chr${CHR}.recalibrated_variants.vcf.gz
-VCFKGOUT=$TEMP_WORK/chr${CHR}.1000G.filtered.vcf.gz
-VARSKG=$TEMP_WORK/chr${CHR}.1000G.variants.txt.gz
+DIRKG=$LABSHARE/vitor/vcf_1000G
+VCFKG=$DIRKG/ALL.chr${CHR}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
+VCFKGOUT=$OUTDIR/chr${CHR}.1000G.filtered.vcf.gz
+VARSKG=$OUTDIR/chr${CHR}.1000G.variants.txt.gz
 
 bcftools view --genotype ^miss --types snps -m2 -M2 $VCFKG |\
     bcftools view --min-af 0.01:minor - |\
@@ -61,14 +62,24 @@ zcat $VCFKGOUT |\
     bgzip -c > $VARSKG
 
 # Match variants with those in 1000 Genomes data
-Rscript $HOME/ase/mgb_biobank/match_snps.R $CHR
+POSFILE=$OUTDIR/chr${CHR}.filtered.pos
+Rscript $HOME/ase/mgb_biobank/match_snps.R $VARS $VARSKG $POSFILE
 
 # Filter MGB and 1000G VCFs for the same set of variants
-VCFOUT2=$TEMP_WORK/chr${CHR}.filtered.v2.vcf.gz
-VCFKGOUT2=$TEMP_WORK/chr${CHR}.1000G.filtered.v2.vcf.gz
+# and merge files
+VCFOUT2=$OUTDIR/chr${CHR}.filtered.v2.vcf.gz
+VCFKGOUT2=$OUTDIR/chr${CHR}.1000G.filtered.v2.vcf.gz
+VCFMERGED=$OUTDIR/chr${CHR}.merged.vcf.gz
 
-bcftools view -R $TEMP_WORK/chr${CHR}.filtered.pos $VCFOUT -O z -o $VCFOUT2 
-bcftools view -R $TEMP_WORK/chr${CHR}.filtered.pos $VCFKGOUT -O z -o $VCFKGOUT2
+tabix -p vcf $VCFOUT
+tabix -p vcf $VCFKGOUT
+bcftools view -R $POSFILE $VCFOUT -O z -o $VCFOUT2 
+bcftools view -R $POSFILE $VCFKGOUT -O z -o $VCFKGOUT2
 
-#GDS=$TEMP_WORK/chr${CHR}.gds
-#Rscript $HOME/ase/mgb_biobank/prune_vcf.R $VCF $GDS
+tabix -p vcf $VCFOUT2
+tabix -p vcf $VCFKGOUT2
+bcftools merge $VCFOUT2 $VCFKGOUT2 |\
+    bcftools annotate -x 'INFO' - -O z -o $VCFMERGED
+
+GDS=$OUTDIR/chr${CHR}.gds
+Rscript $HOME/ase/mgb_biobank/prune_vcf.R $VCFMERGED $GDS

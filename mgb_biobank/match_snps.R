@@ -1,6 +1,8 @@
 library(tidyverse)
 
-CHR <- commandArgs(TRUE)[1]
+vars_path <- commandArgs(TRUE)[1]
+vars_1kg_path <- commandArgs(TRUE)[2]
+out_path <- commandArgs(TRUE)[3] 
 
 read_variants <- function(var_path) {
 
@@ -15,11 +17,9 @@ read_variants <- function(var_path) {
 	       !(REF == "G" & ALT == "C"))
 }
 
-vars_df <- sprintf("/temp_work/ch229163/chr%s.variants.txt.gz", CHR) %>%
-    read_variants()
+vars_df <- read_variants(vars_path)
 
-vars_1000G <- sprintf("/temp_work/ch229163/chr%s.1000G.variants.txt.gz", CHR) %>%
-    read_variants()
+vars_1000G <- read_variants(vars_1kg_path)
 
 merge_df <- inner_join(vars_df, vars_1000G, by = c("CHROM", "POS", "REF", "ALT"))
 
@@ -27,6 +27,4 @@ out <- merge_df %>%
     select(1:2) %>%
     arrange(POS)
 
-write_tsv(out, 
-	  sprintf("/temp_work/ch229163/chr%s.filtered.pos", CHR),
-	  col_names = FALSE)
+write_tsv(out, out_path, col_names = FALSE)
