@@ -59,9 +59,21 @@ logfc <- read_tsv("./data/logfc.tsv") %>%
 
 ggplot(logfc, aes(cpm, log2fc)) +
     geom_point(alpha = .1, size = .5) +
-    facet_wrap(~condition_id, scales = "free", ncol = 1) +
+    facet_wrap(~condition_id, scales = "free", ncol = 2) +
     theme_bw() +
     theme(panel.grid = element_blank()) 
+
+ggsave("./plots/fc.png")
+
+ggplot(logfc, aes(cpm, log2fc)) +
+    geom_point(alpha = .1, size = .5) +
+    facet_wrap(~condition_id, scales = "free", ncol = 2) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    coord_cartesian(xlim = c(0, 200), ylim = c(-6, 6))
+
+ggsave("./plots/fc_subset.png")
+
 
 #PCA
 
@@ -77,8 +89,9 @@ ggplot(pca, aes(PC1, PC2, color = condition_id)) +
     scale_color_viridis_d() +
     theme_bw()
 
-# Correlations between conditions
+ggsave("./plots/pca_bcell_expression.png")
 
+# Correlations between conditions
 genes_df <- read_tsv("./phenotypes.bed.gz") %>%
     select(gene_id = gid, contains("hr_")) %>%
     pivot_longer(-(1:2), names_to = "condition_id", values_to = "tpm") %>%

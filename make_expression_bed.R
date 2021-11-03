@@ -3,14 +3,16 @@ library(tidyverse)
 # Gencode annotations
 annotations <- 
     "./data/gencode.v38.primary_assembly.annotation.gtf" %>% 
-    read_tsv(comment = "#", col_names = FALSE, col_types = "c-cii-c-c")
+    read_tsv(comment = "#", col_names = FALSE, col_types = "c-cii-c-c") %>%
+    mutate(X6 = trimws(annotations$X6))
 
 # Gene annotations
 gene_annot <- annotations %>%
     filter(X2 == "gene") %>%
     mutate(gene_id = str_extract(X6, "(?<=gene_id\\s\")[^\"]+"),
+	   gene_name = str_extract(X6, "(?<=gene_name\\s\")[^\"]+"),
 	   gene_type = str_extract(X6, "(?<=gene_type\\s\")[^\"]+")) %>%
-    select(chr = X1, start = X3, end = X4, strand = X5, gene_id, gene_type)
+    select(chr = X1, start = X3, end = X4, strand = X5, gene_id, gene_name, gene_type)
 
 
 # Transcript annotations
@@ -21,6 +23,10 @@ transcript_annot <- annotations %>%
 	   transcript_type = str_extract(X6, "(?<=transcript_type\\s\")[^\"]+")) %>%
     select(chr = X1, start = X3, end = X4, strand = X5, 
 	   gene_id, transcript_id, transcript_type)
+
+select(transcript_annot, target_id = transcript_id, gene_id) %>%
+    left_join(select(gene_annot, gene_id, gene_name, gene_type), by = "gene_id") %>%
+    write_tsv("./data/transc_to_gene.tsv")
 
 # Sample annotations
 sample_info <- 

@@ -1,0 +1,62 @@
+---
+title: "README"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+## B-Cells: Bulk RNA-seq
+
+### Input data:
+
+- 1 individual, 4 timepoints:
+  - Resting for 16 hours
+  - IgG stim for 24 hours
+  - IgG stim for 72 hours
+  - RSQ stim for 24 hours
+  - RSQ stim for 72 hours
+  
+Fastq files located on directory:
+/lab-share/IM-Gutierrez-e2/Public/B_cells/bulkTCpilot_1/34.198.31.178/210618_MG8989_fastq
+
+### Methods
+
+- Expression levels were estimated with Salmon (script `./salmon_quant.slurm`)
+
+
+### Results
+
+#### Overview of expression levels
+
+```{r biotypes, echo=FALSE}
+include_graphics("./plots/transcript_biotypes.png")
+```
+
+#### PCA of expression levels
+
+```{r pca, echo=FALSE}
+include_graphics("./plots/pca_bcell_expression.png")
+```
+
+#### Fold change in comparison with "resting"
+
+```{r fc, echo=FALSE}
+include_graphics("./plots/fc.png")
+```
+
+#### Subset of the plot above:
+
+```{r fcsub, echo=FALSE}
+include_graphics("./plots/fc_subset.png")
+```
+
+### TO DO:
+
+- Run kallisto + sleuth once we have more samples, and call significant genes
+
+
+
+## MGB Biobank analysis
