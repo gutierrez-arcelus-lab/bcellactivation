@@ -44,3 +44,22 @@ Fastq files located on directory:
     significant genes
 
 ## MGB Biobank analysis
+
+### Input data
+
+-   4921 individuals;
+-   \~79M variants.
+
+### Methods
+
+-   VCF processing:
+    -   remove variants with any missing genotypes;
+    -   select only biallelic SNPs with MAF &gt;= 0.1;
+    -   remove variants with pvalue &lt; 0.05/79M for HWE test
+-   1000 Genomes data:
+    -   low coverage and exome data realigned to GRCh38 (not NYGC
+        version);
+    -   same processing as above, except that I did not remove variants
+        failing HWE.
+
+### PCA
