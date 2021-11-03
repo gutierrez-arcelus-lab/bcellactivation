@@ -28,7 +28,7 @@ Fastq files located on directory:
 
 #### PCA of expression levels
 
-<img src="./plots/pca_bcell_expression.png" width="2181" />
+<img src="./plots/pca_bcell_expression.png" width="2275" />
 
 #### Fold change in comparison with “resting”
 
@@ -37,6 +37,10 @@ Fastq files located on directory:
 #### Subset of the plot above:
 
 <img src="./plots/fc_subset.png" width="2181" />
+
+#### Correlations with resting state:
+
+<img src="./plots/scatter_resting_conditions.png" width="2228" />
 
 ### TO DO:
 
@@ -52,14 +56,30 @@ Fastq files located on directory:
 
 ### Methods
 
+The procedure below is carried out by the `./process_vcf.slurm` script:
+
 -   VCF processing:
     -   remove variants with any missing genotypes;
     -   select only biallelic SNPs with MAF &gt;= 0.1;
-    -   remove variants with pvalue &lt; 0.05/79M for HWE test
+    -   remove variants with pvalue &lt; 0.05/79M for HWE test.
 -   1000 Genomes data:
     -   low coverage and exome data realigned to GRCh38 (not NYGC
         version);
     -   same processing as above, except that I did not remove variants
         failing HWE.
+-   Match MGB and 1000G VCFs:
+    -   remove A/T and C/G genotypes due to potential strand ambiguity;
+    -   remove duplicate entries (these can be multiallelic variants);
+    -   select variants with the same position and alleles in both
+        datasets;
+    -   filter both datasets for the common set of variants;
+    -   merge VCFs and run LD pruning for r2 &gt; 0.2.
+-   PCA:
+    -   QTLtools pca
 
-### PCA
+### Results
+
+### TO DO:
+
+-   select SLE variants from Langefeld et al. (2017)
+-   select individuals from MGB biobank

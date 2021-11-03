@@ -1,5 +1,6 @@
 library(tidyverse)
 library(ggsci)
+library(ggrepel)
 
 
 # Most expressed biotypes
@@ -99,13 +100,43 @@ ggplot(pca, aes(PC1, PC2, color = condition_id)) +
 ggsave("./plots/pca_bcell_expression.png")
 
 # Correlations between conditions
-genes_df <- read_tsv("./phenotypes.bed.gz") %>%
-    select(gene_id = gid, contains("hr_")) %>%
-    pivot_longer(-(1:2), names_to = "condition_id", values_to = "tpm") %>%
-    select(gene_id, resting = `16hr_resting`, condition_id, tpm) %>%
-    arrange(gene_id, condition_id)
+gene_names <- read_tsv("./data/transc_to_gene.tsv") %>%
+    distinct(gene_id, gene_name)
 
+gene_v2_df <- gene_df %>%
+    select(-tpm) %>%
+    pivot_wider(names_from = condition_id, values_from = cpm) %>%
+    pivot_longer(-(1:2), names_to = "condition", values_to = "cpm")
 
+cor_df <- gene_v2_df %>%
+    group_by(condition) %>%
+    summarise(y = max(cpm),
+              x = min(`16hr_resting`),
+              rho = cor(cpm, `16hr_resting`, method = "spearman"),
+              rho = round(rho, 2),
+              rho_label = paste("rho == ", rho)) %>%
+    ungroup()
 
+gene_labels_df <- gene_v2_df %>%
+    filter(`16hr_resting` > 2500 , cpm > 2500) %>%
+    mutate(fc = pmax(cpm, `16hr_resting`)/pmin(cpm, `16hr_resting`),
+           fc = replace_na(fc, 0)) %>%
+    group_by(condition) %>%
+    top_n(10, fc) %>%
+    ungroup() %>%
+    left_join(gene_names)    
 
+ggplot(gene_v2_df, aes(`16hr_resting`, cpm)) +
+    geom_abline() +
+    geom_point(alpha = .25) +
+    geom_text(data = cor_df, aes(x, y * 1.1, label = rho_label),
+              hjust = "inward", vjust = "inward",
+              parse = TRUE, size = 3) +
+    geom_text_repel(data = gene_labels_df, 
+                    aes(label = gene_name),
+                    size = 3) +
+    facet_wrap(~condition, scales = "free", ncol = 2) +
+    theme_bw()
+
+ggsave("./plots/scatter_resting_conditions.png")
 

@@ -53,6 +53,12 @@ include_graphics("./plots/fc.png")
 include_graphics("./plots/fc_subset.png")
 ```
 
+#### Correlations with resting state:
+
+```{r corr, echo=FALSE}
+include_graphics("./plots/scatter_resting_conditions.png")
+```
+
 ### TO DO:
 
 - Run kallisto + sleuth once we have more samples, and call significant genes
@@ -86,7 +92,18 @@ The procedure below is carried out by the `./process_vcf.slurm` script:
   - filter both datasets for the common set of variants;
   - merge VCFs and run LD pruning for r2 > 0.2.
 
-### PCA
+- PCA:
+  - QTLtools pca
+
+### Results
+
+
+
+
+### TO DO:
+
+- select SLE variants from Langefeld et al. (2017)
+- select individuals from MGB biobank
 
 
 
