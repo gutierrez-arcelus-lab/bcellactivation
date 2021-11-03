@@ -82,11 +82,18 @@ pca <- "./data/pca/pheno_pcs.pca" %>%
     pivot_longer(-1, names_to = "condition_id") %>%
     mutate(pc = str_extract(SampleID, "(PC\\d$)")) %>%
     select(pc, condition_id, value) %>%
-    pivot_wider(names_from = pc, values_from = value)
+    pivot_wider(names_from = pc, values_from = value) %>%
+    mutate(condition_id = factor(condition_id, 
+                                 levels = c("16hr_resting", "24hr_IgG",
+                                            "72hr_IgG", "24hr_RSQ", "72hr_RSQ")))
 
 ggplot(pca, aes(PC1, PC2, color = condition_id)) +
     geom_point(size = 5) +
-    scale_color_viridis_d() +
+    scale_color_manual(values = c("16hr_resting" = "grey35",
+                                  "24hr_IgG" = "slateblue",
+                                  "72hr_IgG" = "cornflowerblue",
+                                  "24hr_RSQ" = "tomato3",
+                                  "72hr_RSQ" = "salmon")) +
     theme_bw()
 
 ggsave("./plots/pca_bcell_expression.png")
