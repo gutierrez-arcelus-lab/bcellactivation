@@ -19,7 +19,8 @@ read_variants <- function(var_path) {
 
 vars_df <- read_variants(vars_path)
 
-vars_1000G <- read_variants(vars_1kg_path)
+vars_1000G <- read_variants(vars_1kg_path) %>%
+    mutate(CHROM = ifelse(is.numeric(CHROM), paste0("chr", CHROM), CHROM))
 
 merge_df <- inner_join(vars_df, vars_1000G, by = c("CHROM", "POS", "REF", "ALT"))
 

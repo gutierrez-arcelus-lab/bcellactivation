@@ -2,7 +2,8 @@ library(SNPRelate)
 library(SeqArray)
 
 vcf_file <- commandArgs(TRUE)[1]
-gds_file <- commandArgs(TRUE)[2]
+out_prefix <- commandArgs(TRUE)[2]
+gds_file <- paste0(out_prefix, ".gds")
 
 # Convert VCF to GDS
 seqVCF2GDS(vcf_file, gds_file, fmt.import = "GT", verbose = FALSE)
@@ -22,8 +23,8 @@ pruned_snps <- unlist(pruned, use.names = FALSE)
 # Save pruned GDS
 seqSetFilter(gds, variant.id = pruned_snps)
 
-gds_out <- sub("\\.gds$", ".pruned.gds", gds_file)
+gds_out <- paste0(out_prefix, ".pruned.gds")
 seqExport(gds, gds_out)
 
-vcf_out <- sub("gds$", "vcf", gds_out)
+vcf_out <- paste0(out_prefix, ".vcf.gz")
 seqGDS2VCF(gds_out, vcf_out)
