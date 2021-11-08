@@ -34,7 +34,7 @@ VARS=$OUTDIR/chr${CHR}.variants.txt
 # remove variants exceding p=0.05/79M for a HWE test.
 bcftools view --genotype ^miss --types snps -m2 -M2 $VCF |\
     bcftools view --min-af 0.01:minor - |\
-    bcftools annotate -x 'FORMAT' - |\
+    bcftools annotate -x INFO,FORMAT - |\
     bgzip -c > $VCFOUT    
 #vcftools --vcf - --hwe 0.00000000063 --recode --stdout |\
 
@@ -61,7 +61,7 @@ tabix -p vcf $VCFKGTMP
 
 bcftools view --genotype ^miss --types snps -m2 -M2 $VCFKGTMP |\
     bcftools view --min-af 0.01:minor - |\
-    bcftools annotate -x 'FORMAT' - |\
+    bcftools annotate -x INFO,FORMAT - |\
     bgzip -c > $VCFKGOUT
 
 tabix -p vcf $VCFKGOUT
@@ -89,4 +89,5 @@ VCFMERGED=$OUTDIR/chr${CHR}.merged.vcf.gz
 bcftools merge $VCFOUT2 $VCFKGOUT2 |\
     bcftools annotate -x 'INFO' - -O z -o $VCFMERGED
 
-Rscript $HOME/ase/mgb_biobank/prune_vcf.R $VCFMERGED chr${CHR}
+OUTPREFIX=$OUTDIR/chr${CHR}.merged
+Rscript $HOME/ase/mgb_biobank/prune_vcf.R $VCFMERGED $OUTPREFIX

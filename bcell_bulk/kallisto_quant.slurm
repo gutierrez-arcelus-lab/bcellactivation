@@ -18,13 +18,13 @@ LABSHARE=/lab-share/IM-Gutierrez-e2/Public
 FQDIR=$LABSHARE/B_cells/bulkTCpilot_1/34.198.31.178/210618_MG8989_fastq
 
 INDEX=$HOME/ase/indices/kallisto/transcripts.idx
-SAMPLELIST=/home/ch229163/ase/bcell_samples.txt
+SAMPLELIST=/home/ch229163/ase/bcell_bulk/bcell_samples.txt
 SAMPLE=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $SAMPLELIST )
 
 FQ1=${FQDIR}/${SAMPLE}_R1_001.fastq.gz 
 FQ2=${FQDIR}/${SAMPLE}_R2_001.fastq.gz 
 
-OUT=$HOME/ase/bcell_quant/kallisto/${SAMPLE}
+OUT=$HOME/ase/bcell_bullk/results/kallisto/${SAMPLE}
 
 mkdir -p $OUT
 

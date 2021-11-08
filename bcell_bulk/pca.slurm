@@ -11,10 +11,13 @@
 #SBATCH -o /home/ch229163/ase/log/PCA_expression.%j
 
 
+# BED file with expression data
 PHENO=$HOME/ase/phenotypes.bed.gz
-OUT=$HOME/ase/data/pca
 
+# Results
+OUT=$HOME/ase/data/pca
 mkdir -p $OUT
 
+# Run QTLtools pca on expression data
 QTLtools pca --bed $PHENO --out $OUT/pheno_pcs --center --scale
 

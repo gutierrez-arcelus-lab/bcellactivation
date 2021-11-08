@@ -1,11 +1,40 @@
 README
 ================
 
-## B-Cells: Bulk RNA-seq
+# Table of contents
 
-### Input data:
+-   [0. General info](##general-info)
+-   [1. B cells: Bulk RNAseq](##b-cells:-bulk-rnaseq)
+    -   [1.1. Input data](###b-cells-input-data)
+    -   [1.2. Methods](###b-cells-methods)
+        -   [1.2.1. Alignment index](####alignment-index)
+        -   [1.2.2. Expression estimation](####expression-estimation)
+        -   [1.2.3. PCA on expression data](####pca-on-expression-data)
+        -   [1.2.4. Parsing result files](####parsing-result-files)
+        -   [1.2.5. Plots](####plots)
+    -   [1.3. Results](###b-cells-results)
+        -   [1.3.1. Overview of expression
+            levels](####overview-of-expression-levels)
+        -   [1.3.2. PCA](####pca)
+        -   [1.3.3. Fold change in comparison with
+            resting](####fold-change-in-comparison-with-resting)
+        -   [1.3.4. Correlations with resting
+            state](####correlations-with-resting-state)
+-   [2. MGB Biobank analysis](##mgb-biobank-analysis)
+    -   [2.1. Input data](###mgb-input-data)
+    -   [2.2. Methods](###mgb-method)
+    -   [2.3. Results](###mgb-results)
 
--   1 individual, 4 timepoints:
+## General info
+
+All the scripts with the `.slurm` extension can be submitted to the
+cluster using the command `sbatch script_name.slurm`.
+
+## B cells: Bulk RNAseq
+
+### B cells input data:
+
+-   1 individual, 5 timepoints:
     -   Resting for 16 hours
     -   IgG stim for 24 hours
     -   IgG stim for 72 hours
@@ -15,22 +44,75 @@ README
 Fastq files located on directory:
 /lab-share/IM-Gutierrez-e2/Public/B\_cells/bulkTCpilot\_1/34.198.31.178/210618\_MG8989\_fastq
 
-### Methods
+### B cells methods
 
--   Expression levels were estimated with Salmon (script
-    `./salmon_quant.slurm`)
+#### Alignment index
 
-### Results
+I obtained the genome sequence and annotation data from
+[Gencode](https://www.gencodegenes.org/human/release_38.html):
+
+Using `wget **gencode_link**`, I downloaded the comprehensive gene
+annotation GTF file (“PRI”) and the Genome sequence (“PRI”), which
+includes chromosomes and scaffolds. The files are in the `./data`
+directory.
+
+Unfortunately, Gencode does not include a corresponding fasta file with
+transcript sequences for the “PRI” annotation, so I used RSEM to slice
+the Reference genome given the annotations, this way producing
+transcript sequences. For that I used the `./bcell_bulk/rsem.slurm`
+script.
+
+I used Salmon to estimate expression. The script to create an index is
+`./bcell_bulk/salmon_index.slurm`.
+
+#### Expression estimation
+
+Expression levels were estimated with script
+`./bcell_bulk/salmon_quant.slurm`.
+
+#### PCA on expression data
+
+I used QTLtools to compute principal components from the expression
+matrix, using the script `./bcell_bull/pca.slurm`.
+
+#### Parsing result files
+
+I compiled results from expression quantification, PCA, and other
+downstream analyses in R, with the script
+`./bcell_bulk/compile_results.R`.
+
+#### Plots
+
+All the plots below were create with the script `./plot.R`.
+
+### B cells results
 
 #### Overview of expression levels
 
+In the plot below we see the proportion of total expression attributed
+to each type of transcript, in Counts Per Million (CPM) and in
+Transcripts Per Million (TPM).
+
+For the TPM plot, we see a jump in quantifications for rRNAs. But we
+need to keep in mind that these are very short RNAs, and a small
+increase in read counts can lead to large increases in TPM values.
+
 <img src="./plots/transcript_biotypes.png" width="2181" />
 
-#### PCA of expression levels
+#### PCA
+
+PCA shows a separation of the RSQ and IgG treatments (PC1), and of the
+24h/72h conditions (PC2).
 
 <img src="./plots/pca_bcell_expression.png" width="2275" />
 
 #### Fold change in comparison with “resting”
+
+Here we have a scatter plot of CPM values in each condition against the
+log2 Fold-change in respect to the resting state.
+
+Extreme values correspond to genes that have no expression in either the
+resting or test condition.
 
 <img src="./plots/fc.png" width="2181" />
 
@@ -49,35 +131,32 @@ Fastq files located on directory:
 
 ## MGB Biobank analysis
 
-### Input data
+### MGB input data
 
--   4921 individuals;
--   \~79M variants.
+-   MGB:
+    -   4921 individuals;
+    -   \~79M variants.
+-   1000 Genomes data:
+    -   2,504 low coverage data realigned to GRCh38 (not NYGC version).
 
-### Methods
+### MGB methods
 
-The procedure below is carried out by the `./process_vcf.slurm` script:
-
--   VCF processing:
+-   VCF processing (`./mgb_biobank/process_vcf.slurm` script):
     -   remove variants with any missing genotypes;
     -   select only biallelic SNPs with MAF &gt;= 0.1;
-    -   remove variants with pvalue &lt; 0.05/79M for HWE test.
--   1000 Genomes data:
-    -   low coverage and exome data realigned to GRCh38 (not NYGC
-        version);
-    -   same processing as above, except that I did not remove variants
-        failing HWE.
--   Match MGB and 1000G VCFs:
     -   remove A/T and C/G genotypes due to potential strand ambiguity;
-    -   remove duplicate entries (these can be multiallelic variants);
+    -   remove duplicates (these can be multiallelic variants or
+        multiple variants with same position);
     -   select variants with the same position and alleles in both
         datasets;
     -   filter both datasets for the common set of variants;
     -   merge VCFs and run LD pruning for r2 &gt; 0.2.
--   PCA:
-    -   QTLtools pca
+-   PCA (`./mgb_biobank/run_pca.slurm` script):
+    -   plink pca
 
-### Results
+### MGB results
+
+<img src="./plots/pca.png" width="2175" />
 
 ### TO DO:
 

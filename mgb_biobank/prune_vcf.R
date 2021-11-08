@@ -26,5 +26,5 @@ seqSetFilter(gds, variant.id = pruned_snps)
 gds_out <- paste0(out_prefix, ".pruned.gds")
 seqExport(gds, gds_out)
 
-vcf_out <- paste0(out_prefix, ".vcf.gz")
+vcf_out <- paste0(out_prefix, ".pruned.vcf.gz")
 seqGDS2VCF(gds_out, vcf_out)

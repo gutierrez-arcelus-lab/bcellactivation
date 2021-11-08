@@ -1,6 +1,7 @@
 library(tidyverse)
 library(ggsci)
 library(ggrepel)
+library(RColorBrewer)
 
 
 # Most expressed biotypes
@@ -76,7 +77,7 @@ ggplot(logfc, aes(cpm, log2fc)) +
 ggsave("./plots/fc_subset.png")
 
 
-#PCA
+#PCA on expression data
 
 pca <- "./data/pca/pheno_pcs.pca" %>%
     read_delim(delim = " ") %>%
@@ -139,4 +140,78 @@ ggplot(gene_v2_df, aes(`16hr_resting`, cpm)) +
     theme_bw()
 
 ggsave("./plots/scatter_resting_conditions.png")
+
+
+
+
+# MGB biobank
+
+
+## PCA on genotype data
+
+### Metadata for 1000G samples
+index_1000G <- "https://raw.githubusercontent.com/igsr/1000Genomes_data_indexes/master/data_collections/1000_genomes_project/1000genomes.sequence.index"
+
+sample_annotation <- read_tsv(index_1000G, comment = "##") %>%
+    select(sample_id = SAMPLE_NAME,
+           population = POPULATION) %>%
+    distinct()
+
+### read PCA results into R
+
+pca_genos <-
+    "/lab-share/IM-Gutierrez-e2/Public/vitor/mgb_biobank/plink_pca.eigenvec" %>%
+    read_table2(col_names = FALSE) %>%
+    select(-1) %>%
+    select(X2:X12) %>%
+    setNames(c("sample_id", paste0("PC", 1:10)))
+
+pca_kgp <- pca_genos %>%
+    inner_join(sample_annotation) 
+
+pca_mgb <- pca_genos %>%
+    anti_join(sample_annotation) %>%
+    mutate(population = "MGB_biobank")
+
+pca_df <- bind_rows(pca_mgb, pca_kgp) %>%
+    select(sample_id, population, PC1:PC10)
+
+### Colors
+mgb_cols <- "grey" %>%
+    setNames("MGB_biobank")
+
+afr_cols <- brewer.pal("Oranges", n = 9)[3:9] %>%
+    setNames(c("ASW", "ACB", "ESN", "GWD", "LWK", "MSL", "YRI"))
+
+eur_cols <- brewer.pal("Blues", n =9)[5:9] %>%
+    setNames(c("GBR", "IBS", "TSI", "CEU", "FIN"))
+
+sas_cols <- brewer.pal("Greens", n =9)[5:9] %>%
+    setNames(c("BEB", "PJL", "GIH", "ITU", "STU"))
+
+eas_cols <- brewer.pal("Purples", n =9)[5:9] %>%
+    setNames(c("CHB", "CHS", "CDX", "KHV", "JPT"))
+
+amr_cols <- grep("pink", colors(), value = T)[6:9] %>%
+    setNames(c("MXL", "CLM", "PEL", "PUR"))
+
+all_cols <- c(mgb_cols, afr_cols, eur_cols, sas_cols, eas_cols, amr_cols)
+
+pca_df_reorder <- pca_df %>%
+    mutate(population = factor(population, levels = names(all_cols)))
+
+sizes <- ifelse(names(all_cols) == "MGB_biobank", 2, 1) %>%
+    setNames(names(all_cols))
+
+ggplot(pca_df_reorder, aes(PC1, PC2, color = population, size = population)) +
+    geom_point(alpha = .5) +
+    scale_color_manual(values = all_cols) +
+    scale_size_manual(values = sizes) +
+    theme_minimal() +
+    guides(color = guide_legend(override.aes = list(alpha = 1, size = 4)))
+
+ggsave("./plots/pca.png")
+
+
+
 
