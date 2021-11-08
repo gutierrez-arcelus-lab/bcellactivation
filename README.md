@@ -1,38 +1,14 @@
 README
 ================
 
-# Table of contents
-
--   [0. General info](##general-info)
--   [1. B cells: Bulk RNAseq](##b-cells:-bulk-rnaseq)
-    -   [1.1. Input data](###b-cells-input-data)
-    -   [1.2. Methods](###b-cells-methods)
-        -   [1.2.1. Alignment index](####alignment-index)
-        -   [1.2.2. Expression estimation](####expression-estimation)
-        -   [1.2.3. PCA on expression data](####pca-on-expression-data)
-        -   [1.2.4. Parsing result files](####parsing-result-files)
-        -   [1.2.5. Plots](####plots)
-    -   [1.3. Results](###b-cells-results)
-        -   [1.3.1. Overview of expression
-            levels](####overview-of-expression-levels)
-        -   [1.3.2. PCA](####pca)
-        -   [1.3.3. Fold change in comparison with
-            resting](####fold-change-in-comparison-with-resting)
-        -   [1.3.4. Correlations with resting
-            state](####correlations-with-resting-state)
--   [2. MGB Biobank analysis](##mgb-biobank-analysis)
-    -   [2.1. Input data](###mgb-input-data)
-    -   [2.2. Methods](###mgb-method)
-    -   [2.3. Results](###mgb-results)
-
-## General info
+## 0. General info
 
 All the scripts with the `.slurm` extension can be submitted to the
 cluster using the command `sbatch script_name.slurm`.
 
-## B cells: Bulk RNAseq
+## 1. B cells: Bulk RNAseq
 
-### B cells input data:
+### 1.1. Input data:
 
 -   1 individual, 5 timepoints:
     -   Resting for 16 hours
@@ -44,9 +20,9 @@ cluster using the command `sbatch script_name.slurm`.
 Fastq files located on directory:
 /lab-share/IM-Gutierrez-e2/Public/B\_cells/bulkTCpilot\_1/34.198.31.178/210618\_MG8989\_fastq
 
-### B cells methods
+### 1.2. Methods
 
-#### Alignment index
+#### 1.2.1. Alignment index
 
 I obtained the genome sequence and annotation data from
 [Gencode](https://www.gencodegenes.org/human/release_38.html):
@@ -65,29 +41,29 @@ script.
 I used Salmon to estimate expression. The script to create an index is
 `./bcell_bulk/salmon_index.slurm`.
 
-#### Expression estimation
+#### 1.2.2. Expression estimation
 
 Expression levels were estimated with script
 `./bcell_bulk/salmon_quant.slurm`.
 
-#### PCA on expression data
+#### 1.2.3. PCA on expression data
 
 I used QTLtools to compute principal components from the expression
 matrix, using the script `./bcell_bull/pca.slurm`.
 
-#### Parsing result files
+#### 1.2.4. Parsing result files
 
 I compiled results from expression quantification, PCA, and other
 downstream analyses in R, with the script
 `./bcell_bulk/compile_results.R`.
 
-#### Plots
+#### 1.2.5. Plots
 
 All the plots below were create with the script `./plot.R`.
 
-### B cells results
+### 1.3. Results
 
-#### Overview of expression levels
+#### 1.3.1. Overview of expression levels
 
 In the plot below we see the proportion of total expression attributed
 to each type of transcript, in Counts Per Million (CPM) and in
@@ -99,14 +75,14 @@ increase in read counts can lead to large increases in TPM values.
 
 <img src="./plots/transcript_biotypes.png" width="2181" />
 
-#### PCA
+#### 1.3.2. PCA
 
 PCA shows a separation of the RSQ and IgG treatments (PC1), and of the
 24h/72h conditions (PC2).
 
 <img src="./plots/pca_bcell_expression.png" width="2275" />
 
-#### Fold change in comparison with “resting”
+#### 1.3.3. Fold change in comparison with “resting”
 
 Here we have a scatter plot of CPM values in each condition against the
 log2 Fold-change in respect to the resting state.
@@ -116,22 +92,24 @@ resting or test condition.
 
 <img src="./plots/fc.png" width="2181" />
 
-#### Subset of the plot above:
+#### 1.3.4. Subset of the plot above:
 
 <img src="./plots/fc_subset.png" width="2181" />
 
-#### Correlations with resting state:
+#### 1.3.5. Correlations with resting state:
 
 <img src="./plots/scatter_resting_conditions.png" width="2228" />
 
-### TO DO:
+### 1.4. TO DO:
 
+-   Look at common DE genes across conditions;
+-   Select genes in LD with SLE variants and look at their DE status;
 -   Run kallisto + sleuth once we have more samples, and call
-    significant genes
+    significant genes.
 
-## MGB Biobank analysis
+## 2. MGB Biobank analysis
 
-### MGB input data
+### 2.1. Input data
 
 -   MGB:
     -   4921 individuals;
@@ -139,7 +117,7 @@ resting or test condition.
 -   1000 Genomes data:
     -   2,504 low coverage data realigned to GRCh38 (not NYGC version).
 
-### MGB methods
+### 2.2. Methods
 
 -   VCF processing (`./mgb_biobank/process_vcf.slurm` script):
     -   remove variants with any missing genotypes;
@@ -154,11 +132,11 @@ resting or test condition.
 -   PCA (`./mgb_biobank/run_pca.slurm` script):
     -   plink pca
 
-### MGB results
+### 2.3. Results
 
 <img src="./plots/pca.png" width="2175" />
 
-### TO DO:
+### 2.4. TO DO:
 
 -   select SLE variants from Langefeld et al. (2017)
 -   select individuals from MGB biobank
