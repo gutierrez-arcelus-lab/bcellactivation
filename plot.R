@@ -157,10 +157,32 @@ sample_annotation <- read_tsv(index_1000G, comment = "##") %>%
            population = POPULATION) %>%
     distinct()
 
-### read PCA results into R
 
+### Colors
+mgb_cols <- "grey70" %>%
+    setNames("MGB_biobank")
+
+afr_cols <- brewer.pal("Oranges", n = 9)[4:9] %>%
+    c("black") %>%
+    setNames(c("ACB", "ESN", "GWD", "LWK", "MSL", "YRI", "ASW"))
+
+eur_cols <- brewer.pal("Blues", n =9)[5:9] %>%
+    setNames(c("GBR", "IBS", "TSI", "CEU", "FIN"))
+
+sas_cols <- brewer.pal("Greens", n =9)[5:9] %>%
+    setNames(c("BEB", "PJL", "GIH", "ITU", "STU"))
+
+eas_cols <- brewer.pal("Purples", n =9)[5:9] %>%
+    setNames(c("CHB", "CHS", "CDX", "KHV", "JPT"))
+
+amr_cols <- c("lightpink1", "hotpink", "hotpink3", "deeppink") %>%
+    setNames(c("MXL", "CLM", "PEL", "PUR"))
+
+all_cols <- c(mgb_cols, afr_cols, eur_cols, sas_cols, eas_cols, amr_cols)
+
+### read PCA results into R
 pca_genos <-
-    "/lab-share/IM-Gutierrez-e2/Public/vitor/mgb_biobank/plink_pca.eigenvec" %>%
+    "/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank/results/plink_pca.eigenvec" %>%
     read_table2(col_names = FALSE) %>%
     select(-1) %>%
     select(X2:X12) %>%
@@ -174,43 +196,34 @@ pca_mgb <- pca_genos %>%
     mutate(population = "MGB_biobank")
 
 pca_df <- bind_rows(pca_mgb, pca_kgp) %>%
-    select(sample_id, population, PC1:PC10)
-
-### Colors
-mgb_cols <- "grey" %>%
-    setNames("MGB_biobank")
-
-afr_cols <- brewer.pal("Oranges", n = 9)[3:9] %>%
-    setNames(c("ASW", "ACB", "ESN", "GWD", "LWK", "MSL", "YRI"))
-
-eur_cols <- brewer.pal("Blues", n =9)[5:9] %>%
-    setNames(c("GBR", "IBS", "TSI", "CEU", "FIN"))
-
-sas_cols <- brewer.pal("Greens", n =9)[5:9] %>%
-    setNames(c("BEB", "PJL", "GIH", "ITU", "STU"))
-
-eas_cols <- brewer.pal("Purples", n =9)[5:9] %>%
-    setNames(c("CHB", "CHS", "CDX", "KHV", "JPT"))
-
-amr_cols <- grep("pink", colors(), value = T)[6:9] %>%
-    setNames(c("MXL", "CLM", "PEL", "PUR"))
-
-all_cols <- c(mgb_cols, afr_cols, eur_cols, sas_cols, eas_cols, amr_cols)
-
-pca_df_reorder <- pca_df %>%
+    select(sample_id, population, PC1:PC3) %>%
     mutate(population = factor(population, levels = names(all_cols)))
+
+pca_for_plot <- 
+    bind_rows(
+        select(pca_df, sample_id, population, x = PC1, y = PC2) %>%
+            mutate(comparison = "PC1 vs PC2"),
+        select(pca_df, sample_id, population, x = PC2, y = PC3) %>%
+            mutate(comparison = "PC2 vs PC3"))
+
 
 sizes <- ifelse(names(all_cols) == "MGB_biobank", 2, 1) %>%
     setNames(names(all_cols))
 
-ggplot(pca_df_reorder, aes(PC1, PC2, color = population, size = population)) +
-    geom_point(alpha = .5) +
+ggplot(pca_for_plot, aes(x, y, color = population, size = population)) +
+    geom_point() +
     scale_color_manual(values = all_cols) +
     scale_size_manual(values = sizes) +
+    facet_wrap(~comparison, ncol = 1, scales = "free") +
     theme_minimal() +
-    guides(color = guide_legend(override.aes = list(alpha = 1, size = 4)))
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2),
+                                ncol = 2)) +
+    labs(x = NULL, y = NULL)
 
-ggsave("./plots/pca.png")
+ggsave("./plots/pca.png", height = 6)
 
 
 

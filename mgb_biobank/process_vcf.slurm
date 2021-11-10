@@ -89,5 +89,17 @@ VCFMERGED=$OUTDIR/chr${CHR}.merged.vcf.gz
 bcftools merge $VCFOUT2 $VCFKGOUT2 |\
     bcftools annotate -x 'INFO' - -O z -o $VCFMERGED
 
-OUTPREFIX=$OUTDIR/chr${CHR}.merged
-Rscript $HOME/ase/mgb_biobank/prune_vcf.R $VCFMERGED $OUTPREFIX
+# Prune SNPs for r2 < 0.1
+PRUNESNPS=$OUTDIR/chr${CHR}.prunedsnps
+OUTPREFIX=$OUTDIR/chr${CHR}.merged.pruned
+
+plink --vcf $VCFMERGED \
+    --indep-pairwise 50 10 0.1 \
+    --out $PRUNESNPS
+
+plink --vcf $VCFMERGED \
+    --extract $PRUNESNPS.prune.in \
+    --keep-allele-order \
+    --recode vcf \
+    --out $OUTPREFIX
+

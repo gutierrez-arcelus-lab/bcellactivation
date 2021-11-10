@@ -128,7 +128,9 @@ include_graphics("./plots/scatter_resting_conditions.png")
   - remove duplicates (these can be multiallelic variants or multiple variants with same position);
   - select variants with the same position and alleles in both datasets;
   - filter both datasets for the common set of variants;
-  - merge VCFs and run LD pruning for r2 > 0.2.
+  - merge VCFs and run LD pruning for r2 < 0.1.
+
+- Concatenate VCFs for each chromosome into a single VCF (`./mgb_biobank/concat_vcf.sh`)
 
 - PCA (`./mgb_biobank/run_pca.slurm` script):
   - plink pca
@@ -144,8 +146,9 @@ include_graphics("./plots/pca.png")
 
 ### 2.4. TO DO:
 
-- select SLE variants from Langefeld et al. (2017)
-- select individuals from MGB biobank
+- run ADMIXTURE;
+- select SLE variants from Langefeld et al. (2017);
+- select individuals from MGB biobank.
 
 
 

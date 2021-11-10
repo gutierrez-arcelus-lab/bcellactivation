@@ -6,3 +6,4 @@ log
 *gz
 *gz.tbi
 *.tsv
+*results

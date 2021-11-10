@@ -13,14 +13,8 @@
 source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
 
-# Merge VCFs for each chromosome into a single VCF
-OUTDIR=/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank/results 
-VCF=$OUTDIR/allchr.vcf.gz
-
-#bcftools concat -o $VCF -O z $(ls -v $TEMP_WORK/VCF/chr*.merged.pruned.vcf.gz)
-#tabix -p vcf $VCF
-
-# PCA
-OUT=$OUTDIR/mgb
+DIR=/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank/results 
+VCF=$DIR/allchr.vcf.gz
+OUT=$DIR/mgb
 
 plink --vcf $VCF --pca --out $OUT

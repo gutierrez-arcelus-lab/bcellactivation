@@ -120,6 +120,7 @@ resting or test condition.
 ### 2.2. Methods
 
 -   VCF processing (`./mgb_biobank/process_vcf.slurm` script):
+
     -   remove variants with any missing genotypes;
     -   select only biallelic SNPs with MAF &gt;= 0.1;
     -   remove A/T and C/G genotypes due to potential strand ambiguity;
@@ -128,15 +129,21 @@ resting or test condition.
     -   select variants with the same position and alleles in both
         datasets;
     -   filter both datasets for the common set of variants;
-    -   merge VCFs and run LD pruning for r2 &gt; 0.2.
+    -   merge VCFs and run LD pruning for r2 &lt; 0.1.
+
+-   Concatenate VCFs for each chromosome into a single VCF
+    (`./mgb_biobank/concat_vcf.sh`)
+
 -   PCA (`./mgb_biobank/run_pca.slurm` script):
+
     -   plink pca
 
 ### 2.3. Results
 
-<img src="./plots/pca.png" width="2175" />
+<img src="./plots/pca.png" width="2284" />
 
 ### 2.4. TO DO:
 
--   select SLE variants from Langefeld et al. (2017)
--   select individuals from MGB biobank
+-   run ADMIXTURE;
+-   select SLE variants from Langefeld et al. (2017);
+-   select individuals from MGB biobank.
