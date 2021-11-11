@@ -109,7 +109,19 @@ resting or test condition.
 
 ## 2. MGB Biobank analysis
 
-### 2.1. Input data
+### 2.1. Goals
+
+-   Among the individuals in MGB Biobank, select those who carry more
+    European ancestry;
+-   Among those, select 12 individuals who are more heterozygous at SLE
+    loci;
+-   We will use the SLE loci reported by Langefeld et al. (2017);
+-   Recruit these individuals to donate samples;
+-   Perform transcriptomic (ASE) and other analyses in multiple
+    timepoints and stims;
+-   Identify dysregulated loci.
+
+### 2.2. Input data
 
 -   MGB:
     -   4921 individuals;
@@ -117,7 +129,7 @@ resting or test condition.
 -   1000 Genomes data:
     -   2,504 low coverage data realigned to GRCh38 (not NYGC version).
 
-### 2.2. Methods
+### 2.3. Methods
 
 -   VCF processing (`./mgb_biobank/process_vcf.slurm` script):
 
@@ -138,11 +150,11 @@ resting or test condition.
 
     -   plink pca
 
-### 2.3. Results
+### 2.4. Results
 
 <img src="./plots/pca.png" width="2284" />
 
-### 2.4. TO DO:
+### 2.5. TO DO:
 
 -   run ADMIXTURE;
 -   select SLE variants from Langefeld et al. (2017);

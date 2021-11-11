@@ -7,3 +7,5 @@ log
 *gz.tbi
 *.tsv
 *results
+.Rhistory
+mgb_biobank/allchr*

@@ -225,6 +225,15 @@ ggplot(pca_for_plot, aes(x, y, color = population, size = population)) +
 
 ggsave("./plots/pca.png", height = 6)
 
+k_df <- system("grep -h CV ./mgb_biobank/results/admix.cv*.log", intern = TRUE) %>%
+    str_remove("CV error ") %>%
+    tibble(tmp = .) %>%
+    separate(tmp, c("K", "error"), sep = " ", convert = TRUE) %>%
+    mutate(K = parse_number(K))
 
+ggplot(k_df, aes(K, error)) +
+    geom_point() +
+    geom_line(aes(group = 1)) +
+    labs(y = "Cross-validation error")
 
 
