@@ -225,6 +225,9 @@ ggplot(pca_for_plot, aes(x, y, color = population, size = population)) +
 
 ggsave("./plots/pca.png", height = 6)
 
+# Admixture
+
+## Cross-validations to choose best value for K
 k_df <- system("grep -h CV ./mgb_biobank/results/admix.cv*.log", intern = TRUE) %>%
     str_remove("CV error ") %>%
     tibble(tmp = .) %>%
@@ -234,6 +237,46 @@ k_df <- system("grep -h CV ./mgb_biobank/results/admix.cv*.log", intern = TRUE) 
 ggplot(k_df, aes(K, error)) +
     geom_point() +
     geom_line(aes(group = 1)) +
+    geom_label(aes(label = error), hjust = "outward", vjust = "outward")  +
+    scale_x_continuous(breaks = 1:10) +
+    scale_y_continuous(breaks = c(.3, .33, .36)) +
+    coord_cartesian(xlim = c(0, 10), ylim = c(0.297, 0.365)) +
+    theme(panel.grid.minor = element_blank()) +
     labs(y = "Cross-validation error")
 
+ggsave("./plots/admixture_cv.png", height = 3)
 
+## Ancestry proportions
+ids_1000g <- "./mgb_biobank/results/allchr.1000G.fam" %>%
+    read_delim(delim = " ", col_names = FALSE) %>%
+    pull(1)
+
+ancestry_1000g <- "./mgb_biobank/allchr.1000G.5.Q" %>%
+    read_delim(delim = " ", col_names = FALSE) %>%
+    add_column(id = ids_1000g, .before = 1) %>%
+    left_join(sample_annotation, c("id" = "sample_id")) %>%
+    mutate(continent = case_when(population %in% names(afr_cols) ~ "AFR",
+                                 population %in% names(eur_cols) ~ "EUR",
+                                 population %in% names(sas_cols) ~ "SAS",
+                                 population %in% names(eas_cols) ~ "EAS",
+                                 population %in% names(amr_cols) ~ "AMR")) %>%
+    mutate(continent = factor(continent, 
+                              levels = c("AFR", "EUR", "SAS", "EAS", "AMR"))) %>%
+    pivot_longer(X1:X5, names_to = "cluster", values_to = "q") %>%
+    arrange(continent, population, id) %>%
+    mutate(population = fct_inorder(population))
+
+ancestry_colors <- c("X1" = amr_cols[["CLM"]], "X2" = afr_cols[["YRI"]],
+                     "X3" = eur_cols[["IBS"]], "X4" = sas_cols[["PJL"]],
+                     "X5" = eas_cols[["CHS"]])
+
+ggplot(ancestry_1000g, aes(id, q, fill = cluster)) +
+    geom_bar(stat = "identity", position = "fill", width = 1) +
+    facet_wrap(~population, scales = "free", ncol = 4) +
+    scale_fill_manual(values = ancestry_colors) +
+    scale_y_continuous(breaks = c(0, .5, 1)) +
+    theme_minimal() +
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank())
+
+ggsave("./plots/admixture.png", height = 5)

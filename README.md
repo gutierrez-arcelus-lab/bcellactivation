@@ -6,6 +6,9 @@ README
 All the scripts with the `.slurm` extension can be submitted to the
 cluster using the command `sbatch script_name.slurm`.
 
+For the `.sh` scripts, I execute them with the command
+`./script_name.sh` in an interactive job.
+
 ## 1. B cells: Bulk RNAseq
 
 ### 1.1. Input data:
@@ -59,7 +62,7 @@ downstream analyses in R, with the script
 
 #### 1.2.5. Plots
 
-All the plots below were create with the script `./plot.R`.
+All the plots below were created with the script `./plot.R`.
 
 ### 1.3. Results
 
@@ -150,12 +153,38 @@ resting or test condition.
 
     -   plink pca
 
+-   ADMIXTURE
+
+    -   Cross-validations (`./mgb_biobank/admixture_cv.slurm`);
+    -   Projection of MGB individuals on 1000G reference panel
+        (`./mgb_biobank/admixture_projection.sh`)
+
 ### 2.4. Results
+
+The PCA plot shows the MGB individuals with the 1000 Genomes data
+superimposed. We can see that individuals are distributed along 5 axis
+of variation which correspond to the 5 main continental groups.
 
 <img src="./plots/pca.png" width="2284" />
 
+Next, I wanted to run ADMIXTURE to determine the ancestry proportions in
+each individual, so I could select those who are (mostly) of European
+ancestry.
+
+First, I ran the cross-validation procedure of ADMIXTURE to determine
+the best value of K cluster, and see if K = 5 would really make sense.
+Indeed, K=5 looks a good guess.
+
+<img src="./plots/admixture_cv.png" width="2165" />
+
+In fact, separation of populations in 5 cluster makes sense:
+
+<img src="./plots/admixture.png" width="2165" />
+
+Next, I asked ADMIXTURE to project the MGB biobank onto the 1000 Genomes
+reference in order to determine the ancestry proportions in MGB biobank.
+
 ### 2.5. TO DO:
 
--   run ADMIXTURE;
 -   select SLE variants from Langefeld et al. (2017);
--   select individuals from MGB biobank.
+-   select European individuals from MGB biobank.
