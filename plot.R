@@ -251,7 +251,7 @@ ids_1000g <- "./mgb_biobank/results/allchr.1000G.fam" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     pull(1)
 
-ancestry_1000g <- "./mgb_biobank/allchr.1000G.5.Q" %>%
+ancestry_1000g <- "./mgb_biobank/results/allchr.1000G.5.Q" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     add_column(id = ids_1000g, .before = 1) %>%
     left_join(sample_annotation, c("id" = "sample_id")) %>%
@@ -267,8 +267,8 @@ ancestry_1000g <- "./mgb_biobank/allchr.1000G.5.Q" %>%
     mutate(population = fct_inorder(population))
 
 ancestry_colors <- c("X1" = amr_cols[["CLM"]], "X2" = afr_cols[["YRI"]],
-                     "X3" = eur_cols[["IBS"]], "X4" = sas_cols[["PJL"]],
-                     "X5" = eas_cols[["CHS"]])
+                     "X3" = eur_cols[["IBS"]], "X4" = sas_cols[["ITU"]],
+                     "X5" = eas_cols[["CDX"]])
 
 ggplot(ancestry_1000g, aes(id, q, fill = cluster)) +
     geom_bar(stat = "identity", position = "fill", width = 1) +
@@ -277,6 +277,32 @@ ggplot(ancestry_1000g, aes(id, q, fill = cluster)) +
     scale_y_continuous(breaks = c(0, .5, 1)) +
     theme_minimal() +
     theme(axis.text.x = element_blank(),
-          axis.ticks.x = element_blank())
+          axis.ticks.x = element_blank(),
+          panel.grid = element_blank()) +
+    labs(x = NULL)
 
 ggsave("./plots/admixture.png", height = 5)
+
+## MGB biobank ancestry
+ids_mgb <- "./mgb_biobank/results/allchr.MGB.fam" %>%
+    read_delim(delim = " ", col_names = FALSE) %>%
+    pull(1)
+
+ancestry_mgb <- "./mgb_biobank/results/allchr.MGB.5.Q" %>%
+    read_delim(delim = " ", col_names = FALSE) %>%
+    add_column(id = ids_mgb, .before = 1) %>%
+    arrange(X3, X2, X4) %>%
+    mutate(id = fct_inorder(id)) %>%
+    pivot_longer(X1:X5, names_to = "cluster", values_to = "q")
+
+ggplot(ancestry_mgb, aes(id, q, fill = cluster)) +
+    geom_bar(stat = "identity", position = "fill", width = 1) +
+    scale_fill_manual(values = ancestry_colors) +
+    scale_y_continuous(breaks = c(0, .5, 1)) +
+    theme_minimal() +
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          panel.grid = element_blank()) +
+    labs(x = NULL)
+
+ggsave("./plots/admixture_mgb.png")

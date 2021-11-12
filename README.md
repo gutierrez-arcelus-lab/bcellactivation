@@ -184,6 +184,15 @@ In fact, separation of populations in 5 cluster makes sense:
 Next, I asked ADMIXTURE to project the MGB biobank onto the 1000 Genomes
 reference in order to determine the ancestry proportions in MGB biobank.
 
+The results don’t make sense. All individuals seem to be admixed,
+including a almost constant proportion of South Asian ancestry.
+
+Is this share ancestry with EUR that are being marked as SAS?
+
+Run ADMIXTURE with 3 parental populations only?
+
+<img src="./plots/admixture_mgb.png" width="2165" />
+
 ### 2.5. TO DO:
 
 -   select SLE variants from Langefeld et al. (2017);
