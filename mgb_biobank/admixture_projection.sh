@@ -1,9 +1,10 @@
 #!/bin/bash
 
+DIR=/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank
 K=5
 
-cd ./results
+cd $DIR/results
 
-#cp allchr.1000G.$K.P allchr.MGB.$K.P.in 
+cp allchr.refpanel.$K.P allchr.MGB.$K.P.in 
 
-admixture -P -j8 allchr.MGB.bed $K
+admixture -P -j4 allchr.MGB.bed $K | tee admix.MGBprojection.$K.log

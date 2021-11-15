@@ -176,13 +176,24 @@ Next, I asked ADMIXTURE to project the MGB biobank onto the 1000 Genomes referen
 
 The results don't make sense. All individuals seem to be admixed, including a almost constant proportion of South Asian ancestry. 
 
-Is this share ancestry with EUR that are being marked as SAS?
+Then I tried reducing the reference panel to a single population from each continente, selecting individuals who carry at least 97.5% of that ancestry.
 
-Run ADMIXTURE with 3 parental populations only?
+
+```{r admixture_refpanel}
+include_graphics("./plots/admixture_refpanel.png")
+```
+
+
+However, when I project the MGB biobank individuals onto this reference panel, I get the same constant SAS ancestry on all individuals, with an average of 9%.
 
 ```{r admixture_mgb}
 include_graphics("./plots/admixture_mgb.png")
 ```
+
+Is this share ancestry with EUR that are being marked as SAS?
+
+
+
 
 ### 2.5. TO DO:
 
