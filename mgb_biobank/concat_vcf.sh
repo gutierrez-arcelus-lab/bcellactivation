@@ -7,14 +7,14 @@ export BCFTOOLS_X=1.12
 OUTDIR=/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank/results 
 VCF=$OUTDIR/allchr.vcf.gz
 
-#bcftools concat -o $VCF -O z $(ls -v $TEMP_WORK/VCF/chr*.merged.pruned.vcf)
-#tabix -p vcf $VCF
+bcftools concat -o $VCF -O z $(ls -v $TEMP_WORK/VCF/chr*.merged.pruned.vcf)
+tabix -p vcf $VCF
 
 # Make PLINK binary files
-#plink --vcf $VCF \
-#    --keep-allele-order \
-#    --make-bed \
-#    --out $OUTDIR/allchr
+plink --vcf $VCF \
+    --keep-allele-order \
+    --make-bed \
+    --out $OUTDIR/allchr
 
 # Subset VCF for individuals in 1000G or MGB
 VCF1000G=$OUTDIR/allchr.1000G.vcf.gz
