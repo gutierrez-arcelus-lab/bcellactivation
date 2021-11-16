@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DIR=/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank
-K=5
+K=3
 
 cd $DIR/results
 

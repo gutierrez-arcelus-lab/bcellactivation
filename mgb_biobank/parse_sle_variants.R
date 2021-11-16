@@ -46,4 +46,5 @@ bed <- tab_fdr01 %>%
     select(chrom, start, end = pos, snp_id) %>%
     arrange(chrom, start) 
 
+write_tsv(tab_fdr01, "./sle_variants/sle.tsv")
 write_tsv(bed, "./sle_variants/sle.bed", col_names = FALSE)

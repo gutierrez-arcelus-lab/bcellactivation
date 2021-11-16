@@ -2,7 +2,7 @@ library(tidyverse)
 library(ggsci)
 library(ggrepel)
 library(RColorBrewer)
-
+library(cowplot)
 
 # Most expressed biotypes
 gene_df <- read_tsv("./data/gene_quants.tsv")
@@ -159,7 +159,7 @@ sample_annotation <- read_tsv(index_1000G, comment = "##") %>%
 
 
 ### Colors
-mgb_cols <- "grey70" %>%
+mgb_cols <- "black" %>%
     setNames("MGB_biobank")
 
 afr_cols <- brewer.pal("Oranges", n = 9)[4:9] %>%
@@ -204,93 +204,119 @@ pca_for_plot <-
         select(pca_df, sample_id, population, x = PC1, y = PC2) %>%
             mutate(comparison = "PC1 vs PC2"),
         select(pca_df, sample_id, population, x = PC2, y = PC3) %>%
-            mutate(comparison = "PC2 vs PC3"))
+            mutate(comparison = "PC2 vs PC3")) %>%
+    mutate(dataset = ifelse(population == "MGB_biobank", "MGB", "1000 Genomes"))
 
-
-sizes <- ifelse(names(all_cols) == "MGB_biobank", 2, 1) %>%
-    setNames(names(all_cols))
-
-ggplot(pca_for_plot, aes(x, y, color = population, size = population)) +
-    geom_point() +
+ggplot(pca_for_plot, aes(x, y, color = population, alpha = dataset)) +
+    geom_point(size = .75) +
     scale_color_manual(values = all_cols) +
-    scale_size_manual(values = sizes) +
-    facet_wrap(~comparison, ncol = 1, scales = "free") +
-    theme_minimal() +
+    scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
+    facet_grid(comparison~dataset, scales = "free") +
+    theme_bw() +
     theme(panel.grid = element_blank(),
           strip.text = element_text(face = "bold", size = 11),
           panel.spacing = unit(2, "lines")) +
-    guides(color = guide_legend(override.aes = list(size = 2),
-                                ncol = 2)) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
+           alpha = FALSE) +
     labs(x = NULL, y = NULL)
 
-ggsave("./plots/pca.png", height = 6)
+ggsave("./plots/pca.png", width = 8, height = 5)
+
+# Heterozygosity scores
+
+scores_df <- read_tsv("./mgb_biobank/sle_variants/scores.tsv") %>%
+    extract(sample_id, c("sample_id"), ".+_(.+)")
+
+top_scores <- 
+    bind_rows(het = scores_df %>% top_n(12, het_score),
+              het_wt = scores_df %>% top_n(12, het_score_wt),
+              .id = "score")
+
+ggplot(scores_df, aes(het_score, het_score_wt)) +
+    geom_jitter()
+
+top_scores %>%
+    select(score, sample_id) %>%
+    group_by(sample_id) %>%
+    mutate(shared = all(c("het", "het_wt") %in% score)) %>%
+    ggplot(aes(score, sample_id, color = shared)) +
+    geom_point() +
+    theme_minimal() +
+    theme(axis.text.y = element_text(size = 4)) +
+    scale_color_npg() +
+    labs(y = NULL)
+    
+ggsave("./plots/het_score.png", width = 4)
+
+
+
 
 # Admixture
 
-## Cross-validations to choose best value for K
-k_df <- system("grep -h CV ./mgb_biobank/results/admix.cv*.log", intern = TRUE) %>%
-    str_remove("CV error ") %>%
-    tibble(tmp = .) %>%
-    separate(tmp, c("K", "error"), sep = " ", convert = TRUE) %>%
-    mutate(K = parse_number(K))
-
-ggplot(k_df, aes(K, error)) +
-    geom_point() +
-    geom_line(aes(group = 1)) +
-    geom_label(aes(label = error), hjust = "outward", vjust = "outward")  +
-    scale_x_continuous(breaks = 1:10) +
-    scale_y_continuous(breaks = c(.3, .33, .36)) +
-    coord_cartesian(xlim = c(0, 10), ylim = c(0.297, 0.365)) +
-    theme(panel.grid.minor = element_blank()) +
-    labs(y = "Cross-validation error")
-
-ggsave("./plots/admixture_cv.png", height = 3)
-
-## Ancestry proportions
-ids_1000g <- "./mgb_biobank/results/allchr.1000G.fam" %>%
-    read_delim(delim = " ", col_names = FALSE) %>%
-    pull(1)
-
-ancestry_1000g <- "./mgb_biobank/results/allchr.1000G.5.Q" %>%
-    read_delim(delim = " ", col_names = FALSE) %>%
-    add_column(id = ids_1000g, .before = 1) %>%
-    left_join(sample_annotation, c("id" = "sample_id")) %>%
-    mutate(continent = case_when(population %in% names(afr_cols) ~ "AFR",
-                                 population %in% names(eur_cols) ~ "EUR",
-                                 population %in% names(sas_cols) ~ "SAS",
-                                 population %in% names(eas_cols) ~ "EAS",
-                                 population %in% names(amr_cols) ~ "AMR")) %>%
-    mutate(continent = factor(continent, 
-                              levels = c("AFR", "EUR", "SAS", "EAS", "AMR"))) %>%
-    pivot_longer(X1:X5, names_to = "cluster", values_to = "q") %>%
-    arrange(continent, population, id) %>%
-    mutate(population = fct_inorder(population))
-
-ancestry_colors <- c("X1" = amr_cols[["CLM"]], "X2" = afr_cols[["YRI"]],
-                     "X3" = eur_cols[["IBS"]], "X4" = sas_cols[["ITU"]],
-                     "X5" = eas_cols[["CDX"]])
-
-ggplot(ancestry_1000g, aes(id, q, fill = cluster)) +
-    geom_bar(stat = "identity", position = "fill", width = 1) +
-    facet_wrap(~population, scales = "free", ncol = 4) +
-    scale_fill_manual(values = ancestry_colors) +
-    scale_y_continuous(breaks = c(0, .5, 1)) +
-    theme_minimal() +
-    theme(axis.text.x = element_blank(),
-          axis.ticks.x = element_blank(),
-          panel.grid = element_blank()) +
-    labs(x = NULL)
-
-ggsave("./plots/admixture.png", height = 5)
-
-
-## select individuals for a reduced reference panel
-ancestry_1000g %>%
-    filter(q > .975) %>%
-    filter(population %in% c("YRI", "STU", "CEU", "CHS", "PEL")) %>%
-    pull(id) %>%
-    {paste(., ., sep = "_")} %>%
-    write_lines("./mgb_biobank/ref_panel_ids.txt")
+# ## Cross-validations to choose best value for K
+# k_df <- system("grep -h CV ./mgb_biobank/results/admix.cv*.log", intern = TRUE) %>%
+#     str_remove("CV error ") %>%
+#     tibble(tmp = .) %>%
+#     separate(tmp, c("K", "error"), sep = " ", convert = TRUE) %>%
+#     mutate(K = parse_number(K))
+# 
+# ggplot(k_df, aes(K, error)) +
+#     geom_point() +
+#     geom_line(aes(group = 1)) +
+#     geom_label(aes(label = error), hjust = "outward", vjust = "outward")  +
+#     scale_x_continuous(breaks = 1:10) +
+#     scale_y_continuous(breaks = c(.3, .33, .36)) +
+#     coord_cartesian(xlim = c(0, 10), ylim = c(0.297, 0.365)) +
+#     theme(panel.grid.minor = element_blank()) +
+#     labs(y = "Cross-validation error")
+# 
+# ggsave("./plots/admixture_cv.png", height = 3)
+# 
+# ## Ancestry proportions
+# ids_1000g <- "./mgb_biobank/results/allchr.1000G.fam" %>%
+#     read_delim(delim = " ", col_names = FALSE) %>%
+#     pull(1)
+# 
+# ancestry_1000g <- "./mgb_biobank/results/allchr.1000G.5.Q" %>%
+#     read_delim(delim = " ", col_names = FALSE) %>%
+#     add_column(id = ids_1000g, .before = 1) %>%
+#     left_join(sample_annotation, c("id" = "sample_id")) %>%
+#     mutate(continent = case_when(population %in% names(afr_cols) ~ "AFR",
+#                                  population %in% names(eur_cols) ~ "EUR",
+#                                  population %in% names(sas_cols) ~ "SAS",
+#                                  population %in% names(eas_cols) ~ "EAS",
+#                                  population %in% names(amr_cols) ~ "AMR")) %>%
+#     mutate(continent = factor(continent, 
+#                               levels = c("AFR", "EUR", "SAS", "EAS", "AMR"))) %>%
+#     pivot_longer(X1:X5, names_to = "cluster", values_to = "q") %>%
+#     arrange(continent, population, id) %>%
+#     mutate(population = fct_inorder(population))
+# 
+# ancestry_colors <- c("X1" = amr_cols[["CLM"]], "X2" = afr_cols[["YRI"]],
+#                      "X3" = eur_cols[["IBS"]], "X4" = sas_cols[["ITU"]],
+#                      "X5" = eas_cols[["CDX"]])
+# 
+# ggplot(ancestry_1000g, aes(id, q, fill = cluster)) +
+#     geom_bar(stat = "identity", position = "fill", width = 1) +
+#     facet_wrap(~population, scales = "free", ncol = 4) +
+#     scale_fill_manual(values = ancestry_colors) +
+#     scale_y_continuous(breaks = c(0, .5, 1)) +
+#     theme_minimal() +
+#     theme(axis.text.x = element_blank(),
+#           axis.ticks.x = element_blank(),
+#           panel.grid = element_blank()) +
+#     labs(x = NULL)
+# 
+# ggsave("./plots/admixture.png", height = 5)
+# 
+# 
+# ## select individuals for a reduced reference panel
+# ancestry_1000g %>%
+#     filter(q > .975) %>%
+#     filter(population %in% c("YRI", "STU", "CEU", "CHS", "PEL")) %>%
+#     pull(id) %>%
+#     {paste(., ., sep = "_")} %>%
+#     write_lines("./mgb_biobank/ref_panel_ids.txt")
 
 
 ## Plot results for reference panel
@@ -298,7 +324,7 @@ ids_refpanel <- "./mgb_biobank/results/allchr.refpanel.fam" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     pull(1)
 
-ancestry_refpanel <- "./mgb_biobank/results/allchr.refpanel.5.Q" %>%
+ancestry_refpanel <- "./mgb_biobank/results/allchr.refpanel.3.Q" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     add_column(id = ids_refpanel, .before = 1) %>%
     left_join(sample_annotation, c("id" = "sample_id")) %>%
@@ -309,14 +335,16 @@ ancestry_refpanel <- "./mgb_biobank/results/allchr.refpanel.5.Q" %>%
                                  population %in% names(amr_cols) ~ "AMR")) %>%
     mutate(continent = factor(continent, 
                               levels = c("EUR", "AFR", "SAS", "EAS", "AMR"))) %>%
-    pivot_longer(X1:X5, names_to = "cluster", values_to = "q") %>%
+    pivot_longer(X1:X3, names_to = "cluster", values_to = "q") %>%
     arrange(continent, population, id) %>%
     mutate(population = fct_inorder(population))
 
-refpanel_colors <- c("X1" = all_cols[["TSI"]], "X2" = all_cols[["YRI"]],
-                     "X3" = all_cols[["BEB"]], "X4" = all_cols[["CHS"]],
-                     "X5" = all_cols[["CLM"]])
+# refpanel_colors <- c("X1" = all_cols[["TSI"]], "X2" = all_cols[["YRI"]],
+#                      "X3" = all_cols[["BEB"]], "X4" = all_cols[["CHS"]],
+#                      "X5" = all_cols[["CLM"]])
 
+refpanel_colors <- c("X1" = all_cols[["TSI"]], "X2" = all_cols[["YRI"]],
+                     "X3" = all_cols[["CHB"]])
 
 ggplot(ancestry_refpanel, aes(id, q, fill = cluster)) +
     geom_bar(stat = "identity", position = "fill", width = 1) +
@@ -337,12 +365,12 @@ ids_mgb <- "./mgb_biobank/results/allchr.MGB.fam" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     pull(1)
 
-ancestry_mgb <- "./mgb_biobank/results/allchr.MGB.5.Q" %>%
+ancestry_mgb <- "./mgb_biobank/results/allchr.MGB.3.Q" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     add_column(id = ids_mgb, .before = 1) %>%
-    arrange(X3, X2, X4) %>%
+    arrange(X1) %>%
     mutate(id = fct_inorder(id)) %>%
-    pivot_longer(X1:X5, names_to = "cluster", values_to = "q")
+    pivot_longer(X1:X3, names_to = "cluster", values_to = "q")
 
 ggplot(ancestry_mgb, aes(id, q, fill = cluster)) +
     geom_bar(stat = "identity", position = "fill", width = 1) +
@@ -354,4 +382,4 @@ ggplot(ancestry_mgb, aes(id, q, fill = cluster)) +
           panel.grid = element_blank()) +
     labs(x = NULL)
 
-ggsave("./plots/admixture_mgb.png")
+ggsave("./plots/admixture_mgb_k3.png")
