@@ -161,6 +161,8 @@ resting or test condition.
 
 ### 2.4. Results
 
+#### Ancestry information from genotype data
+
 The PCA plot shows the MGB individuals in comparison with the 1000
 Genomes data. We can see that individuals are distributed according to
 the 5 main continental groups.
@@ -217,3 +219,25 @@ individuals.
 <img src="./plots/admixture_mgb_k3.png" width="2553" />
 
 Therefore, I’ve decided for now to stick with the selection by PCA.
+
+#### SLE variants
+
+I’ve selected 90 SLE risk variants from the [Langefeld et
+al. study](nature.com/articles/ncomms16021), by taking all variants
+identified in individuals of European ancestry with FDR &lt;= 0.01.
+
+Then, I computed a heterozygosity score that corresponds to the number
+of variants at which the individuals are heterozygotes. I also computed
+a weighted score that is simply the number of alleles times the log(OR),
+summed over all variants. Since the number of alleles for heterozygotes
+is equal to 1, that corresponds to simply summing the log(OR) over all
+SLE SNPs.
+
+This is the relationship between the two scores:
+
+<img src="./plots/het_scores_jitterplot.png" width="2400" />
+
+If we select the individuals who have the most extreme values at each
+score, we would end up selecting different individuals.
+
+<img src="./plots/het_score.png" width="1200" />

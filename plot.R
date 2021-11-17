@@ -226,15 +226,27 @@ ggsave("./plots/pca.png", width = 8, height = 5)
 # Heterozygosity scores
 
 scores_df <- read_tsv("./mgb_biobank/sle_variants/scores.tsv") %>%
-    extract(sample_id, c("sample_id"), ".+_(.+)")
+    extract(sample_id, c("sample_id"), ".+_(.+)") %>%
+    mutate(top_eur = sample_id %in% mgb_mosteur)
+
+scores_eur_df <- scores_df %>%
+    filter(top_eur == TRUE)
 
 top_scores <- 
-    bind_rows(het = scores_df %>% top_n(12, het_score),
-              het_wt = scores_df %>% top_n(12, het_score_wt),
+    bind_rows(het = scores_eur_df %>% top_n(12, het_score),
+              het_wt = scores_eur_df %>% top_n(12, het_score_wt),
               .id = "score")
 
 ggplot(scores_df, aes(het_score, het_score_wt)) +
-    geom_jitter()
+    geom_jitter(size = .75, aes(color = top_eur), alpha = .5) +
+    scale_color_manual(values = c("TRUE" = "cornflowerblue",
+                                  "FALSE" = "black")) +
+    guides(color = guide_legend(override.aes = list(alpha = 1))) +
+    labs(x = "Heterozygosity score",
+         y = "Weighted heterozygosity score",
+         color = "Top\nEuropean\nAncestry")
+
+ggsave("./plots/het_scores_jitterplot.png", width = 8, height = 4)
 
 top_scores %>%
     select(score, sample_id) %>%
