@@ -161,23 +161,33 @@ resting or test condition.
 
 ### 2.4. Results
 
-The PCA plot shows the MGB individuals with the 1000 Genomes data
-superimposed. We can see that individuals are distributed along 5 axis
-of variation which correspond to the 5 main continental groups.
+The PCA plot shows the MGB individuals in comparison with the 1000
+Genomes data. We can see that individuals are distributed according to
+the 5 main continental groups.
 
-<img src="./plots/pca.png" width="2284" />
+Below, I’m showing a subset of MGB biobank individuals who are within 2
+standard deviations from the European averages for PC1, PC2 and PC3. I’m
+calling those “MGB\_most\_EUR”.
 
-Next, I wanted to run ADMIXTURE to determine the ancestry proportions in
-each individual, so I could select those who are (mostly) of European
+<img src="./plots/pca.png" width="2400" />
+
+I think I’m going to select these individuals for the next step, since
+results from the ADMIXTURE program are a bit difficult to understand at
+this point.
+
+I wanted to run ADMIXTURE to determine the ancestry proportions in each
+individual, so I could select those who are (mostly) of European
 ancestry.
 
 First, I ran the cross-validation procedure of ADMIXTURE to determine
 the best value of K cluster, and see if K = 5 would really make sense.
-Indeed, K=5 looks a good guess.
+Indeed, K=5 looks a good guess. If we use larger values of K, we start
+seeing separation within continents, which is not really our goal.
 
-<img src="./plots/admixture_cv.png" width="2165" />
+<img src="./plots/admixture_cv.png" width="2153" />
 
-In fact, separation of populations in 5 cluster makes sense:
+In fact, separation of populations in 5 cluster makes sense in the 1000
+Genomes data:
 
 <img src="./plots/admixture.png" width="2165" />
 
@@ -199,9 +209,10 @@ average of 9%.
 
 <img src="./plots/admixture_mgb.png" width="2171" />
 
-Is this share ancestry with EUR that are being marked as SAS?
+Finally, I tried using only 3 populations in my reference panel: CEU,
+YRI, and CHS. But now I have a constant Chinese ancestry on all
+individuals.
 
-### 2.5. TO DO:
+<img src="./plots/admixture_mgb_k3.png" width="2553" />
 
--   select SLE variants from Langefeld et al. (2017);
--   select European individuals from MGB biobank.
+Therefore, I’ve decided for now to stick with the selection by PCA.
