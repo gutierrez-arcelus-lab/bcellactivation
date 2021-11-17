@@ -165,9 +165,10 @@ The PCA plot shows the MGB individuals in comparison with the 1000
 Genomes data. We can see that individuals are distributed according to
 the 5 main continental groups.
 
-Below, I’m showing a subset of MGB biobank individuals who are within 2
-standard deviations from the European averages for PC1, PC2 and PC3. I’m
-calling those “MGB\_most\_EUR”.
+Below, I’m showing a subset of MGB biobank individuals who are within
+0.5 standard deviations from the European averages for PC1, PC2 and PC3.
+I’m calling those “MGB\_most\_EUR”, they represent 34% of the MGB
+individuals.
 
 <img src="./plots/pca.png" width="2400" />
 

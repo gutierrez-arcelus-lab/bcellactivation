@@ -33,9 +33,9 @@ mgb_selected <- pca_mgb %>%
     mutate(z_pc1 = (PC1 - eur_mu$PC1)/sd(PC1),
        z_pc2 = (PC2 - eur_mu$PC2)/sd(PC2),
        z_pc3 = (PC3 - eur_mu$PC3)/sd(PC3)) %>%
-    filter(between(z_pc1, -1, 1),
-	   between(z_pc2, -1, 1),
-	   between(z_pc3, -1, 1))
+    filter(between(z_pc1, -0.5, 0.5),
+	   between(z_pc2, -0.5, 0.5),
+	   between(z_pc3, -0.5, 0.5))
 
 mgb_selected %>%
     pull(sample_id) %>%
