@@ -116,7 +116,7 @@ resting or test condition.
 
 -   Among the individuals in MGB Biobank, select those who carry more
     European ancestry;
--   Among those, select 12 individuals who are more heterozygous at SLE
+-   Among those, select individuals who are more heterozygous at SLE
     loci;
 -   We will use the SLE loci reported by Langefeld et al. (2017);
 -   Recruit these individuals to donate samples;
@@ -127,10 +127,16 @@ resting or test condition.
 ### 2.2. Input data
 
 -   MGB:
-    -   4921 individuals;
-    -   \~79M variants.
+
+| Batch |  N   |    M    |       Source       |
+|:-----:|:----:|:-------:|:------------------:|
+| 0401  | 4921 | \~79.1M |    MEGA\_TopMed    |
+| 0402  | 5336 | \~80.1M |   MEGAEX\_TopMed   |
+| 0403  | 4780 | \~79.8M | MEG\_A1\_A\_TopMed |
+
 -   1000 Genomes data:
-    -   2,504 low coverage data realigned to GRCh38 (not NYGC version).
+    -   \~2,500 individuals low coverage data realigned to GRCh38 (not
+        NYGC version).
 
 ### 2.3. Methods
 
@@ -183,40 +189,25 @@ individual, so I could select those who are (mostly) of European
 ancestry.
 
 First, I ran the cross-validation procedure of ADMIXTURE to determine
-the best value of K cluster, and see if K = 5 would really make sense.
-Indeed, K=5 looks a good guess. If we use larger values of K, we start
-seeing separation within continents, which is not really our goal.
+the best value of K (number of clusters).
 
 <img src="./plots/admixture_cv.png" width="2153" />
 
-In fact, separation of populations in 5 cluster makes sense in the 1000
-Genomes data:
+And this is the separation we get in 1000 Genomes data:
 
-<img src="./plots/admixture.png" width="2165" />
+<img src="./plots/admixture.1000G.allK.png" width="2100" />
 
 Next, I asked ADMIXTURE to project the MGB biobank onto the 1000 Genomes
 reference in order to determine the ancestry proportions in MGB biobank.
+I tried with K = 3 or K = 5.
 
 The results don’t make sense. All individuals seem to be admixed,
-including a almost constant proportion of South Asian ancestry.
-
-Then I tried reducing the reference panel to a single population from
-each continente, selecting individuals who carry at least 97.5% of that
-ancestry.
-
-<img src="./plots/admixture_refpanel.png" width="2165" />
-
-However, when I project the MGB biobank individuals onto this reference
-panel, I get the same constant SAS ancestry on all individuals, with an
-average of 9%.
-
-<img src="./plots/admixture_mgb.png" width="2171" />
-
-Finally, I tried using only 3 populations in my reference panel: CEU,
-YRI, and CHS. But now I have a constant Chinese ancestry on all
-individuals.
+including a almost constant proportion of South Asian or South East
+Asian ancestry.
 
 <img src="./plots/admixture_mgb_k3.png" width="2553" />
+
+<img src="./plots/admixture_mgb.png" width="2171" />
 
 Therefore, I’ve decided for now to stick with the selection by PCA.
 

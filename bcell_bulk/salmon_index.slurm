@@ -16,7 +16,7 @@ export SALMON_X=1.5.1
 GENCODE=$HOME/ase/data/gencode.transcripts.fa
 INDEX=$HOME/ase/indices
 
-mkdir -p INDEX
+mkdir -p $INDEX
 
 salmon index -t $GENCODE -i $INDEX/SALMON
 

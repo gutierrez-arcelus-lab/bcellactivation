@@ -5,7 +5,7 @@
 #SBATCH --mem=8gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
-#SBATCH --array=1-22
+#SBATCH --array=1-44
 #SBATCH --job-name=vcf_process
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
@@ -18,32 +18,35 @@ export VCFTOOLS_X=0.1.12b
 export BCFTOOLS_X=1.12
 export R_X=4.1
 
-# Specify input data
-LABSHARE=/lab-share/IM-Gutierrez-e2/Public
-MGB=$LABSHARE/mgb_biobank/0401/vcf
-OUTDIR=$TEMP_WORK/VCF
+# Define directory and chromosome given array design file
+DESIGN=$SLURM_SUBMIT_DIR/array_design.txt
+BATCH=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $DESIGN )
+CHR=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $2 }' $DESIGN )
 
-CHR=$SLURM_ARRAY_TASK_ID
+# Define IO
+LABSHARE=/lab-share/IM-Gutierrez-e2/Public
+MGB=$LABSHARE/mgb_biobank/$BATCH/vcf
 VCF=$MGB/chr${CHR}.dose.vcf.gz
-VCFOUT=$OUTDIR/chr${CHR}.filtered.vcf.gz
-VARS=$OUTDIR/chr${CHR}.variants.txt
+
+OUTDIR=$TEMP_WORK/VCF
+VCFOUT=$OUTDIR/chr${CHR}.MGB.$BATCH.filtered.vcf.gz
 
 # Select biallelic SNPs only, with MAF >= 1%;
 # remove variants with any missing genotypes;
 # extract GT info and discard dosages and probabilities;
-# remove variants exceding p=0.05/79M for a HWE test.
 bcftools view --genotype ^miss --types snps -m2 -M2 $VCF |\
     bcftools view --min-af 0.01:minor - |\
     bcftools annotate -x INFO,FORMAT - |\
     bgzip -c > $VCFOUT    
-#vcftools --vcf - --hwe 0.00000000063 --recode --stdout |\
 
 tabix -p vcf $VCFOUT
 
 # Save Chromosome, Position, ID, Ref and Alt alleles to a file
+VARSMGB=$OUTDIR/chr${CHR}.MGB.$BATCH.variants.txt
+
 zcat $VCFOUT |\
     grep -v '^##' |\
-    awk '{print $1, $2, $3, $4, $5}' > $VARS
+    awk '{print $1, $2, $3, $4, $5}' > $VARSMGB
 
 # Filter 1000G
 # first adjust chr notation
@@ -73,20 +76,23 @@ zcat $VCFKGOUT |\
 
 # Match variants with those in 1000 Genomes data
 POSFILE=$OUTDIR/chr${CHR}.commonvars.pos
-Rscript $HOME/ase/mgb_biobank/match_snps.R $VARS $VARSKG $POSFILE
+Rscript $HOME/ase/mgb_biobank/match_snps.R $VARSMGB1 $VARSMGB2 $VARSKG $POSFILE
 
 # Filter MGB and 1000G VCFs for the same set of variants
 # and merge files
-VCFOUT2=$OUTDIR/chr${CHR}.filtered.v2.vcf.gz
+VCFOUT1V2=$OUTDIR/chr${CHR}.filtered.MGB.1.v2.vcf.gz
+VCFOUT2V2=$OUTDIR/chr${CHR}.filtered.MGB.2.v2.vcf.gz
 VCFKGOUT2=$OUTDIR/chr${CHR}.1000G.filtered.v2.vcf.gz
 
-bcftools view -R $POSFILE $VCFOUT -O z -o $VCFOUT2 
+bcftools view -R $POSFILE $VCFOUT1 -O z -o $VCFOUT1V2 
+bcftools view -R $POSFILE $VCFOUT2 -O z -o $VCFOUT2V2 
 bcftools view -R $POSFILE $VCFKGOUT -O z -o $VCFKGOUT2
-tabix -p vcf $VCFOUT2
+tabix -p vcf $VCFOUT1V2
+tabix -p vcf $VCFOUT2V2
 tabix -p vcf $VCFKGOUT2
 
 VCFMERGED=$OUTDIR/chr${CHR}.merged.vcf.gz
-bcftools merge $VCFOUT2 $VCFKGOUT2 |\
+bcftools merge $VCFOUT1V2 $VCFOUT2V2 $VCFKGOUT2 |\
     bcftools annotate -x 'INFO' - -O z -o $VCFMERGED
 
 # Prune SNPs for r2 < 0.1

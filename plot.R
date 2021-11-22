@@ -290,9 +290,14 @@ ids_1000g <- "./mgb_biobank/results/allchr.1000G.fam" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     pull(1)
 
-ancestry_1000g <- "./mgb_biobank/results/allchr.1000G.9.Q" %>%
-    read_delim(delim = " ", col_names = FALSE) %>%
-    add_column(id = ids_1000g, .before = 1) %>%
+ancestry_1000g <- 
+    "./mgb_biobank/results/allchr.1000G.%d.Q" %>%
+    sprintf(1:10) %>%
+    setNames(1:10) %>%
+    map_df(~read_delim(., delim = " ", col_names = FALSE) %>%
+               add_column(id = ids_1000g, .before = 1) %>%
+               pivot_longer(-id, names_to = "cluster", values_to = "q"), 
+           .id = "K") %>%
     left_join(sample_annotation, c("id" = "sample_id")) %>%
     mutate(continent = case_when(population %in% names(afr_cols) ~ "AFR",
                                  population %in% names(eur_cols) ~ "EUR",
@@ -300,27 +305,43 @@ ancestry_1000g <- "./mgb_biobank/results/allchr.1000G.9.Q" %>%
                                  population %in% names(eas_cols) ~ "EAS",
                                  population %in% names(amr_cols) ~ "AMR")) %>%
     mutate(continent = factor(continent,
-                              levels = c("AFR", "EUR", "SAS", "EAS", "AMR"))) %>%
-    pivot_longer(X1:X9, names_to = "cluster", values_to = "q") %>%
-    arrange(continent, population, id) %>%
-    mutate(population = fct_inorder(population))
+                              levels = c("AFR", "EUR", "SAS", "EAS", "AMR")),
+           K = as.integer(K),
+           cluster = factor(cluster, levels = sprintf("X%d", 1:10))) %>%
+    arrange(continent, population, cluster, id) %>%
+    mutate(population = fct_inorder(population),
+           id = fct_inorder(id))
 
-ancestry_colors <- c("X1" = amr_cols[["CLM"]], "X2" = afr_cols[["YRI"]],
-                     "X3" = eur_cols[["IBS"]], "X4" = sas_cols[["ITU"]],
-                     "X5" = eas_cols[["CDX"]])
+# ancestry_colors <- c("X1" = amr_cols[["CLM"]], "X2" = afr_cols[["YRI"]],
+#                      "X3" = eur_cols[["IBS"]], "X4" = sas_cols[["ITU"]],
+#                      "X5" = eas_cols[["CDX"]])
+# 
+# ggplot(ancestry_1000g, aes(id, q, fill = cluster)) +
+#     geom_bar(stat = "identity", position = "fill", width = 1) +
+#     facet_wrap(~population, scales = "free", ncol = 4) +
+#     #scale_fill_manual(values = ancestry_colors) +
+#     scale_y_continuous(breaks = c(0, .5, 1)) +
+#     theme_minimal() +
+#     theme(axis.text.x = element_blank(),
+#           axis.ticks.x = element_blank(),
+#           panel.grid = element_blank()) +
+#     labs(x = NULL)
+# 
+# ggsave("./plots/admixture.1000G.png", height = 5)
 
-ggplot(ancestry_1000g, aes(id, q, fill = cluster)) +
+
+admix1000G <- ggplot(ancestry_1000g, aes(q, id, fill = cluster)) +
     geom_bar(stat = "identity", position = "fill", width = 1) +
-    facet_wrap(~population, scales = "free", ncol = 4) +
-    #scale_fill_manual(values = ancestry_colors) +
-    scale_y_continuous(breaks = c(0, .5, 1)) +
+    facet_grid(continent~K, scales = "free") +
+    scale_fill_npg() +
     theme_minimal() +
-    theme(axis.text.x = element_blank(),
-          axis.ticks.x = element_blank(),
-          panel.grid = element_blank()) +
-    labs(x = NULL)
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          panel.grid = element_blank(),
+          panel.spacing.y = unit(0, "lines")) +
+    labs(y = NULL)
 
-ggsave("./plots/admixture.1000G.png", height = 5)
+ggsave("./plots/admixture.1000G.allK.png", admix1000G, height = 7)
 
 # 
 # ## select individuals for a reduced reference panel
