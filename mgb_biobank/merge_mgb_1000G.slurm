@@ -29,7 +29,7 @@ VARS1KG=$OUTDIR/chr$CHR.1000G.variants.txt
 OUTPOS=$OUTDIR/chr$CHR.commonvars.pos
 
 # Extract common variants among datasets
-#Rscript $SLURM_SUBMIT_DIR/match_snps.R $( eval echo $VARSMGB ) $VARS1KG $OUTPOS
+Rscript $SLURM_SUBMIT_DIR/match_snps.R $( eval echo $VARSMGB ) $VARS1KG $OUTPOS
 
 # Filter MGB and 1000G VCFs for the same set of variants
 for f in $( eval echo $VCFMGB; echo $VCFKGP)
