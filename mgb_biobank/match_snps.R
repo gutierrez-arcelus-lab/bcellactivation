@@ -2,7 +2,7 @@ library(tidyverse)
 
 paths <- commandArgs(TRUE)
 
-var_paths <- paths[-length(paths)]
+vars_paths <- paths[-length(paths)]
 out_path <- last(paths)
 
 read_variants <- function(var_path) {
@@ -19,10 +19,10 @@ read_variants <- function(var_path) {
 	select(-n)
 }
 
-out_df <- c(mgb_paths, kgp_path) %>%
+out_df <- vars_paths %>%
     map(read_variants) %>%
     reduce(inner_join, by = c("CHROM", "POS", "REF", "ALT")) %>%
     select(CHROM, POS) %>%
-    arrange(POS)
+   arrange(POS)
 
 write_tsv(out_df, out_path, col_names = FALSE)

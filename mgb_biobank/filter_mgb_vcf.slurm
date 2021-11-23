@@ -5,7 +5,7 @@
 #SBATCH --mem=8gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
-#SBATCH --array=45-66
+#SBATCH --array=1-66
 #SBATCH --job-name=vcf_process
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
