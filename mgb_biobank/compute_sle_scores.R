@@ -1,6 +1,5 @@
 library(tidyverse)
 
-
 bed_hg19 <- 
     read_tsv("./sle_variants/sle.bed", col_names = FALSE) %>%
     select(chr = X1, pos_hg19 = X3, snp_id = X4)
@@ -12,8 +11,10 @@ bed_hg38 <-
 bed <- left_join(bed_hg19, bed_hg38, by = c("chr", "snp_id")) %>%
     select(-snp_id)
 
+# If OR < 0, use the reciprocal for risk
 sle_vars <- read_tsv("./sle_variants/sle.tsv") %>%
-    select(pos, or)
+    select(pos, or) %>%
+    mutate(or = ifelse(or < 0, 1/or, or))
 
 vcf <- read_tsv("./sle_variants/sle.MGB.vcf", comment = "##") %>%
     select(-(QUAL:FORMAT)) %>%

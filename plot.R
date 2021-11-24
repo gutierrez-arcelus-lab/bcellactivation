@@ -181,11 +181,12 @@ all_cols <- c(mgb_cols, afr_cols, eur_cols, sas_cols, eas_cols, amr_cols)
 
 ### read PCA results into R
 pca_genos <-
-    "/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank/results/plink_pca.eigenvec" %>%
+    file.path("/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank/results",
+    "plink_pca.eigenvec") %>%
     read_table2(col_names = FALSE) %>%
     select(-1) %>%
-    select(X2:X12) %>%
-    setNames(c("sample_id", paste0("PC", 1:10)))
+    select(X2:X5) %>%
+    setNames(c("sample_id", paste0("PC", 1:3)))
 
 pca_kgp <- pca_genos %>%
     inner_join(sample_annotation) 
@@ -194,7 +195,8 @@ mgb_mosteur <- read_lines("./mgb_biobank/mgb_mosteuropean.txt")
 
 pca_mgb <- pca_genos %>%
     anti_join(sample_annotation) %>%
-    mutate(population = ifelse(sample_id %in% mgb_mosteur, "MGB_most_EUR", "MGB_biobank"))
+    mutate(population = ifelse(sample_id %in% mgb_mosteur, 
+                               "MGB_most_EUR", "MGB_biobank"))
 
 pca_df <- bind_rows(pca_mgb, pca_kgp) %>%
     select(sample_id, population, PC1:PC3) %>%
@@ -206,7 +208,8 @@ pca_for_plot <-
             mutate(comparison = "PC1 vs PC2"),
         select(pca_df, sample_id, population, x = PC2, y = PC3) %>%
             mutate(comparison = "PC2 vs PC3")) %>%
-    mutate(dataset = ifelse(grepl("MGB", population), "MGB", "1000 Genomes"))
+    mutate(dataset = ifelse(grepl("MGB", population), "MGB", "1000 Genomes"),
+           dataset = factor(dataset, levels = rev(c("1000 Genomes", "MGB"))))
 
 ggplot(pca_for_plot, aes(x, y, color = population, alpha = dataset)) +
     geom_point(size = .75) +
@@ -261,8 +264,12 @@ top_scores %>%
     
 ggsave("./plots/het_score.png", width = 4)
 
+# OR
 
+sle_vars <- read_tsv("./mgb_biobank/sle_variants/sle.tsv")
 
+ggplot(sle_vars, aes(or, log(or))) +
+    geom_point()
 
 # Admixture
 

@@ -35,10 +35,10 @@ tab_best <- tab %>%
     slice(which.min(p_value)) %>%
     ungroup()
 
-tab_fdr01 <- tab %>%
-    filter(p_value <= 1/46744 * 0.01)
+#tab_fdr01 <- tab %>%
+#    filter(p_value <= 1/46744 * 0.01)
 
-bed <- tab_fdr01 %>%
+bed <- tab_best %>%
     mutate(chrom = sub("^(\\d+).*$", "chr\\1", chr),
 	   chrom = factor(chrom, levels = paste0("chr", 1:22)),
 	   snp_id = sub("^(\\S+)\\s+.*$", "\\1", snp_id)) %>%
@@ -46,5 +46,6 @@ bed <- tab_fdr01 %>%
     select(chrom, start, end = pos, snp_id) %>%
     arrange(chrom, start) 
 
-write_tsv(tab_fdr01, "./sle_variants/sle.tsv")
+#write_tsv(tab_fdr01, "./sle_variants/sle.tsv")
+write_tsv(tab_best, "./sle_variants/sle.tsv")
 write_tsv(bed, "./sle_variants/sle.bed", col_names = FALSE)
