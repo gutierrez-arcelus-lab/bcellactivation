@@ -9,7 +9,7 @@
 #SBATCH --job-name=ADMIXTURE-cv
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /home/ch229163/log/ADMIXTURE-cv.%A.%a
+#SBATCH -o /temp_work/ch229163/log/ADMIXTURE-cv.%A.%a
 
 DIR=/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank/results
 BASENAME=allchr.merged.pruned.1000G 

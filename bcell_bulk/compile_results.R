@@ -2,9 +2,9 @@ library(tidyverse)
 
 # Gencode annotations
 annotations <- 
-    "./data/gencode.v38.primary_assembly.annotation.gtf" %>% 
+    "../data/gencode.v38.primary_assembly.annotation.gtf" %>% 
     read_tsv(comment = "#", col_names = FALSE, col_types = "c-cii-c-c") %>%
-    mutate(X6 = trimws(annotations$X6))
+    mutate(X6 = trimws(X6))
 
 # Gene annotations
 gene_annot <- annotations %>%
@@ -14,6 +14,9 @@ gene_annot <- annotations %>%
 	   gene_type = str_extract(X6, "(?<=gene_type\\s\")[^\"]+")) %>%
     select(chr = X1, start = X3, end = X4, strand = X5, gene_id, gene_name, gene_type)
 
+
+gene_annot %>%
+    filter(grepl("ENS", gene_name))
 
 # Transcript annotations
 transcript_annot <- annotations %>%
@@ -30,12 +33,12 @@ select(transcript_annot, target_id = transcript_id, gene_id) %>%
 
 # Sample annotations
 sample_info <- 
-    tibble(sample_id = list.files("./bcell_quant")) %>%
+    tibble(sample_id = list.files("results/salmon")) %>%
     mutate(condition_id = gsub("^[^_]+_([^_]+)_([^_]+).*$", "\\1_\\2", sample_id))
 
 # Expression estimates
 quant_df <- 
-    file.path("./bcell_quant", sample_info$sample_id, "quant.sf") %>% 
+    file.path("./results/salmon", sample_info$sample_id, "quant.sf") %>% 
     setNames(sample_info$condition_id) %>%
     map_df(read_tsv, .id = "condition_id") %>%
     left_join(sample_info, by = "condition_id") %>%
@@ -78,7 +81,7 @@ logfc_df <- expressed_genes_df %>%
     pivot_wider(names_from = condition_id, values_from = cpm) %>%
     pivot_longer(-(1:2), names_to = "condition_id", values_to = "cpm") %>%
     select(gene_id, resting = 2, condition_id, cpm) %>%
-    mutate(cpm = cpm + 1e-23,
+    mutate(cpm = cpm + 1L,
 	   log2fc = log2(cpm/resting)) %>%
     left_join(gene_annot, by = "gene_id") %>%
     select(gene_id, gene_type, condition_id, cpm, log2fc)
@@ -97,7 +100,7 @@ gene_bed <- gene_df %>%
 # Write output files
 write_tsv(quant_annot_df, "./data/transcript_quants.tsv")
 write_tsv(gene_df, "./data/gene_quants.tsv")
-write_tsv(logfc_df, "./data/logfc.tsv")
+write_tsv(logfc_df, "./results/logfc.tsv")
 
 write_tsv(gene_bed, "./data/phenotypes.bed")
 system("bgzip ./data/phenotypes.bed && tabix -p bed ./data/phenotypes.bed.gz")

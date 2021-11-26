@@ -8,12 +8,13 @@
 #SBATCH --job-name=PCA
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /home/ch229163/log/pca.%o
+#SBATCH -o /temp_work/ch229163/log/pca.%j
 
 source /programs/biogrids.shrc
 
 DIR=/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank/results 
-VCF=$DIR/allchr.merged.pruned.vcf.gz
-OUT=$DIR/plink_pca
+PREFIX=allchr.merged.pruned
+VCF=${DIR}/${PREFIX}.vcf.gz
+OUT=${DIR}/${PREFIX}.pca
 
 plink --vcf $VCF --pca --out $OUT

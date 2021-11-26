@@ -76,7 +76,7 @@ For the TPM plot, we see a jump in quantifications for rRNAs. But we
 need to keep in mind that these are very short RNAs, and a small
 increase in read counts can lead to large increases in TPM values.
 
-<img src="./plots/transcript_biotypes.png" width="2181" />
+<img src="./plots/total_expression.png" width="1800" />
 
 #### 1.3.2. PCA
 
@@ -93,20 +93,28 @@ log2 Fold-change in respect to the resting state.
 Extreme values correspond to genes that have no expression in either the
 resting or test condition.
 
-<img src="./plots/fc.png" width="2181" />
+<img src="./plots/foldchange.png" width="1500" />
 
 #### 1.3.4. Subset of the plot above:
 
-<img src="./plots/fc_subset.png" width="2181" />
+<img src="./plots/foldchange_subset.png" width="1500" />
 
-#### 1.3.5. Correlations with resting state:
+#### 1.3.5. Summary of direction of regulation
+
+<img src="./plots/foldchange_summary.png" width="1500" />
+
+#### 1.3.6. Correlations with resting state:
 
 <img src="./plots/scatter_resting_conditions.png" width="2228" />
 
+#### 1.3.7. Comparison of FC for each stimulant
+
+<img src="./plots/fc_24vs72.png" width="1500" />
+
 ### 1.4. TO DO:
 
--   Look at common DE genes across conditions;
 -   Select genes in LD with SLE variants and look at their DE status;
+-   Run Maria’s script to model expression given condition;
 -   Run kallisto + sleuth once we have more samples, and call
     significant genes.
 
@@ -128,11 +136,12 @@ resting or test condition.
 
 -   MGB:
 
-| Batch |  N   |    M    |       Source       |
-|:-----:|:----:|:-------:|:------------------:|
-| 0401  | 4921 | \~79.1M |    MEGA\_TopMed    |
-| 0402  | 5336 | \~80.1M |   MEGAEX\_TopMed   |
-| 0403  | 4780 | \~79.8M | MEG\_A1\_A\_TopMed |
+| Batch |   N   | Variants (MM) |       Source       |
+|:-----:|:-----:|:-------------:|:------------------:|
+| 0401  | 4,921 |    \~79.1     |    MEGA\_TopMed    |
+| 0402  | 5,336 |    \~80.1     |   MEGAEX\_TopMed   |
+| 0403  | 4,780 |    \~79.8     | MEG\_A1\_A\_TopMed |
+| 0404  | 5,016 |    \~80.9     | MEG\_A1\_B\_TopMed |
 
 -   1000 Genomes data:
     -   \~2,500 individuals low coverage data realigned to GRCh38 (not
@@ -140,53 +149,44 @@ resting or test condition.
 
 ### 2.3. Methods
 
--   VCF processing (`./mgb_biobank/process_vcf.slurm` script):
+The workflow for the analyses below is described in
+`./mgb_biobank/README.md`.
 
-    -   remove variants with any missing genotypes;
-    -   select only biallelic SNPs with MAF &gt;= 0.1;
-    -   remove A/T and C/G genotypes due to potential strand ambiguity;
-    -   remove duplicates (these can be multiallelic variants or
+-   VCF processing:
+    -   Remove variants with any missing genotypes;
+    -   Select only biallelic SNPs with MAF &gt;= 0.1;
+    -   Remove A/T and C/G genotypes due to potential strand ambiguity;
+    -   Remove duplicates (these can be multiallelic variants or
         multiple variants with same position);
-    -   select variants with the same position and alleles in both
+    -   Select variants with the same position and alleles in both
         datasets;
-    -   filter both datasets for the common set of variants;
-    -   merge VCFs and run LD pruning for r2 &lt; 0.1.
-
--   Concatenate VCFs for each chromosome into a single VCF
-    (`./mgb_biobank/concat_vcf.sh`)
-
--   PCA (`./mgb_biobank/run_pca.slurm` script):
-
+    -   Filter both datasets for the common set of variants;
+    -   Merge VCFs and run LD pruning for r2 &lt; 0.1;
+    -   oncatenate VCFs for each chromosome into a single VCF.
+-   PCA:
     -   plink pca
-
 -   ADMIXTURE
-
-    -   Cross-validations (`./mgb_biobank/admixture_cv.slurm`);
-    -   Projection of MGB individuals on 1000G reference panel
-        (`./mgb_biobank/admixture_projection.sh`)
+    -   Unsupervised analysis on 1000 Genomes data;
+    -   Project MGB individuals onto 1000G reference panel.
+-   SLE risk variants
+    -   We take all variants at FDR&lt;5% from [Langefeld et
+        al. (2017)](http://www.nature.com/articles/ncomms16021);
+    -   For each individual, we compute an overall heterozygosity score
+        at SLE variants.
 
 ### 2.4. Results
 
 #### Ancestry information from genotype data
 
+##### PCA
+
 The PCA plot shows the MGB individuals in comparison with the 1000
 Genomes data. We can see that individuals are distributed according to
 the 5 main continental groups.
 
-Below, I’m showing a subset of MGB biobank individuals who are within
-0.5 standard deviations from the European averages for PC1, PC2 and PC3.
-I’m calling those “MGB\_most\_EUR”, they represent 34% of the MGB
-individuals.
-
 <img src="./plots/pca.png" width="2400" />
 
-I think I’m going to select these individuals for the next step, since
-results from the ADMIXTURE program are a bit difficult to understand at
-this point.
-
-I wanted to run ADMIXTURE to determine the ancestry proportions in each
-individual, so I could select those who are (mostly) of European
-ancestry.
+##### ADMIXTURE
 
 First, I ran the cross-validation procedure of ADMIXTURE to determine
 the best value of K (number of clusters).
@@ -199,23 +199,35 @@ And this is the separation we get in 1000 Genomes data:
 
 Next, I asked ADMIXTURE to project the MGB biobank onto the 1000 Genomes
 reference in order to determine the ancestry proportions in MGB biobank.
-I tried with K = 3 or K = 5.
 
-The results don’t make sense. All individuals seem to be admixed,
-including a almost constant proportion of South Asian or South East
-Asian ancestry.
+The results don’t make sense.
 
 <img src="./plots/admixture_mgb_k3.png" width="2553" />
 
 <img src="./plots/admixture_mgb.png" width="2171" />
 
-Therefore, I’ve decided for now to stick with the selection by PCA.
+##### K-means
+
+I tried k-means to classify MGB individuals into continental groups,
+giving their values for PC1:PC4.
+
+The plot below shows the classifications according to the most likely
+continental group for each cluster.
+
+<img src="./plots/clusters.png" width="2400" />
+
+K=7 seems to make sense to extract the individuals with high European
+ancestry. I computed a heterogeneity score, defined as the degree of
+homogeneity regarding called continental groups at each cluster, using
+known continental groups for the 1000 Genomes data. For example, if at
+cluster X we have 90% of individuals from a 1000G European population,
+the score will equal 0.9.
+
+<img src="./plots/kmeans_accuracy.png" width="1500" />
 
 #### SLE variants
 
-I’ve selected 90 SLE risk variants from the [Langefeld et
-al. study](nature.com/articles/ncomms16021), by taking all variants
-identified in individuals of European ancestry with FDR &lt;= 0.01.
+We selected SLE risk variants from the Langefeld et al. study.
 
 Then, I computed a heterozygosity score that corresponds to the number
 of variants at which the individuals are heterozygotes. I also computed
@@ -224,11 +236,13 @@ summed over all variants. Since the number of alleles for heterozygotes
 is equal to 1, that corresponds to simply summing the log(OR) over all
 SLE SNPs.
 
+Since we are not intested in the direction of effect, I converted all
+ORs &lt; 1 to the reciprocal 1/OR.
+
 This is the relationship between the two scores:
 
-<img src="./plots/het_scores_jitterplot.png" width="2400" />
+<img src="./plots/het_scores_jitterplot.png" width="1500" />
 
-If we select the individuals who have the most extreme values at each
-score, we would end up selecting different individuals.
+This are the distributions according the European ancestry:
 
-<img src="./plots/het_score.png" width="1200" />
+<img src="./plots/het_score_density.png" width="1800" />

@@ -8,7 +8,7 @@ BED=${LABSHARE}/vitor/ase/mgb_biobank/sle_variants/sle_hg38.bed
 
 for CHR in {1..22}
     do
-	for BATCH in {01..03}
+	for BATCH in {01..04}
 	do
 	    VCFIN=$LABSHARE/mgb_biobank/04${BATCH}/vcf/chr${CHR}.dose.vcf.gz 
 	    VCFOUT=$TEMP_WORK/VCF/chr${CHR}.04${BATCH}.sle.vcf.gz
@@ -19,7 +19,7 @@ for CHR in {1..22}
 	    tabix -p vcf $VCFOUT
 	done
 
-	VCFCHR=$TEMP_WORK/VCF/chr${CHR}.04{01..03}.sle.vcf.gz 
+	VCFCHR=$TEMP_WORK/VCF/chr${CHR}.04{01..04}.sle.vcf.gz 
 	MERGEDCHR=$TEMP_WORK/VCF/chr${CHR}.sle.merged.vcf.gz
 	bcftools merge -O z -o $MERGEDCHR $( eval echo $VCFCHR )
 	tabix -p vcf $MERGEDCHR

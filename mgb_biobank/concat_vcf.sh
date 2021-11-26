@@ -1,15 +1,5 @@
 #!/bin/bash
 
-#SBATCH -N 1
-#SBATCH -c 2
-#SBATCH --mem=8gb
-#SBATCH --time=24:00:00
-#SBATCH -p bch-compute
-#SBATCH --job-name=concat_vcf
-#SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
-#SBATCH --mail-type=END,FAIL
-#SBATCH -o /temp_work/ch229163/log/concat_vcf.%j
-
 source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
 
