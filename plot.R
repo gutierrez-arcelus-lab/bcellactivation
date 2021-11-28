@@ -444,7 +444,9 @@ ggplot(sle_vars, aes(or, log(or))) +
 # Admixture
 
 ## Cross-validations to choose best value for K
-k_df <- system("grep -h CV ./mgb_biobank/results/admix.1000G.cv*.log", intern = TRUE) %>%
+k_df <- 
+    "grep -h CV ./mgb_biobank/results/allchr.merged.pruned.1000G.cv*.log" %>%
+    system(intern = TRUE) %>%
     str_remove("CV error ") %>%
     tibble(tmp = .) %>%
     separate(tmp, c("K", "error"), sep = " ", convert = TRUE) %>%
@@ -463,12 +465,12 @@ ggplot(k_df, aes(K, error)) +
 ggsave("./plots/admixture_cv.png", height = 3)
 
 ## Ancestry proportions
-ids_1000g <- "./mgb_biobank/results/allchr.1000G.fam" %>%
+ids_1000g <- "./mgb_biobank/results/allchr.merged.pruned.1000G.fam" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     pull(1)
 
 ancestry_1000g <- 
-    "./mgb_biobank/results/allchr.1000G.%d.Q" %>%
+    "./mgb_biobank/results/allchr.merged.pruned.1000G.%d.Q" %>%
     sprintf(1:10) %>%
     setNames(1:10) %>%
     map_df(~read_delim(., delim = " ", col_names = FALSE) %>%
@@ -505,59 +507,40 @@ admix1000G <- ggplot(ancestry_1000g, aes(q, id, fill = cluster)) +
 ggsave("./plots/admixture.1000G.allK.png", admix1000G, height = 7)
 
 
-
-## Plot results for reference panel
-ids_refpanel <- "./mgb_biobank/results/allchr.refpanel.fam" %>%
+## MGB biobank ancestry
+ids_mgb <- "./mgb_biobank/results/allchr.merged.pruned.MGB.fam" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     pull(1)
 
-ancestry_refpanel <- "./mgb_biobank/results/allchr.refpanel.3.Q" %>%
+ancestry_mgb <- "./mgb_biobank/results/allchr.merged.pruned.MGB.3.Q" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
-    add_column(id = ids_refpanel, .before = 1) %>%
+    add_column(id = ids_mgb, .before = 1) %>%
+    arrange(X1) %>%
+    mutate(id = fct_inorder(id)) %>%
+    pivot_longer(X1:X3, names_to = "cluster", values_to = "q")
+
+
+"./mgb_biobank/results/allchr.merged.pruned.MGB.%d.Q" %>%
+    sprintf(1:10) %>%
+    setNames(1:10) %>% .[1] %>%
+    map_df(~read_delim(., delim = " ", col_names = FALSE) %>%
+               add_column(id = ids_1000g, .before = 1) %>%
+               pivot_longer(-id, names_to = "cluster", values_to = "q"), 
+           .id = "K") %>%
     left_join(sample_annotation, c("id" = "sample_id")) %>%
     mutate(continent = case_when(population %in% names(afr_cols) ~ "AFR",
                                  population %in% names(eur_cols) ~ "EUR",
                                  population %in% names(sas_cols) ~ "SAS",
                                  population %in% names(eas_cols) ~ "EAS",
                                  population %in% names(amr_cols) ~ "AMR")) %>%
-    mutate(continent = factor(continent, 
-                              levels = c("EUR", "AFR", "SAS", "EAS", "AMR"))) %>%
-    pivot_longer(X1:X3, names_to = "cluster", values_to = "q") %>%
-    arrange(continent, population, id) %>%
-    mutate(population = fct_inorder(population))
+    mutate(continent = factor(continent,
+                              levels = c("AFR", "EUR", "SAS", "EAS", "AMR")),
+           K = as.integer(K),
+           cluster = factor(cluster, levels = sprintf("X%d", 1:10))) %>%
+    arrange(continent, population, cluster, id) %>%
+    mutate(population = fct_inorder(population),
+           id = fct_inorder(id))
 
-# refpanel_colors <- c("X1" = all_cols[["TSI"]], "X2" = all_cols[["YRI"]],
-#                      "X3" = all_cols[["BEB"]], "X4" = all_cols[["CHS"]],
-#                      "X5" = all_cols[["CLM"]])
-
-refpanel_colors <- c("X1" = all_cols[["TSI"]], "X2" = all_cols[["YRI"]],
-                     "X3" = all_cols[["CHB"]])
-
-ggplot(ancestry_refpanel, aes(id, q, fill = cluster)) +
-    geom_bar(stat = "identity", position = "fill", width = 1) +
-    facet_wrap(~population, scales = "free", nrow = 1) +
-    scale_fill_manual(values = refpanel_colors) +
-    scale_y_continuous(breaks = c(0, .5, 1)) +
-    theme_minimal() +
-    theme(axis.text.x = element_blank(),
-          axis.ticks.x = element_blank(),
-          panel.grid = element_blank()) +
-    labs(x = NULL)
-
-ggsave("./plots/admixture_refpanel.png")
-
-
-## MGB biobank ancestry
-ids_mgb <- "./mgb_biobank/results/allchr.MGB.fam" %>%
-    read_delim(delim = " ", col_names = FALSE) %>%
-    pull(1)
-
-ancestry_mgb <- "./mgb_biobank/results/allchr.MGB.3.Q" %>%
-    read_delim(delim = " ", col_names = FALSE) %>%
-    add_column(id = ids_mgb, .before = 1) %>%
-    arrange(X1) %>%
-    mutate(id = fct_inorder(id)) %>%
-    pivot_longer(X1:X3, names_to = "cluster", values_to = "q")
 
 ggplot(ancestry_mgb, aes(id, q, fill = cluster)) +
     geom_bar(stat = "identity", position = "fill", width = 1) +
