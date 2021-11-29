@@ -209,8 +209,8 @@ sample_annotation <- read_tsv(index_1000G, comment = "##") %>%
 
 
 ### Colors
-mgb_cols <- c("black", "cornflowerblue") %>%
-    setNames(c("MGB_biobank", "MGB_most_EUR"))
+mgb_cols <- c("black", "goldenrod") %>%
+    setNames(c("MGB_biobank", "MGB_eur"))
 
 afr_cols <- brewer.pal("Oranges", n = 9)[3:9] %>%
     setNames(c("ACB", "ESN", "GWD", "LWK", "MSL", "YRI", "ASW"))
@@ -321,7 +321,8 @@ clusters_continent <- clusters_df %>%
     count(continent) %>%
     mutate(p = n/sum(n)) %>%
     slice(which.max(n)) %>%
-    select(k, cluster, continent, p)
+    select(k, cluster, continent, p) %>%
+    ungroup()
     
 clusters_continent %>%
     group_by(k) %>%
@@ -373,19 +374,19 @@ ggsave("./plots/kmeans_illustration.png", width = 4, height = 6)
 
 
 # Select MGB individuals with high EUR ancestry
-mgb_eur <- clusters_df %>%
-    filter(dataset == "MGB", k == 7, cluster %in% c(3L, 7L)) %>%
-    pull(sample_id)
-
 continent_colors <- all_cols[c("YRI", "TSI", "PJL", "CDX", "PEL")] %>%
-    setNames(levels(clusters_continent$continent))
+    setNames(levels(clusters_continent$continent)) %>%
+    c("MGB" = "Black")
 
 clusters_plot_df <- clusters_df %>%
-    left_join(clusters_continent) %>%
-    filter(dataset != "MGB") 
+    left_join(select(clusters_continent, -p), by = c("k", "cluster")) %>%
+    filter(dataset == "MGB") %>%
+    mutate(continent = as.character(continent),
+           continent = ifelse(is.na(continent), "MGB", continent),
+           continent = factor(continent, levels = names(continent_colors)))
 
 cluster_plot_1 <- ggplot(clusters_plot_df, aes(PC1, PC2, color = continent)) +
-    geom_point(size = .75, alpha = .5) +
+    geom_point(size = .25, alpha = .25) +
     scale_color_manual(values = continent_colors) +
     facet_wrap(~k, nrow = 1) +
     theme_minimal() +
@@ -394,10 +395,10 @@ cluster_plot_1 <- ggplot(clusters_plot_df, aes(PC1, PC2, color = continent)) +
           panel.spacing = unit(0, "lines"),
           axis.text = element_blank(),
           legend.position = "top") +
-    guides(color = guide_legend(override.aes = list(size = 2, alpha = 1)))
+    guides(color = guide_legend(nrow = 1, override.aes = list(size = 2, alpha = 1)))
 
 cluster_plot_2 <- ggplot(clusters_plot_df, aes(PC3, PC4, color = continent)) +
-    geom_point(size = .75, alpha = .5) +
+    geom_point(size = .25, alpha = .25) +
     scale_color_manual(values = continent_colors) +
     facet_wrap(~k, nrow = 1) +
     theme_minimal() +
@@ -419,11 +420,46 @@ cluster_plot_final <-
 ggsave("./plots/clusters.png", cluster_plot_final, height = 4, width = 8)
 
 
+mgb_eur <- clusters_df %>%
+    filter(dataset == "MGB", k == 8, cluster %in% c(4L, 8L)) %>%
+    pull(sample_id)
+
+## Select based on PC1:PC2 coordinates
+mgb_eur_inds <- read_lines("./mgb_biobank/results/mgb_eur.txt")
+    
+pca_eur_df <- pca_df %>%
+    select(sample_id, dataset, population, PC1, PC2) %>%
+    mutate(population = as.character(population),
+           population = ifelse(sample_id %in% mgb_eur_inds, "MGB_eur", population),
+           population = factor(population, levels = names(all_cols)))
+
+
+pca_eur_plot <- pca_eur_df %>%
+    ggplot(aes(PC1, PC2, color = population, alpha = dataset)) +
+    geom_point(size = .75) +
+    scale_color_manual(values = all_cols) +
+    scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines"),
+          legend.text = element_text(size = 6)) +
+    guides(color = guide_legend(override.aes = list(size = 1), 
+                                ncol = 2,
+                                keyheight = .5),
+           alpha = FALSE)
+
+ggsave("./plots/pca_eur.png", pca_eur_plot, width = 6, height = 2)
+
+
+    
+
 # Heterozygosity scores
 
 scores_df <- read_tsv("./mgb_biobank/sle_variants/scores.tsv") %>%
     extract(sample_id, c("sample_id"), ".+_(.+)") %>%
-    mutate(top_eur = sample_id %in% mgb_eur)
+    mutate(top_eur = sample_id %in% mgb_eur_inds)
 
 scores_eur_df <- scores_df %>%
     filter(top_eur == TRUE)
@@ -472,6 +508,25 @@ scores_df %>%
     labs(fill = "Top\nEuropean\nAncestry?")
     
 ggsave("./plots/het_score_density.png", width = 6)
+
+## color PCA by heterozygosity
+
+pca_score_df <- pca_df %>%
+    filter(dataset == "MGB") %>%
+    left_join(scores_df) %>%
+    select(sample_id, PC1, PC2, PC3, PC4, het_score, het_score_wt)
+
+pca_score_df %>%
+    ggplot(aes(PC1, PC2, color = het_score_wt)) +
+    geom_point(size = .25) +
+    scale_color_viridis_c(option = "inferno") +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    guides(color = guide_legend(override.aes = list(size = 2, alpha = 1))) +
+    labs(color = "Weighted\nscore")
+
+ggsave("./plots/pca_het_scores.png", width = 4, height = 2)
+
 
 
 # OR

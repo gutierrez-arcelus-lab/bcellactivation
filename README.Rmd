@@ -20,7 +20,7 @@ For the `.sh` scripts, I execute them with the command `./script_name.sh` in an 
 
 ### 1.1. Input data:
 
-- 1 individual, 5 timepoints:
+- 1 individual sequenced at:
   - Resting for 16 hours
   - IgG stim for 24 hours
   - IgG stim for 72 hours
@@ -161,7 +161,7 @@ The workflow for the analyses below is described in `./mgb_biobank/README.md`.
   - Select variants with the same position and alleles in both datasets;
   - Filter both datasets for the common set of variants;
   - Merge VCFs and run LD pruning for r2 < 0.1;
-  - oncatenate VCFs for each chromosome into a single VCF.
+  - Concatenate VCFs for each chromosome into a single VCF.
 
 - PCA:
   - plink pca
@@ -225,10 +225,24 @@ The plot below shows the classifications according to the most likely continenta
 include_graphics("./plots/clusters.png")
 ```
 
-K=7 seems to make sense to extract the individuals with high European ancestry. I computed a heterogeneity score, defined as the degree of homogeneity regarding called continental groups at each cluster, using known continental groups for the 1000 Genomes data. For example, if at cluster X we have 90% of individuals from a 1000G European population, the score will equal 0.9.
+I computed specificity defined as the proportion of correct calls for continental groups at each cluster, using known continental groups for the 1000 Genomes data. For example, if at cluster X we have 90% of individuals from a 1000G European population, the score will equal 0.9.
 
 ```{r kmeans_heterog}
 include_graphics("./plots/kmeans_accuracy.png")
+```
+
+The specificity suggests K = 7 as the optimal value. However, in the plot above we see that K = 7 does not correctly deal with a MGB subgroup which appears to refer to European ancestries which are not sampled in the 1000 Genomes data.
+
+Anyway, for MGB data, no value of K seems to be very specific, as the algorithm is clustering admixed individuals as Europeans.
+
+##### PCA-based selection
+
+Therefore, I've decided to simply select individuals based on PC1 and PC2 values.
+
+I computed the mean and SD for PC1 and PC2 in 1000 Genomes Europeans, and computed a z-score for each MGB individuals, selecting all individuals falling between -3 and +3 SDs.
+
+```{r pca_selection}
+include_graphics("./plots/pca_eur.png")
 ```
 
 
@@ -250,5 +264,11 @@ This are the distributions according the European ancestry:
 
 ```{r het_score_dens}
 include_graphics("./plots/het_score_density.png")
+```
+
+We can see that heterozygosity increases with European ancestry. We can also see that if we color the PCA plot by heterozygosity.
+
+```{r pca_het_score}
+include_graphics("./plots/pca_het_scores.png")
 ```
 

@@ -13,7 +13,7 @@ For the `.sh` scripts, I execute them with the command
 
 ### 1.1. Input data:
 
--   1 individual, 5 timepoints:
+-   1 individual sequenced at:
     -   Resting for 16 hours
     -   IgG stim for 24 hours
     -   IgG stim for 72 hours
@@ -109,7 +109,7 @@ resting or test condition.
 
 #### 1.3.7. Comparison of FC for each stimulant
 
-<img src="./plots/fc_24vs72.png" width="1500" />
+<img src="./plots/fc_24vs72.png" width="1800" />
 
 ### 1.4. TO DO:
 
@@ -162,7 +162,7 @@ The workflow for the analyses below is described in
         datasets;
     -   Filter both datasets for the common set of variants;
     -   Merge VCFs and run LD pruning for r2 &lt; 0.1;
-    -   oncatenate VCFs for each chromosome into a single VCF.
+    -   Concatenate VCFs for each chromosome into a single VCF.
 -   PCA:
     -   plink pca
 -   ADMIXTURE
@@ -191,11 +191,11 @@ the 5 main continental groups.
 First, I ran the cross-validation procedure of ADMIXTURE to determine
 the best value of K (number of clusters).
 
-<img src="./plots/admixture_cv.png" width="2153" />
+<img src="./plots/admixture_cv.png" width="2109" />
 
 And this is the separation we get in 1000 Genomes data:
 
-<img src="./plots/admixture.1000G.allK.png" width="2100" />
+<img src="./plots/admixture.1000G.allK.png" width="2109" />
 
 Next, I asked ADMIXTURE to project the MGB biobank onto the 1000 Genomes
 reference in order to determine the ancestry proportions in MGB biobank.
@@ -216,14 +216,31 @@ continental group for each cluster.
 
 <img src="./plots/clusters.png" width="2400" />
 
-K=7 seems to make sense to extract the individuals with high European
-ancestry. I computed a heterogeneity score, defined as the degree of
-homogeneity regarding called continental groups at each cluster, using
-known continental groups for the 1000 Genomes data. For example, if at
-cluster X we have 90% of individuals from a 1000G European population,
-the score will equal 0.9.
+I computed specificity defined as the proportion of correct calls for
+continental groups at each cluster, using known continental groups for
+the 1000 Genomes data. For example, if at cluster X we have 90% of
+individuals from a 1000G European population, the score will equal 0.9.
 
 <img src="./plots/kmeans_accuracy.png" width="1500" />
+
+The specificity suggests K = 7 as the optimal value. However, in the
+plot above we see that K = 7 does not correctly deal with a MGB subgroup
+which appears to refer to European ancestries which are not sampled in
+the 1000 Genomes data.
+
+Anyway, for MGB data, no value of K seems to be very specific, as the
+algorithm is clustering admixed individuals as Europeans.
+
+##### PCA-based selection
+
+Therefore, I’ve decided to simply select individuals based on PC1 and
+PC2 values.
+
+I computed the mean and SD for PC1 and PC2 in 1000 Genomes Europeans,
+and computed a z-score for each MGB individuals, selecting all
+individuals falling between -3 and +3 SDs.
+
+<img src="./plots/pca_eur.png" width="1800" />
 
 #### SLE variants
 
@@ -246,3 +263,8 @@ This is the relationship between the two scores:
 This are the distributions according the European ancestry:
 
 <img src="./plots/het_score_density.png" width="1800" />
+
+We can see that heterozygosity increases with European ancestry. We can
+also see that if we color the PCA plot by heterozygosity.
+
+<img src="./plots/pca_het_scores.png" width="1200" />
