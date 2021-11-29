@@ -371,8 +371,6 @@ ggsave("./plots/kmeans_illustration.png", width = 4, height = 6)
 
 ###
 
-
-
 # Select MGB individuals with high EUR ancestry
 continent_colors <- all_cols[c("YRI", "TSI", "PJL", "CDX", "PEL")] %>%
     setNames(levels(clusters_continent$continent)) %>%
@@ -517,15 +515,17 @@ pca_score_df <- pca_df %>%
     select(sample_id, PC1, PC2, PC3, PC4, het_score, het_score_wt)
 
 pca_score_df %>%
-    ggplot(aes(PC1, PC2, color = het_score_wt)) +
+    ggplot(aes(PC1, PC2, fill = het_score_wt, color = het_score_wt)) +
     geom_point(size = .25) +
     scale_color_viridis_c(option = "inferno") +
+    scale_fill_viridis_c(option = "inferno", 
+                         guide = guide_colorbar(barwidth = 0.5)) +
     theme_bw() +
     theme(panel.grid = element_blank()) +
-    guides(color = guide_legend(override.aes = list(size = 2, alpha = 1))) +
-    labs(color = "Weighted\nscore")
+    guides(color = FALSE) +
+    labs(fill = "Weighted\nscore")
 
-ggsave("./plots/pca_het_scores.png", width = 4, height = 2)
+ggsave("./plots/pca_het_scores.png", width = 6, height = 4)
 
 
 
