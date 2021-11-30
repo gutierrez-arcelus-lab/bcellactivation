@@ -525,7 +525,7 @@ pca_score_df %>%
     guides(color = FALSE) +
     labs(fill = "Weighted\nscore")
 
-ggsave("./plots/pca_het_scores.png", width = 6, height = 4)
+ggsave("./plots/pca_het_scores.png", width = 5, height = 3)
 
 
 
@@ -603,48 +603,54 @@ ggsave("./plots/admixture.1000G.allK.png", admix1000G, height = 7)
 
 
 ## MGB biobank ancestry
+ids_1000g <- "./mgb_biobank/results/allchr.refpanel.fam" %>%
+    read_delim(delim = " ", col_names = FALSE) %>%
+    pull(X1)
+
+cluster_identity <- "./mgb_biobank/results/allchr.refpanel.3.Q" %>%
+    read_delim(delim = " ", col_names = FALSE) %>%
+    add_column(id = ids_1000g, .before = 1) %>%
+    left_join(sample_annotation, by = c("id" = "sample_id")) %>%
+    pivot_longer(X1:X3, names_to = "cluster", values_to = "q") %>%
+    group_by(population, cluster) %>%
+    summarise(q = mean(q)) %>%
+    slice(which.max(q)) %>%
+    ungroup() %>%
+    select(cluster, population)
+    
+
 ids_mgb <- "./mgb_biobank/results/allchr.merged.pruned.MGB.fam" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
-    pull(1)
+    pull(2)
 
-ancestry_mgb <- "./mgb_biobank/results/allchr.merged.pruned.MGB.3.Q" %>%
+ancestry_mgb <- "./mgb_biobank/results/allchr.merged.pruned.MGB.4.Q" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     add_column(id = ids_mgb, .before = 1) %>%
-    arrange(X1) %>%
-    mutate(id = fct_inorder(id)) %>%
-    pivot_longer(X1:X3, names_to = "cluster", values_to = "q")
+    pivot_longer(X1:X4, names_to = "cluster", values_to = "q") %>%
+    group_by(id) %>%
+    mutate(likely_group = cluster[which.max(q)],
+           group_q = max(q)) %>%
+    ungroup() %>%
+    arrange(likely_group, desc(group_q)) %>%
+    mutate(id = fct_inorder(id))
 
+refpanel_colors <- all_cols[c("CDX", "YRI", "GBR", "GIH")] %>%
+    setNames(paste0("X", 1:4))
 
-"./mgb_biobank/results/allchr.merged.pruned.MGB.%d.Q" %>%
-    sprintf(1:10) %>%
-    setNames(1:10) %>% .[1] %>%
-    map_df(~read_delim(., delim = " ", col_names = FALSE) %>%
-               add_column(id = ids_1000g, .before = 1) %>%
-               pivot_longer(-id, names_to = "cluster", values_to = "q"), 
-           .id = "K") %>%
-    left_join(sample_annotation, c("id" = "sample_id")) %>%
-    mutate(continent = case_when(population %in% names(afr_cols) ~ "AFR",
-                                 population %in% names(eur_cols) ~ "EUR",
-                                 population %in% names(sas_cols) ~ "SAS",
-                                 population %in% names(eas_cols) ~ "EAS",
-                                 population %in% names(amr_cols) ~ "AMR")) %>%
-    mutate(continent = factor(continent,
-                              levels = c("AFR", "EUR", "SAS", "EAS", "AMR")),
-           K = as.integer(K),
-           cluster = factor(cluster, levels = sprintf("X%d", 1:10))) %>%
-    arrange(continent, population, cluster, id) %>%
-    mutate(population = fct_inorder(population),
-           id = fct_inorder(id))
-
-
-ggplot(ancestry_mgb, aes(id, q, fill = cluster)) +
-    geom_bar(stat = "identity", position = "fill", width = 1) +
+ggplot(ancestry_mgb, aes(id, q, fill = cluster), color = NULL) +
+    geom_col(width = 1) +
     scale_fill_manual(values = refpanel_colors) +
-    scale_y_continuous(breaks = c(0, .5, 1)) +
+    scale_y_continuous(breaks = c(0, .5, 1), labels = scales::percent) +
     theme_minimal() +
     theme(axis.text.x = element_blank(),
           axis.ticks.x = element_blank(),
-          panel.grid = element_blank()) +
-    labs(x = NULL)
+          panel.grid = element_blank(), 
+          strip.text = element_blank(),
+          panel.spacing = unit(.25, "lines"),
+          legend.position = "none") +
+    facet_grid(~likely_group, scales = "free", space = "free") +
+    labs(x = "Individual", y = "Ancestry %")
 
-ggsave("./plots/admixture_mgb_k3.png")
+ggsave("./plots/admixture_mgb_k4.png")
+
+

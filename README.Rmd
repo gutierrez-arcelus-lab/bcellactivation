@@ -205,15 +205,12 @@ include_graphics("./plots/admixture.1000G.allK.png")
 
 Next, I asked ADMIXTURE to project the MGB biobank onto the 1000 Genomes reference in order to determine the ancestry proportions in MGB biobank. 
 
-The results don't make sense.
+The results don't make sense, because all individuals have some proportion of South Asian "ancestry" (similarity).
 
-```{r admixture_mgb_k3}
-include_graphics("./plots/admixture_mgb_k3.png")
+```{r admixture_mgb_k4}
+include_graphics("./plots/admixture_mgb_k4.png")
 ```
 
-```{r admixture_mgb_k5}
-include_graphics("./plots/admixture_mgb.png")
-```
 
 ##### K-means
 

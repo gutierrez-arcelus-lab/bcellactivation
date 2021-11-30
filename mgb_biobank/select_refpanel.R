@@ -10,7 +10,8 @@ sample_annotation <- read_tsv(index_1000G, comment = "##") %>%
     distinct()
 
 sample_annotation %>%
-    filter(population %in% c("CEU", "YRI", "CHS", "ITU")) %>%
+    #filter(population %in% c("CEU", "YRI", "CHS", "ITU")) %>%
+    filter(population %in% c("CEU", "YRI", "CHS")) %>%
     arrange(sample_id) %>%
     mutate(id = paste0(sample_id, "_", sample_id)) %>%
     pull(id) %>%

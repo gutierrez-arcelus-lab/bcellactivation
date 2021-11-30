@@ -200,11 +200,10 @@ And this is the separation we get in 1000 Genomes data:
 Next, I asked ADMIXTURE to project the MGB biobank onto the 1000 Genomes
 reference in order to determine the ancestry proportions in MGB biobank.
 
-The results don’t make sense.
+The results don’t make sense, because all individuals have some
+proportion of South Asian “ancestry” (similarity).
 
-<img src="./plots/admixture_mgb_k3.png" width="2553" />
-
-<img src="./plots/admixture_mgb.png" width="2171" />
+<img src="./plots/admixture_mgb_k4.png" width="2106" />
 
 ##### K-means
 
@@ -267,4 +266,4 @@ This are the distributions according the European ancestry:
 We can see that heterozygosity increases with European ancestry. We can
 also see that if we color the PCA plot by heterozygosity.
 
-<img src="./plots/pca_het_scores.png" width="1200" />
+<img src="./plots/pca_het_scores.png" width="1500" />
