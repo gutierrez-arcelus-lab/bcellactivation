@@ -623,10 +623,10 @@ ids_mgb <- "./mgb_biobank/results/allchr.merged.pruned.MGB.fam" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     pull(2)
 
-ancestry_mgb <- "./mgb_biobank/results/allchr.merged.pruned.MGB.4.Q" %>%
+ancestry_mgb <- "./mgb_biobank/results/allchr.merged.pruned.MGB.3.Q" %>%
     read_delim(delim = " ", col_names = FALSE) %>%
     add_column(id = ids_mgb, .before = 1) %>%
-    pivot_longer(X1:X4, names_to = "cluster", values_to = "q") %>%
+    pivot_longer(X1:X3, names_to = "cluster", values_to = "q") %>%
     group_by(id) %>%
     mutate(likely_group = cluster[which.max(q)],
            group_q = max(q)) %>%
@@ -634,8 +634,10 @@ ancestry_mgb <- "./mgb_biobank/results/allchr.merged.pruned.MGB.4.Q" %>%
     arrange(likely_group, desc(group_q)) %>%
     mutate(id = fct_inorder(id))
 
-refpanel_colors <- all_cols[c("CDX", "YRI", "GBR", "GIH")] %>%
-    setNames(paste0("X", 1:4))
+refpanel_colors <- 
+    #all_cols[c("CDX", "YRI", "GBR", "GIH")] %>%
+    all_cols[c("TSI", "CHS", "YRI")] %>%
+    setNames(paste0("X", 1:3))
 
 ggplot(ancestry_mgb, aes(id, q, fill = cluster), color = NULL) +
     geom_col(width = 1) +
@@ -651,6 +653,6 @@ ggplot(ancestry_mgb, aes(id, q, fill = cluster), color = NULL) +
     facet_grid(~likely_group, scales = "free", space = "free") +
     labs(x = "Individual", y = "Ancestry %")
 
-ggsave("./plots/admixture_mgb_k4.png")
+ggsave("./plots/admixture_mgb_k3.png")
 
 
