@@ -5,11 +5,11 @@
 #SBATCH --mem=8gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
-#SBATCH --array=67-88
+#SBATCH --array=89-110
 #SBATCH --job-name=vcf_process
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /home/ch229163/log/vcf_process.%A.%a
+#SBATCH -o /temp_work/ch229163/log/vcf_process.%A.%a
 
 # Load tools
 source /programs/biogrids.shrc

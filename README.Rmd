@@ -269,3 +269,15 @@ We can see that heterozygosity increases with European ancestry. We can also see
 include_graphics("./plots/pca_het_scores.png")
 ```
 
+## TO DO:
+
+Selecting individuals with European ancestry:
+
+- Select on the whole data (>50,000)?
+- Use more PCs for selection?
+- Include variants from other studies? Assess independence?
+- Include HLA?
+- Include independent signals in the same genomic region? 
+- Investigate technical details such as variants not present in the VCF, and multiallelic SNPs
+- Identify and remove closely related individuals?
+

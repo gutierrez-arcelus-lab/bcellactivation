@@ -103,41 +103,69 @@ gene_names <- read_tsv("./data/transc_to_gene.tsv") %>%
     distinct(gene_id, gene_name)
 
 gene_v2_df <- gene_df %>%
-    select(-tpm) %>%
-    pivot_wider(names_from = condition_id, values_from = cpm) %>%
-    pivot_longer(-(1:2), names_to = "condition", values_to = "cpm")
-
+    mutate(log2_cpm = log2(cpm + 1)) %>%
+    select(-tpm, -cpm) %>%
+    pivot_wider(names_from = condition_id, values_from = log2_cpm) %>%
+    pivot_longer(-(1:2), names_to = "condition", values_to = "log2_cpm") %>%
+    rename(log2_resting = `16hr_resting`) %>%
+    mutate(fc = log2_cpm - log2_resting)
+    
 cor_df <- gene_v2_df %>%
     group_by(condition) %>%
-    summarise(y = max(cpm),
-              x = min(`16hr_resting`),
-              rho = cor(cpm, `16hr_resting`, method = "spearman"),
+    summarise(y = max(log2_cpm),
+              x = min(log2_resting),
+              rho = cor(log2_cpm, log2_resting, method = "spearman"),
               rho = round(rho, 2),
               rho_label = paste("rho == ", rho)) %>%
     ungroup()
 
 gene_labels_df <- gene_v2_df %>%
-    filter(`16hr_resting` > 2500 , cpm > 2500) %>%
-    mutate(fc = pmax(cpm, `16hr_resting`)/pmin(cpm, `16hr_resting`),
-           fc = replace_na(fc, 0)) %>%
+    filter(log2_resting > 4, log2_cpm > 4, 
+           fc > 2) %>%
     group_by(condition) %>%
-    top_n(10, fc) %>%
+    top_n(20, abs(fc)) %>%
     ungroup() %>%
     left_join(gene_names)    
 
-ggplot(gene_v2_df, aes(`16hr_resting`, cpm)) +
+fc_plot_1 <- ggplot(gene_v2_df, aes(log2_resting, log2_cpm)) +
     geom_abline() +
-    geom_point(alpha = .25) +
+    geom_point(alpha = .1, size = .25) +
     geom_text(data = cor_df, aes(x, y * 1.1, label = rho_label),
-              hjust = "inward", vjust = "inward",
-              parse = TRUE, size = 3) +
-    geom_text_repel(data = gene_labels_df, 
-                    aes(label = gene_name),
-                    size = 3) +
+             hjust = "inward", vjust = "inward",
+             parse = TRUE, size = 3) +
+    # geom_label_repel(data = gene_labels_df, 
+    #                aes(label = gene_name),
+    #                size = 3, force = TRUE) +
     facet_wrap(~condition, scales = "free", ncol = 2) +
-    theme_bw()
+    theme_bw() +
+    theme(text = element_text(size = 9),
+          plot.title = element_text(size = 9),
+          axis.title = element_text(size = 9)) +
+    labs(title = "Top 10 Log2 Fold-changes for\nexpressed genes at each condition",
+         x = expression(paste("Log"[2], "CPM + 1 (Resting)")),
+         y = expression(paste("Log"[2], "CPM + 1")))
 
-ggsave("./plots/scatter_resting_conditions.png")
+fc_plot_2 <- gene_v2_df %>%
+    group_by(condition) %>%
+    summarise(n = sum(abs(fc) > 2L)/n()) %>%
+    mutate(condition = factor(condition, 
+                              levels = c("24hr_IgG", "72hr_IgG", 
+                                         "24hr_RSQ", "72hr_RSQ"))) %>%
+    ggplot(aes(n, condition)) +
+    geom_col() +
+    scale_x_continuous(labels = scales::percent) +
+    theme_bw() +
+    theme(text = element_text(size = 9),
+          plot.title = element_text(size = 9),
+          axis.title = element_text(size = 9)) +
+    labs(title = expression(paste("% of genes with Log"[2], " FC>2")), 
+         x = " ",
+         y = NULL)
+
+plot_grid(fc_plot_1, fc_plot_2, rel_widths = c(1, .6))
+
+
+ggsave("./plots/scatter_resting_conditions.png", width = 6)
 
 # Comparison between log2 FC
 
