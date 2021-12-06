@@ -3,6 +3,7 @@ library(ggsci)
 library(ggthemes)
 library(ggrepel)
 library(RColorBrewer)
+library(ggridges)
 library(cowplot)
 
 # Most expressed biotypes
@@ -225,6 +226,55 @@ ggsave("./plots/pca_bcell_expression.png")
 # MGB biobank
 
 
+## Select females
+batches <- sprintf("04%02d", 1:7)
+
+het <- paste0("/temp_work/ch229163/VCF/chrX.MGB.", batches, ".het") %>%
+    setNames(batches) %>%
+    map_dfr(read_tsv, .id = "batch") %>%
+    mutate(hom = `O(HOM)`/N_SITES) 
+
+sex_1 <- ggplot(het, aes(hom)) +
+    geom_histogram() +
+    geom_vline(xintercept = .985, linetype = 2) +
+    theme_bw() +
+    theme(panel.grid.major.x = element_blank(),
+          panel.grid.minor.x = element_blank(),
+          panel.grid.minor.y = element_blank()) +
+    labs(x = "Homozygosity")
+
+sex_2 <- het %>%
+    mutate(sex = ifelse(hom > .985, "male", "female")) %>%
+    count(sex) %>%
+    mutate(p = n/sum(n)) %>%
+    ggplot(aes(x = 1, y = p, fill = sex)) +
+    geom_col(position = "fill") +
+    geom_hline(yintercept = .5, linetype = 2) +
+    scale_fill_npg(labels = c("< 0.985", ">0.985")) +
+    scale_y_continuous(breaks = c(0, .5, 1), labels = scales::percent) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          axis.text.x = element_blank(),
+          legend.title = element_text(size = 9)) +
+    labs(x = NULL, y = NULL, fill = "Homozygosity") +
+    guides(color = guide_legend(override.aes = list(size = 2)))
+
+plot_grid(sex_1, NULL, sex_2, nrow = 1, rel_widths = c(1, .1, .6))
+
+ggsave("./plots/chrX_het.png", width = 5)
+
+# Write ID files
+het %>%
+    filter(hom < .985) %>%
+    select(1:2) %>%
+    group_nest(batch) %>%
+    mutate(out = paste0("./mgb_biobank/results/females_", batch, ".txt"),
+           data = map(data, unlist)) %>%
+    walk2(.x = .$data, .y = .$out, .f = ~write_lines(.x, .y))
+    
+
+
+
 ## PCA on genotype data
 
 ### Metadata for 1000G samples
@@ -237,7 +287,7 @@ sample_annotation <- read_tsv(index_1000G, comment = "##") %>%
 
 
 ### Colors
-mgb_cols <- c("black", "goldenrod") %>%
+mgb_cols <- c("black", "cadetblue2") %>%
     setNames(c("MGB_biobank", "MGB_eur"))
 
 afr_cols <- brewer.pal("Oranges", n = 9)[3:9] %>%
@@ -256,6 +306,7 @@ amr_cols <- c("lightpink1", "hotpink", "hotpink3", "deeppink") %>%
     setNames(c("MXL", "CLM", "PEL", "PUR"))
 
 all_cols <- c(mgb_cols, afr_cols, eur_cols, sas_cols, eas_cols, amr_cols)
+
 
 ### read PCA results into R
 pca_genos <-
@@ -283,7 +334,7 @@ pca_df <- bind_rows(pca_mgb, pca_kgp) %>%
 
 pca_plot_1 <- pca_df %>%
     ggplot(aes(PC1, PC2, color = population, alpha = dataset)) +
-    geom_point(size = .75) +
+    geom_point(size = .5) +
     scale_color_manual(values = all_cols) +
     scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
     facet_wrap(~dataset) +
@@ -296,7 +347,7 @@ pca_plot_1 <- pca_df %>%
 
 pca_plot_2 <- pca_df %>%
     ggplot(aes(PC3, PC4, color = population, alpha = dataset)) +
-    geom_point(size = .75) +
+    geom_point(size = .5) +
     scale_color_manual(values = all_cols) +
     scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
     facet_wrap(~dataset) +
@@ -317,6 +368,176 @@ pca_plot <- plot_grid(pca_grid, get_legend(pca_plot_1),
 
 ggsave("./plots/pca.png", pca_plot, width = 8, height = 5)
 
+
+pca_df %>%
+    select(sample_id, PC1, PC2) %>%
+    pivot_longer(PC1:PC2, names_to = "PC") %>%
+    ggplot(aes(value)) +
+    geom_histogram() +
+    facet_wrap(~PC, scales = "free") +
+    theme_bw() +
+    theme(panel.grid = element_blank())
+
+ggsave("./plots/pca_histogram.png", width = 5, height = 2.5)
+
+
+
+## Select based on PC1:PC4 coordinates
+mgb_eur_inds <- read_lines("./mgb_biobank/results/mgb_eur.txt")
+
+pca_eur_df <- pca_df %>%
+    select(sample_id, dataset, population, PC1:PC4) %>%
+    mutate(population = as.character(population),
+           population = ifelse(sample_id %in% mgb_eur_inds, "MGB_eur", population),
+           population = factor(population, levels = names(all_cols)))
+
+
+pca_eur_plot_1 <- pca_eur_df %>%
+    ggplot(aes(PC1, PC2, color = population, alpha = dataset)) +
+    geom_point(size = .5) +
+    scale_color_manual(values = all_cols) +
+    scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines"),
+          legend.text = element_text(size = 6)) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
+           alpha = FALSE)
+
+
+pca_eur_plot_2 <- pca_eur_df %>%
+    ggplot(aes(PC3, PC4, color = population, alpha = dataset)) +
+    geom_point(size = .5) +
+    scale_color_manual(values = all_cols) +
+    scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines"),
+          legend.text = element_text(size = 6)) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
+           alpha = FALSE)
+
+
+pca_eur_grid <- plot_grid(pca_eur_plot_1 + theme(legend.position = "none"),
+                          NULL,
+                          pca_eur_plot_2 + theme(legend.position = "none"),
+                          ncol = 1, rel_heights = c(1, .05, 1))
+
+pca_eur_plot <- plot_grid(pca_eur_grid, get_legend(pca_eur_plot_1),
+                      nrow = 1, rel_widths = c(1, .3))
+
+ggsave("./plots/pca_eur.png", pca_eur_plot, width = 8, height = 5)
+
+
+# Heterozygosity scores
+
+scores_df <- read_tsv("./mgb_biobank/sle_variants/scores.tsv") %>%
+    extract(sample_id, c("sample_id"), ".+_(.+)") %>%
+    mutate(top_eur = sample_id %in% mgb_eur_inds)
+
+scores_eur_df <- scores_df %>%
+    filter(top_eur == TRUE)
+
+
+ggplot(scores_df, aes(het_score, het_score_wt)) +
+    geom_point(size = .75, alpha = .1) +
+    theme_bw()  +
+    labs(x = "Heterozigosity score", y = "Weighted heterozygosity score")
+
+ggsave("./plots/het_scores_points.png", width = 5, height = 4)
+
+
+score_colors <- 
+    bind_rows(unweighted = top_n(scores_df, 12, het_score), 
+              weighted = top_n(scores_df, 12, het_score_wt), .id = "score") %>%
+    select(-top_eur) %>%
+    group_by(sample_id) %>%
+    mutate(score = ifelse(n_distinct(score) > 1, "both", score))
+
+
+ggplot(scores_df, aes(het_score, het_score_wt)) +
+    geom_point(size = .75, alpha = .1) +
+    geom_point(data = score_colors, 
+               aes(het_score, het_score_wt, color = score),
+               size = 2.5) +
+    scale_color_uchicago() +
+    theme_bw() +
+    labs(x = "Heterozigosity score", y = "Weighted heterozygosity score") 
+
+ggsave("./plots/het_scores_points_top12.png", width = 6, height = 4)
+
+
+scores_df %>%
+    pivot_longer(het_score:het_score_wt, names_to = "score") %>%
+    mutate(score = recode(score, "het_score" = "Unweighted",
+                          "het_score_wt" = "Weighted")) %>%
+    ggplot(aes(value, color = top_eur, fill = top_eur)) +
+    geom_density(alpha = .5, size = .5) +
+    theme_bw() +
+    scale_color_manual(values = c("TRUE" = "midnightblue",
+                                  "FALSE" = "grey70"), guide = "none") +
+    scale_fill_manual(values = c("TRUE" = "midnightblue",
+                                 "FALSE" = "grey70"),
+                      labels = c("Low EUR ancestry", "HIgh EUR ancestry")) +
+    facet_wrap(~score, scales = "free") +
+    labs(fill = NULL, x = "Heterozygosity score")
+
+ggsave("./plots/het_score_density.png", width = 6)
+
+
+
+## color PCA by heterozygosity
+
+pca_score_df <- pca_df %>%
+    filter(dataset == "MGB") %>%
+    left_join(scores_df) %>%
+    select(sample_id, PC1, PC2, PC3, PC4, het_score, het_score_wt)
+
+het_score_pca_1 <- pca_score_df %>%
+    ggplot(aes(PC1, PC2, fill = het_score_wt, color = het_score_wt)) +
+    geom_point(size = .1) +
+    scale_color_viridis_c(option = "inferno") +
+    scale_fill_viridis_c(option = "inferno", 
+                         guide = guide_colorbar(barwidth = 0.5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    guides(color = FALSE) +
+    labs(fill = "Weighted\nscore")
+
+het_score_pca_2 <- pca_score_df %>%
+    ggplot(aes(PC3, PC4, fill = het_score_wt, color = het_score_wt)) +
+    geom_point(size = .1) +
+    scale_color_viridis_c(option = "inferno") +
+    scale_fill_viridis_c(option = "inferno", 
+                         guide = guide_colorbar(barwidth = 0.5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    guides(color = FALSE) +
+    labs(fill = "Weighted\nscore")
+
+
+het_score_grid <- plot_grid(het_score_pca_1 + theme(legend.position = "none"),
+                            het_score_pca_2 + theme(legend.position = "none"),
+                            ncol = 1)
+
+plot_grid(het_score_grid, 
+          get_legend(het_score_pca_1),
+          nrow = 1, rel_widths = c(1, .3))
+
+
+ggsave("./plots/pca_het_scores.png", width = 5, height = 5)
+
+
+
+
+
+
+
+## Legacy code #################################################################
 
 # kmeans
 
@@ -450,110 +671,6 @@ mgb_eur <- clusters_df %>%
     filter(dataset == "MGB", k == 8, cluster %in% c(4L, 8L)) %>%
     pull(sample_id)
 
-## Select based on PC1:PC2 coordinates
-mgb_eur_inds <- read_lines("./mgb_biobank/results/mgb_eur.txt")
-    
-pca_eur_df <- pca_df %>%
-    select(sample_id, dataset, population, PC1, PC2) %>%
-    mutate(population = as.character(population),
-           population = ifelse(sample_id %in% mgb_eur_inds, "MGB_eur", population),
-           population = factor(population, levels = names(all_cols)))
-
-
-pca_eur_plot <- pca_eur_df %>%
-    ggplot(aes(PC1, PC2, color = population, alpha = dataset)) +
-    geom_point(size = .75) +
-    scale_color_manual(values = all_cols) +
-    scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
-    facet_wrap(~dataset) +
-    theme_bw() +
-    theme(panel.grid = element_blank(),
-          strip.text = element_text(face = "bold", size = 11),
-          panel.spacing = unit(2, "lines"),
-          legend.text = element_text(size = 6)) +
-    guides(color = guide_legend(override.aes = list(size = 1), 
-                                ncol = 2,
-                                keyheight = .5),
-           alpha = FALSE)
-
-ggsave("./plots/pca_eur.png", pca_eur_plot, width = 6, height = 2)
-
-
-    
-
-# Heterozygosity scores
-
-scores_df <- read_tsv("./mgb_biobank/sle_variants/scores.tsv") %>%
-    extract(sample_id, c("sample_id"), ".+_(.+)") %>%
-    mutate(top_eur = sample_id %in% mgb_eur_inds)
-
-scores_eur_df <- scores_df %>%
-    filter(top_eur == TRUE)
-
-
-ggplot(scores_df, aes(het_score, het_score_wt)) +
-    geom_point(size = .75, alpha = .1) +
-    theme_bw()  +
-    labs(x = "Heterozigosity score", y = "Weighted heterozygosity score")
-
-ggsave("./plots/het_scores_points.png", width = 5, height = 4)
-
-
-score_colors <- 
-    bind_rows(unweighted = top_n(scores_df, 12, het_score), 
-              weighted = top_n(scores_df, 12, het_score_wt), .id = "score") %>%
-    select(-top_eur) %>%
-    group_by(sample_id) %>%
-    mutate(score = ifelse(n_distinct(score) > 1, "both", score))
-
-
-ggplot(scores_df, aes(het_score, het_score_wt)) +
-    geom_point(size = .75, alpha = .1) +
-    geom_point(data = score_colors, 
-               aes(het_score, het_score_wt, color = score),
-               size = 2.5) +
-    scale_color_uchicago() +
-    theme_bw() +
-    labs(x = "Heterozigosity score", y = "Weighted heterozygosity score") 
-
-ggsave("./plots/het_scores_points_top12.png", width = 6, height = 4)
-
-
-scores_df %>%
-    pivot_longer(het_score:het_score_wt, names_to = "score") %>%
-    mutate(score = recode(score, "het_score" = "unweighted",
-                          "het_score_wt" = "weighted")) %>%
-    ggplot(aes(value, color = top_eur, fill = top_eur)) +
-    geom_density(alpha = .5, size = .5) +
-    theme_bw() +
-    scale_color_manual(values = c("TRUE" = "midnightblue",
-                                  "FALSE" = "grey70"), guide = "none") +
-    scale_fill_manual(values = c("TRUE" = "midnightblue",
-                                 "FALSE" = "grey70")) +
-    facet_wrap(~score, scales = "free") +
-    labs(fill = "Top\nEuropean\nAncestry?")
-    
-ggsave("./plots/het_score_density.png", width = 6)
-
-## color PCA by heterozygosity
-
-pca_score_df <- pca_df %>%
-    filter(dataset == "MGB") %>%
-    left_join(scores_df) %>%
-    select(sample_id, PC1, PC2, PC3, PC4, het_score, het_score_wt)
-
-pca_score_df %>%
-    ggplot(aes(PC1, PC2, fill = het_score_wt, color = het_score_wt)) +
-    geom_point(size = .25) +
-    scale_color_viridis_c(option = "inferno") +
-    scale_fill_viridis_c(option = "inferno", 
-                         guide = guide_colorbar(barwidth = 0.5)) +
-    theme_bw() +
-    theme(panel.grid = element_blank()) +
-    guides(color = FALSE) +
-    labs(fill = "Weighted\nscore")
-
-ggsave("./plots/pca_het_scores.png", width = 5, height = 3)
 
 
 
@@ -682,5 +799,4 @@ ggplot(ancestry_mgb, aes(id, q, fill = cluster), color = NULL) +
     labs(x = "Individual", y = "Ancestry %")
 
 ggsave("./plots/admixture_mgb_k3.png")
-
 

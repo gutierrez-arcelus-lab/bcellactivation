@@ -21,15 +21,15 @@ export R_X=4.1
 CHR=$SLURM_ARRAY_TASK_ID
 
 # Define IO
-OUTDIR=$TEMP_WORK/VCF
-VCFMGB=$OUTDIR/chr$CHR.MGB.04{01..04}.vcf.gz
-VCFKGP=$OUTDIR/chr$CHR.1000G.vcf.gz
-VARSMGB=$OUTDIR/chr$CHR.MGB.04{01..04}.variants.txt
-VARS1KG=$OUTDIR/chr$CHR.1000G.variants.txt
-OUTPOS=$OUTDIR/chr$CHR.commonvars.pos
+OUTDIR=${TEMP_WORK}/VCF
+VCFMGB=${OUTDIR}/chr${CHR}.MGB.04{01..07}.vcf.gz
+VCFKGP=${OUTDIR}/chr${CHR}.1000G.vcf.gz
+VARSMGB=${OUTDIR}/chr${CHR}.MGB.04{01..07}.variants.txt
+VARS1KG=${OUTDIR}/chr${CHR}.1000G.variants.txt
+OUTPOS=${OUTDIR}/chr${CHR}.commonvars.pos
 
 # Extract common variants among datasets
-Rscript $SLURM_SUBMIT_DIR/match_snps.R $( eval echo $VARSMGB ) $VARS1KG $OUTPOS
+Rscript ${SLURM_SUBMIT_DIR}/match_snps.R $( eval echo $VARSMGB ) $VARS1KG $OUTPOS
 
 # Filter MGB and 1000G VCFs for the same set of variants
 for f in $( eval echo $VCFMGB; echo $VCFKGP)
@@ -41,14 +41,14 @@ do
 done
 
 # Merge files
-VCFMERGED=$OUTDIR/chr${CHR}.merged.vcf.gz
+VCFMERGED=${OUTDIR}/chr${CHR}.merged.vcf.gz
 
 bcftools merge "${VCFOUTLIST[@]}" |\
     bcftools annotate -x 'INFO' - -O z -o $VCFMERGED
 
 # Prune SNPs for r2 < 0.1
-PRUNESNPS=$OUTDIR/chr${CHR}.prunedsnps
-OUTPREFIX=$OUTDIR/chr${CHR}.merged.pruned
+PRUNESNPS=${OUTDIR}/chr${CHR}.prunedsnps
+OUTPREFIX=${OUTDIR}/chr${CHR}.merged.pruned
 
 plink --vcf $VCFMERGED \
     --indep-pairwise 50 10 0.1 \

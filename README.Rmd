@@ -145,6 +145,12 @@ include_graphics("./plots/fc_24vs72.png")
 | 0402  | 5,336 | ~80.1         | MEGAEX_TopMed   |
 | 0403  | 4,780 | ~79.8         | MEG_A1_A_TopMed |
 | 0404  | 5,016 | ~80.9         | MEG_A1_B_TopMed |
+| 0405  | 5,491 | ~81.9         | MEG_C_TopMed    |
+| 0406  | 5,143 | ~80.0         | MEG_D_TopMed    |
+| 0407  | 4,847 | ~76.4         | MEG_E_TopMed    |
+| 0408  | | |
+| 0409  | | |
+| 0410  | | |
 
 - 1000 Genomes data:
   - ~2,500 individuals low coverage data realigned to GRCh38 (not NYGC version).
@@ -188,55 +194,18 @@ The PCA plot shows the MGB individuals in comparison with the 1000 Genomes data.
 include_graphics("./plots/pca.png")
 ```
 
+We can really see that on the plot above, but most individuals appear to have high European ancestry.
 
-##### ADMIXTURE
 
-First, I ran the cross-validation procedure of ADMIXTURE to determine the best value of K (number of clusters).
-
-```{r admixture_cv}
-include_graphics("./plots/admixture_cv.png")
-```
-
-And this is the separation we get in 1000 Genomes data:
-
-```{r admixture_1000G}
-include_graphics("./plots/admixture.1000G.allK.png")
-```
-
-Next, I asked ADMIXTURE to project the MGB biobank onto the 1000 Genomes reference in order to determine the ancestry proportions in MGB biobank. 
-
-The results don't make sense, because all individuals have some proportion of South Asian "ancestry" (similarity).
-
-```{r admixture_mgb_k4}
-include_graphics("./plots/admixture_mgb_k4.png")
+```{r}
+include_graphics("./plots/pca_histogram.png")
 ```
 
 
-##### K-means
 
-I tried k-means to classify MGB individuals into continental groups, giving their values for PC1:PC4.
+##### Selecting individuals with high European ancestry
 
-The plot below shows the classifications according to the most likely continental group for each cluster.
-
-```{r kmeans}
-include_graphics("./plots/clusters.png")
-```
-
-I computed specificity defined as the proportion of correct calls for continental groups at each cluster, using known continental groups for the 1000 Genomes data. For example, if at cluster X we have 90% of individuals from a 1000G European population, the score will equal 0.9.
-
-```{r kmeans_heterog}
-include_graphics("./plots/kmeans_accuracy.png")
-```
-
-The specificity suggests K = 7 as the optimal value. However, in the plot above we see that K = 7 does not correctly deal with a MGB subgroup which appears to refer to European ancestries which are not sampled in the 1000 Genomes data.
-
-Anyway, for MGB data, no value of K seems to be very specific, as the algorithm is clustering admixed individuals as Europeans.
-
-##### PCA-based selection
-
-Therefore, I've decided to simply select individuals based on PC1 and PC2 values.
-
-I computed the mean and SD for PC1 and PC2 in 1000 Genomes Europeans, and computed a z-score for each MGB individuals, selecting all individuals falling between -3 and +3 SDs.
+In order to select individuals with European ancestry given PC coordinates, I computed the mean and SD for PC1 –PC4 in 1000 Genomes Europeans, and computed a z-score for each MGB individuals, selecting all individuals falling between -3 and +3 SDs at each PC.
 
 ```{r pca_selection}
 include_graphics("./plots/pca_eur.png")
@@ -273,11 +242,6 @@ include_graphics("./plots/pca_het_scores.png")
 
 Selecting individuals with European ancestry:
 
-- Select on the whole data (>50,000)?
-- Use more PCs for selection?
-- Include variants from other studies? Assess independence?
-- Include HLA?
-- Include independent signals in the same genomic region? 
-- Investigate technical details such as variants not present in the VCF, and multiallelic SNPs
-- Identify and remove closely related individuals?
-
+- Select on the whole data (>50,000);
+- Include variants from other studies;
+- Include independent signals in the same genomic region; 

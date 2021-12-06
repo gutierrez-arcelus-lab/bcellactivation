@@ -4,6 +4,9 @@
 
 First, we need a specificiation table to parallelize jobs. This table is create by the script `make_array.sh`.
 
+Also, we pre-select female individuals. First we run `compute_chrx_het.slurm` to compute individual-level heterozygosities. After visual inspection with the `../plot.R` script, we write the IDs to `./results/females_BATCH.txt` files.
+
+
 ## 1. Process VCFs
 
 ### 1.1. Filter VCFs from MGB and 1000 Genomes

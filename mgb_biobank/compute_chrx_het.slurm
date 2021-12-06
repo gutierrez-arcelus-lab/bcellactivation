@@ -5,7 +5,7 @@
 #SBATCH --mem=8gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
-#SBATCH --array=0-5
+#SBATCH --array=0-6
 #SBATCH --job-name=vcftools-het
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
@@ -16,7 +16,7 @@ source /programs/biogrids.shrc
 export VCFTOOLS_X=0.1.12b
 
 # Define IO
-BATCHES=( $(eval echo 04{01..06}) )
+BATCHES=( $(eval echo 04{01..07}) )
 BATCH="${BATCHES[$SLURM_ARRAY_TASK_ID]}"
 
 LABSHARE=/lab-share/IM-Gutierrez-e2/Public

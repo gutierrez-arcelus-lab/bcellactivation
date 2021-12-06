@@ -105,7 +105,7 @@ resting or test condition.
 
 #### 1.3.6. Correlations with resting state:
 
-<img src="./plots/scatter_resting_conditions.png" width="2228" />
+<img src="./plots/scatter_resting_conditions.png" width="1800" />
 
 #### 1.3.7. Comparison of FC for each stimulant
 
@@ -186,60 +186,19 @@ the 5 main continental groups.
 
 <img src="./plots/pca.png" width="2400" />
 
-##### ADMIXTURE
+We can really see that on the plot above, but most individuals appear to
+have high European ancestry.
 
-First, I ran the cross-validation procedure of ADMIXTURE to determine
-the best value of K (number of clusters).
+<img src="./plots/pca_histogram.png" width="1500" />
 
-<img src="./plots/admixture_cv.png" width="2109" />
+##### Selecting individuals with high European ancestry
 
-And this is the separation we get in 1000 Genomes data:
+In order to select individuals with European ancestry given PC
+coordinates, I computed the mean and SD for PC1 –PC4 in 1000 Genomes
+Europeans, and computed a z-score for each MGB individuals, selecting
+all individuals falling between -3 and +3 SDs at each PC.
 
-<img src="./plots/admixture.1000G.allK.png" width="2109" />
-
-Next, I asked ADMIXTURE to project the MGB biobank onto the 1000 Genomes
-reference in order to determine the ancestry proportions in MGB biobank.
-
-The results don’t make sense, because all individuals have some
-proportion of South Asian “ancestry” (similarity).
-
-<img src="./plots/admixture_mgb_k4.png" width="2106" />
-
-##### K-means
-
-I tried k-means to classify MGB individuals into continental groups,
-giving their values for PC1:PC4.
-
-The plot below shows the classifications according to the most likely
-continental group for each cluster.
-
-<img src="./plots/clusters.png" width="2400" />
-
-I computed specificity defined as the proportion of correct calls for
-continental groups at each cluster, using known continental groups for
-the 1000 Genomes data. For example, if at cluster X we have 90% of
-individuals from a 1000G European population, the score will equal 0.9.
-
-<img src="./plots/kmeans_accuracy.png" width="1500" />
-
-The specificity suggests K = 7 as the optimal value. However, in the
-plot above we see that K = 7 does not correctly deal with a MGB subgroup
-which appears to refer to European ancestries which are not sampled in
-the 1000 Genomes data.
-
-Anyway, for MGB data, no value of K seems to be very specific, as the
-algorithm is clustering admixed individuals as Europeans.
-
-##### PCA-based selection
-
-Therefore, I’ve decided to simply select individuals based on PC1 and
-PC2 values.
-
-I computed the mean and SD for PC1 and PC2 in 1000 Genomes Europeans,
-and computed a z-score for each MGB individuals, selecting all
-individuals falling between -3 and +3 SDs.
-
-<img src="./plots/pca_eur.png" width="1800" />
+<img src="./plots/pca_eur.png" width="2400" />
 
 #### SLE variants
 
@@ -267,3 +226,11 @@ We can see that heterozygosity increases with European ancestry. We can
 also see that if we color the PCA plot by heterozygosity.
 
 <img src="./plots/pca_het_scores.png" width="1500" />
+
+## TO DO:
+
+Selecting individuals with European ancestry:
+
+-   Select on the whole data (&gt;50,000);
+-   Include variants from other studies;
+-   Include independent signals in the same genomic region;
