@@ -159,6 +159,10 @@ include_graphics("./plots/fc_24vs72.png")
 
 The workflow for the analyses below is described in `./mgb_biobank/README.md`.
 
+- Selection of individuals who are genetically females
+  - Compute individual-level heterozygosity with vcftools;
+  - After visual inspection of the homozygosity distribution, select individuals with <0.985 homozygosity.
+
 - VCF processing:
   - Remove variants with any missing genotypes;
   - Select only biallelic SNPs with MAF >= 0.1;
@@ -183,8 +187,17 @@ The workflow for the analyses below is described in `./mgb_biobank/README.md`.
 
 ### 2.4. Results
 
-#### Ancestry information from genotype data
+#### Select females
 
+After visual inspection of the plot below, we select individuals with homozygosity < 0.985, which we assume to be females. That includes ~54.6% of the individuals.
+
+```{r sex}
+include_graphics("./plots/chrX_het.png")
+```
+
+
+
+#### Ancestry information from genotype data
 
 ##### PCA
 

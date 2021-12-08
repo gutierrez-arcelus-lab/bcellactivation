@@ -158,6 +158,10 @@ resting or test condition.
 The workflow for the analyses below is described in
 `./mgb_biobank/README.md`.
 
+-   Selection of individuals who are genetically females
+    -   Compute individual-level heterozygosity with vcftools;
+    -   After visual inspection of the homozygosity distribution, select
+        individuals with &lt;0.985 homozygosity.
 -   VCF processing:
     -   Remove variants with any missing genotypes;
     -   Select only biallelic SNPs with MAF &gt;= 0.1;
@@ -181,6 +185,14 @@ The workflow for the analyses below is described in
         at SLE variants.
 
 ### 2.4. Results
+
+#### Select females
+
+After visual inspection of the plot below, we select individuals with
+homozygosity &lt; 0.985, which we assume to be females. That includes
+\~54.6% of the individuals.
+
+<img src="./plots/chrX_het.png" width="1500" />
 
 #### Ancestry information from genotype data
 

@@ -142,7 +142,7 @@ fc_plot_1 <- ggplot(gene_v2_df, aes(log2_resting, log2_cpm)) +
     theme(text = element_text(size = 9),
           plot.title = element_text(size = 9),
           axis.title = element_text(size = 9)) +
-    labs(title = "Top 10 Log2 Fold-changes for\nexpressed genes at each condition",
+    labs(title = " ",
          x = expression(paste("Log"[2], "CPM + 1 (Resting)")),
          y = expression(paste("Log"[2], "CPM + 1")))
 
@@ -166,7 +166,7 @@ fc_plot_2 <- gene_v2_df %>%
 plot_grid(fc_plot_1, fc_plot_2, rel_widths = c(1, .6))
 
 
-ggsave("./plots/scatter_resting_conditions.png", width = 6)
+ggsave("./plots/scatter_resting_conditions.png", width = 6, height = 3)
 
 # Comparison between log2 FC
 
