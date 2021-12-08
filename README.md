@@ -142,6 +142,12 @@ resting or test condition.
 | 0402  | 5,336 |    \~80.1     |   MEGAEX\_TopMed   |
 | 0403  | 4,780 |    \~79.8     | MEG\_A1\_A\_TopMed |
 | 0404  | 5,016 |    \~80.9     | MEG\_A1\_B\_TopMed |
+| 0405  | 5,491 |    \~81.9     |   MEG\_C\_TopMed   |
+| 0406  | 5,143 |    \~80.0     |   MEG\_D\_TopMed   |
+| 0407  | 4,847 |    \~76.4     |   MEG\_E\_TopMed   |
+| 0408  |       |               |                    |
+| 0409  |       |               |                    |
+| 0410  |       |               |                    |
 
 -   1000 Genomes data:
     -   \~2,500 individuals low coverage data realigned to GRCh38 (not

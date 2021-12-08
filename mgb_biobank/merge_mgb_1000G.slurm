@@ -9,7 +9,7 @@
 #SBATCH --job-name=vcf_merge
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /home/ch229163/log/vcf_merge.%A.%a
+#SBATCH -o /temp_work/ch229163/log/vcf_merge.%A.%a
 
 # Load tools
 source /programs/biogrids.shrc
