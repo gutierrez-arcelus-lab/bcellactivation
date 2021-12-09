@@ -689,23 +689,26 @@ ggsave("./plots/pca_eur.png", pca_eur_plot, width = 8, height = 5)
 scores_df <- read_tsv("./mgb_biobank/sle_variants/scores.tsv") %>%
     extract(sample_id, c("sample_id"), ".+_(.+)") %>%
     mutate(top_eur = sample_id %in% mgb_eur_inds) %>%
-    arrange(desc(het_score_wt)) %>%
-    mutate(top_400 = 1:n() %in% 1:400)
+    arrange(desc(het_score_wt))
   
+candidate_inds <- scores_df %>%
+    filter(top_eur) %>%
+    top_n(400, het_score_wt) %>%
+    pull(sample_id)
 
-scores_eur_df <- scores_df %>%
-    filter(top_eur == TRUE)
+scores_df <- scores_df %>%
+  mutate(candidate = sample_id %in% candidate_inds)
 
 
 ggplot(scores_df, aes(het_score, het_score_wt)) +
-    geom_point(aes(color = top_400), 
+    geom_point(aes(color = candidate), 
                size = .75) +
     scale_color_manual(values = c("black", "tomato3")) +
     theme_bw()  +
     theme(legend.position = c(.9, .2)) +
     labs(x = "Heterozigosity score", 
          y = "Weighted heterozygosity score",
-         color = "Top 400?")
+         color = "Candidate for\nselection?")
 
 ggsave("./plots/het_scores_points.png", width = 6, height = 4)
 
