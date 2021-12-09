@@ -3,7 +3,6 @@ library(ggsci)
 library(ggthemes)
 library(ggrepel)
 library(RColorBrewer)
-library(ggridges)
 library(cowplot)
 
 # Most expressed biotypes
@@ -35,14 +34,14 @@ biotypes_order <-
     levels() %>%
     rev()
 
-transc_types_summary_reordered <- transc_types_summary %>%
+transc_summary <- transc_types_summary %>%
     mutate(transcript_type = factor(transcript_type, levels = biotypes_order),
            condition_id = factor(condition_id, 
                                  levels = c("16hr_resting", 
                                             "24hr_IgG", "72hr_IgG",
                                             "24hr_RSQ", "72hr_RSQ")))
 
-transc_types_summary_reordered %>%
+transc_summary %>%
     select(transcript_type, condition_id, TPM = avg_tpm) %>%
     ggplot(aes(x = condition_id, y = TPM, fill = transcript_type)) +
     geom_col() +
@@ -95,6 +94,8 @@ logfc %>%
     geom_col(position = "dodge") +
     scale_y_continuous(labels = scales::percent) +
     scale_fill_npg() +
+    theme_bw() +
+    theme(panel.grid = element_blank())
     labs(x = NULL, y = "% of genes", fill = NULL)
 
 ggsave("./plots/foldchange_summary.png", width = 5)
@@ -120,23 +121,12 @@ cor_df <- gene_v2_df %>%
               rho_label = paste("rho == ", rho)) %>%
     ungroup()
 
-gene_labels_df <- gene_v2_df %>%
-    filter(log2_resting > 4, log2_cpm > 4, 
-           fc > 2) %>%
-    group_by(condition) %>%
-    top_n(20, abs(fc)) %>%
-    ungroup() %>%
-    left_join(gene_names)    
-
 fc_plot_1 <- ggplot(gene_v2_df, aes(log2_resting, log2_cpm)) +
     geom_abline() +
     geom_point(alpha = .1, size = .25) +
     geom_text(data = cor_df, aes(x, y * 1.1, label = rho_label),
              hjust = "inward", vjust = "inward",
              parse = TRUE, size = 3) +
-    # geom_label_repel(data = gene_labels_df, 
-    #                aes(label = gene_name),
-    #                size = 3, force = TRUE) +
     facet_wrap(~condition, scales = "free", ncol = 2) +
     theme_bw() +
     theme(text = element_text(size = 9),
@@ -154,7 +144,7 @@ fc_plot_2 <- gene_v2_df %>%
                                          "24hr_RSQ", "72hr_RSQ"))) %>%
     ggplot(aes(n, condition)) +
     geom_col() +
-    scale_x_continuous(labels = scales::percent) +
+    scale_x_continuous(labels = scales::percent_format(accuracy = .1)) +
     theme_bw() +
     theme(text = element_text(size = 9),
           plot.title = element_text(size = 9),
@@ -163,10 +153,269 @@ fc_plot_2 <- gene_v2_df %>%
          x = " ",
          y = NULL)
 
-plot_grid(fc_plot_1, fc_plot_2, rel_widths = c(1, .6))
+plot_grid(fc_plot_1, NULL, fc_plot_2, nrow = 1, rel_widths = c(1, .05, .6))
 
 
 ggsave("./plots/scatter_resting_conditions.png", width = 6, height = 3)
+
+
+
+# # Plot genes in BCR or TRL7 pathways
+# 
+# bcr_genes <- c("PTPN22", "CSK", "BANK1", "BLK", "LYN", "IKZF1", "IKZF3")
+# tlr_genes <- c("IRAK1", "TLR7", "MYD88", "UNC93B1")
+# 
+# 
+# pathways_df <- gene_df %>%
+#     left_join(gene_names) %>%
+#     select(gene_name, gene_id, condition_id, tpm) %>%
+#     mutate(pathway = case_when(gene_name %in% bcr_genes ~ "BCR",
+#                                gene_name %in% tlr_genes ~ "TLR7",
+#                                TRUE ~ "Other")) %>%
+#     filter(pathway %in% c("BCR", "TLR7"))
+# 
+# bcr_df <- pathways_df %>%
+#     filter(condition_id %in% c("16hr_resting", "24hr_IgG", "72hr_IgG"),
+#            pathway == "BCR")
+# 
+# tlr_df <- pathways_df %>%
+#     filter(condition_id %in% c("16hr_resting", "24hr_RSQ", "72hr_RSQ"),
+#            pathway == "TLR7")
+# 
+# bcr_plot <- ggplot(bcr_df, aes(gene_name, tpm)) +
+#     geom_col(aes(fill = condition_id, alpha = condition_id), 
+#              fill = "midnightblue", 
+#              position = "dodge") +
+#     scale_alpha_manual(values = c(.33, .66, 1)) +
+#     scale_y_log10() +
+#     theme_bw() +
+#     theme(panel.grid = element_blank()) +
+#     labs(x = NULL, y = "TPM", alpha = NULL,
+#          title = "BCR pathway")
+#     
+# tlr_plot <- ggplot(tlr_df, aes(gene_name, tpm)) +
+#     geom_col(aes(fill = condition_id, alpha = condition_id), 
+#              fill = "tomato3", 
+#              position = "dodge") +
+#     scale_alpha_manual(values = c(.33, .66, 1)) +
+#     scale_y_log10() +
+#     theme_bw() +
+#     theme(panel.grid = element_blank()) +
+#     labs(x = NULL, y = "TPM", alpha = NULL,
+#          title = "TLR pathway")
+# 
+# pathways_plot <- plot_grid(bcr_plot, tlr_plot, ncol = 1)
+# 
+# ggsave("./plots/pathways.png", pathways_plot, height = 5)
+
+# Genes in Bentham et al.
+
+bentham_genes <- 
+    c("PTPN22", "FCGR2A", "FCGR2B", "FCGR3B", "TNFSF4", "SMG7", "NCF2", "IL10",
+      "LYST", "SPRED2", "IFIH1", "STAT4", "IKZF2", "ABHD6", "PXK", "IL12A",
+      "BANK1", "TCF7", "SKP1", "TNIP1", "MIR146A", "UHRF1BP1", "PRDM1", "ATG5",
+      "TNFAIP3", "JAZF1", "IKZF1", "IRF5", "BLK", "WDFY4", "ARID5B", "IRF7",
+      "CD44", "DHCR7", "NADSYN1", "ETS1", "FLI1", "SH2B3", "SLC15A4", "RAD51B",
+      "CSK", "CIITA", "SOCS1", "ITGAM", "IRF8", "PLD2", "IKZF3", "TYK2", 
+      "UBE2L3", "CXorf21", "IRAK1", "MECP2")
+
+bentham_genes[bentham_genes == "CXorf21"] <- "TASL"
+
+conditions <- c("16hr_resting", "24hr_IgG", "72hr_IgG", "24hr_RSQ", "72hr_RSQ")
+
+bentham_tpm <- gene_df %>%
+    left_join(gene_names) %>%
+    filter(gene_name %in% bentham_genes) %>%
+    mutate(condition_id = factor(condition_id, levels = conditions),
+           gene_name = factor(gene_name, levels = bentham_genes))
+
+bentham_plot <- ggplot(bentham_tpm, aes(gene_name, tpm)) +
+    geom_col(aes(fill = condition_id), position = "dodge",
+             color = "black", size = .15) +
+    scale_fill_manual(values = c("grey70", "gold2", "gold3",
+                                 "mediumpurple1", "mediumpurple3"),
+                      labels = function(x) sub("_", "\n", x)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+    facet_wrap(~gene_name, scales = "free") +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          axis.text.x = element_blank(),
+          legend.position = c(.75, .05),
+          legend.direction = "horizontal",
+          legend.background = element_blank(),
+          legend.box.background = element_rect(color = "black")) +
+    labs(x = NULL, y = "TPM", fill = NULL)
+
+ggsave("./plots/bentham.png", bentham_plot, height = 6, width = 8)
+
+
+bentham_fc <- bentham_tpm %>%
+    mutate(gene_name = as.character(gene_name)) %>%
+    select(-cpm) %>%
+    mutate(tpm = tpm + 1L) %>%
+    pivot_wider(names_from = condition_id, values_from = tpm) %>%
+    pivot_longer(-(1:3), names_to = "condition_id", values_to = "tpm") %>%
+    select(gene_id, gene_name, condition_id, resting_tpm = 3, tpm) %>%
+    mutate(fc = log2(tpm) - log2(resting_tpm)) %>%
+    group_by(condition_id, gene_id) %>%
+    filter(resting_tpm > 10, tpm > 10) %>%
+    filter(fc > 0.5 | fc < -0.5) %>%
+    ungroup() %>%
+    mutate(condition_id = factor(condition_id, levels = conditions))
+
+library(tidytext)
+
+bentham_fc_plot <- ggplot(bentham_fc, aes(fc, reorder_within(gene_name, fc, condition_id))) +
+    geom_vline(xintercept = -3:3, linetype = 2, color = "grey", alpha = .33) +
+    geom_col(aes(fill = fc), show.legend = FALSE) +
+    facet_wrap(~condition_id, scales = "free_y") +
+    scale_y_reordered() +
+    scale_fill_gradient2() +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          plot.caption = element_text(hjust = 0),
+          axis.text.y = element_text(size = 7, face = "bold")) +
+    labs(x = expression(paste("Log"[2], "FC TPM")),
+         y = NULL,
+         title = "Fold change in respect to resting state\nfor genes in Bentham et al.",
+         caption = "Genes with TPM > 10 in both resting and stim and |FC| > 0.5") 
+    
+ggsave("./plots/bentham_fc.png", bentham_fc_plot, height = 6.5)
+
+
+# HLA
+hla_df <- gene_df %>%
+    left_join(gene_names) %>%
+    filter(gene_name %in% paste0("HLA-", c("A", "B", "C", "DRA", "DRB1", "DQA1",
+                                           "DQB1", "DPA1", "DPB1"))) %>%
+    mutate(condition_id = factor(condition_id, levels = conditions))
+
+hla_plot_1 <- ggplot(hla_df, aes(gene_name, tpm)) +
+    geom_col(aes(fill = condition_id), position = "dodge") +
+    scale_fill_manual(values = c("black", "cornflowerblue", "blue",
+                                 "salmon", "tomato3"),
+                      labels = function(x) sub("_", "\n", x)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+    facet_wrap(~gene_name, scales = "free") +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          axis.text.x = element_blank(),
+          legend.position = "bottom",
+          legend.direction = "horizontal",
+          legend.background = element_blank(),
+          legend.box.background = element_rect(color = "black")) +
+    labs(x = NULL, y = "TPM", 
+         fill = NULL)
+
+hla_fc <- hla_df %>%
+    mutate(gene_name = as.character(gene_name)) %>%
+    select(-cpm) %>%
+    mutate(tpm = tpm + 1L) %>%
+    pivot_wider(names_from = condition_id, values_from = tpm) %>%
+    pivot_longer(-(1:3), names_to = "condition_id", values_to = "tpm") %>%
+    select(gene_id, gene_name, condition_id, resting_tpm = 3, tpm) %>%
+    mutate(fc = log2(tpm) - log2(resting_tpm)) %>%
+    group_by(condition_id, gene_id) %>%
+    ungroup() %>%
+    mutate(condition_id = factor(condition_id, levels = conditions))
+
+hla_plot_2 <- ggplot(hla_fc, aes(fc, reorder_within(gene_name, fc, condition_id))) +
+    geom_col(aes(fill = fc), show.legend = FALSE) +
+    facet_wrap(~condition_id, scales = "free_y") +
+    scale_y_reordered() +
+    scale_fill_gradient2() +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          plot.caption = element_text(hjust = 0),
+          axis.text.y = element_text(size = 7)) +
+    labs(x = expression(paste("Log"[2], FC)),
+         y = NULL)
+
+ggsave("./plots/hla.png", hla_plot_1, height = 4)
+ggsave("./plots/hla_fc.png", hla_plot_2, height = 4)
+
+
+# Activation markers
+
+markers <- c("CD69", "CD86")
+
+markers_tpm <- gene_df %>%
+    left_join(gene_names) %>%
+    filter(gene_name %in% markers) %>%
+    mutate(condition_id = factor(condition_id, levels = conditions))
+
+ggplot(markers_tpm, aes(gene_name, tpm)) +
+    geom_col(aes(fill = condition_id), position = "dodge") +
+    scale_fill_manual(values = c("black", "cornflowerblue", "blue",
+                                 "salmon", "tomato3")) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    labs(x = NULL, y = "TPM", fill = NULL)
+
+ggsave("./plots/activation_markers.png")
+
+
+# # Look at genes previously found by Jing
+# gene_names_v2 <- gene_names %>%
+#     mutate(ensembl = sub("\\.\\d+$", "", gene_id)) 
+# 
+# list_dir <- "/lab-share/IM-Gutierrez-e2/Public/B_cells_alignment/PRS/TPM_genes/"
+# 
+# list_files <- list.files(list_dir, pattern = "snp.txt$")
+# 
+# prs_list_df <- file.path(list_dir, list_files) %>%
+#     setNames(sub("_snp\\.txt", "", list_files)) %>%
+#     map_dfr(read_tsv, col_names = FALSE, .id = "condition_id") %>%
+#     left_join(gene_names_v2, by = c("X7" = "ensembl")) %>%
+#     mutate(pathway = case_when(grepl("IGG", condition_id) ~ "BCR",
+#                                grepl("RSQ", condition_id) ~ "TLR7")) %>%
+#     distinct(pathway, gene_id, gene_name) %>%
+#     add_count(gene_name, pathway) %>%
+#     mutate(gene_name = ifelse(n == 1, gene_name, paste(gene_id, gene_name, sep = "-")))
+# 
+# bcr_prs_df <- gene_df %>%
+#     inner_join(prs_list_df) %>% 
+#     filter(condition_id %in% c("16hr_resting", "24hr_IgG", "72hr_IgG"),
+#            pathway == "BCR") %>%
+#     distinct(condition_id, gene_id, gene_name, pathway, .keep_all = TRUE)
+# 
+# tlr_prs_df <- gene_df %>%
+#     inner_join(prs_list_df) %>%
+#     filter(condition_id %in% c("16hr_resting", "24hr_RSQ", "72hr_RSQ"),
+#            pathway == "TLR7") %>%
+#     distinct(condition_id, gene_id, gene_name, pathway, .keep_all = TRUE)
+# 
+# 
+# bcr_prs_plot <- ggplot(bcr_prs_df, aes(tpm, gene_name)) +
+#     geom_col(aes(fill = condition_id, alpha = fct_rev(condition_id)), 
+#              fill = "midnightblue", 
+#              position = "dodge") +
+#     scale_alpha_manual(values = rev(c(.33, .66, 1)),
+#                        guide = guide_legend(reverse = TRUE)) +
+#     theme_bw() +
+#     theme(panel.grid = element_blank()) +
+#     labs(x = "TPM", y = NULL, alpha = NULL,
+#          title = "BCR pathway")
+# 
+# tlr_prs_plot <- ggplot(tlr_prs_df, aes(tpm, gene_name)) +
+#     geom_col(aes(fill = condition_id, alpha = fct_rev(condition_id)), 
+#              fill = "tomato3", 
+#              position = "dodge") +
+#     scale_alpha_manual(values = rev(c(.33, .66, 1)),
+#                        guide = guide_legend(reverse = TRUE)) +
+#     theme_bw() +
+#     theme(panel.grid = element_blank()) +
+#     labs(x = "TPM", y = NULL, alpha = NULL,
+#          title = "TLR7 pathway")
+# 
+# pathways_plot <- plot_grid(bcr_prs_plot, tlr_prs_plot, ncol = 1)
+# 
+# ggsave("./plots/pathways_prs.png", pathways_plot, height = 6)
+
+
+
+
+
 
 # Comparison between log2 FC
 
@@ -213,14 +462,16 @@ pca <- "./data/pca/pheno_pcs.pca" %>%
 
 ggplot(pca, aes(PC1, PC2, color = condition_id)) +
     geom_point(size = 5) +
-    scale_color_manual(values = c("16hr_resting" = "grey35",
-                                  "24hr_IgG" = "slateblue",
-                                  "72hr_IgG" = "cornflowerblue",
-                                  "24hr_RSQ" = "tomato3",
-                                  "72hr_RSQ" = "salmon")) +
-    theme_bw()
+    scale_color_manual(values = c("16hr_resting" = "grey70",
+                                  "24hr_IgG" = "gold2",
+                                  "72hr_IgG" = "gold3",
+                                  "24hr_RSQ" = "mediumpurple1",
+                                  "72hr_RSQ" = "mediumpurple3")) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    labs(color = NULL)
 
-ggsave("./plots/pca_bcell_expression.png")
+ggsave("./plots/pca_bcell_expression.png", height = 3, width = 5)
 
 
 # MGB biobank
@@ -235,7 +486,7 @@ het <- paste0("/temp_work/ch229163/VCF/chrX.MGB.", batches, ".het") %>%
     mutate(hom = `O(HOM)`/N_SITES) 
 
 sex_1 <- ggplot(het, aes(hom)) +
-    geom_histogram() +
+    geom_histogram(bins = 50) +
     geom_vline(xintercept = .985, linetype = 2) +
     theme_bw() +
     theme(panel.grid.major.x = element_blank(),
@@ -287,7 +538,7 @@ sample_annotation <- read_tsv(index_1000G, comment = "##") %>%
 
 
 ### Colors
-mgb_cols <- c("black", "cadetblue2") %>%
+mgb_cols <- c("black", "grey") %>%
     setNames(c("MGB_biobank", "MGB_eur"))
 
 afr_cols <- brewer.pal("Oranges", n = 9)[3:9] %>%
@@ -314,8 +565,8 @@ pca_genos <-
     "allchr.merged.pruned.pca.eigenvec") %>%
     read_table2(col_names = FALSE) %>%
     select(-1) %>%
-    select(X2:X6) %>%
-    setNames(c("sample_id", paste0("PC", 1:4)))
+    select(X2:X10) %>%
+    setNames(c("sample_id", paste0("PC", 1:8)))
 
 pca_kgp <- pca_genos %>%
     inner_join(sample_annotation) 
@@ -326,7 +577,7 @@ pca_mgb <- pca_genos %>%
 
 
 pca_df <- bind_rows(pca_mgb, pca_kgp) %>%
-    select(sample_id, population, PC1:PC4) %>%
+    select(sample_id, population, PC1:PC8) %>%
     mutate(population = factor(population, levels = names(all_cols))) %>%
     mutate(dataset = ifelse(grepl("MGB", population), "MGB", "1000 Genomes"),
            dataset = factor(dataset, levels = rev(c("1000 Genomes", "MGB")))) 
@@ -373,7 +624,7 @@ pca_df %>%
     select(sample_id, PC1, PC2) %>%
     pivot_longer(PC1:PC2, names_to = "PC") %>%
     ggplot(aes(value)) +
-    geom_histogram() +
+    geom_histogram(bins = 50) +
     facet_wrap(~PC, scales = "free") +
     theme_bw() +
     theme(panel.grid = element_blank())
@@ -392,6 +643,8 @@ pca_eur_df <- pca_df %>%
            population = factor(population, levels = names(all_cols)))
 
 
+all_cols[1:2] <- c("grey", "black")
+
 pca_eur_plot_1 <- pca_eur_df %>%
     ggplot(aes(PC1, PC2, color = population, alpha = dataset)) +
     geom_point(size = .5) +
@@ -401,8 +654,7 @@ pca_eur_plot_1 <- pca_eur_df %>%
     theme_bw() +
     theme(panel.grid = element_blank(),
           strip.text = element_text(face = "bold", size = 11),
-          panel.spacing = unit(2, "lines"),
-          legend.text = element_text(size = 6)) +
+          panel.spacing = unit(2, "lines")) +
     guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
            alpha = FALSE)
 
@@ -416,8 +668,7 @@ pca_eur_plot_2 <- pca_eur_df %>%
     theme_bw() +
     theme(panel.grid = element_blank(),
           strip.text = element_text(face = "bold", size = 11),
-          panel.spacing = unit(2, "lines"),
-          legend.text = element_text(size = 6)) +
+          panel.spacing = unit(2, "lines")) +
     guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
            alpha = FALSE)
 
@@ -437,18 +688,26 @@ ggsave("./plots/pca_eur.png", pca_eur_plot, width = 8, height = 5)
 
 scores_df <- read_tsv("./mgb_biobank/sle_variants/scores.tsv") %>%
     extract(sample_id, c("sample_id"), ".+_(.+)") %>%
-    mutate(top_eur = sample_id %in% mgb_eur_inds)
+    mutate(top_eur = sample_id %in% mgb_eur_inds) %>%
+    arrange(desc(het_score_wt)) %>%
+    mutate(top_400 = 1:n() %in% 1:400)
+  
 
 scores_eur_df <- scores_df %>%
     filter(top_eur == TRUE)
 
 
 ggplot(scores_df, aes(het_score, het_score_wt)) +
-    geom_point(size = .75, alpha = .1) +
+    geom_point(aes(color = top_400), 
+               size = .75) +
+    scale_color_manual(values = c("black", "tomato3")) +
     theme_bw()  +
-    labs(x = "Heterozigosity score", y = "Weighted heterozygosity score")
+    theme(legend.position = c(.9, .2)) +
+    labs(x = "Heterozigosity score", 
+         y = "Weighted heterozygosity score",
+         color = "Top 400?")
 
-ggsave("./plots/het_scores_points.png", width = 5, height = 4)
+ggsave("./plots/het_scores_points.png", width = 6, height = 4)
 
 
 score_colors <- 
@@ -459,34 +718,22 @@ score_colors <-
     mutate(score = ifelse(n_distinct(score) > 1, "both", score))
 
 
-ggplot(scores_df, aes(het_score, het_score_wt)) +
-    geom_point(size = .75, alpha = .1) +
-    geom_point(data = score_colors, 
-               aes(het_score, het_score_wt, color = score),
-               size = 2.5) +
-    scale_color_uchicago() +
-    theme_bw() +
-    labs(x = "Heterozigosity score", y = "Weighted heterozygosity score") 
-
-ggsave("./plots/het_scores_points_top12.png", width = 6, height = 4)
-
-
 scores_df %>%
     pivot_longer(het_score:het_score_wt, names_to = "score") %>%
     mutate(score = recode(score, "het_score" = "Unweighted",
                           "het_score_wt" = "Weighted")) %>%
-    ggplot(aes(value, color = top_eur, fill = top_eur)) +
-    geom_density(alpha = .5, size = .5) +
+    ggplot(aes(value, fill = top_eur)) +
+    geom_density(alpha = .5, size = .1) +
+    scale_fill_manual(values = c("TRUE" = "black", "FALSE" = "grey70"),
+                      labels = c("Low EUR ancestry", "High EUR ancestry")) +
     theme_bw() +
-    scale_color_manual(values = c("TRUE" = "midnightblue",
-                                  "FALSE" = "grey70"), guide = "none") +
-    scale_fill_manual(values = c("TRUE" = "midnightblue",
-                                 "FALSE" = "grey70"),
-                      labels = c("Low EUR ancestry", "HIgh EUR ancestry")) +
+    theme(panel.grid = element_blank(),
+          legend.position = "top",
+          text = element_text(size = 8)) +
     facet_wrap(~score, scales = "free") +
     labs(fill = NULL, x = "Heterozygosity score")
 
-ggsave("./plots/het_score_density.png", width = 6)
+ggsave("./plots/het_score_density.png", width = 4.5, height = 2.5)
 
 
 
@@ -497,39 +744,18 @@ pca_score_df <- pca_df %>%
     left_join(scores_df) %>%
     select(sample_id, PC1, PC2, PC3, PC4, het_score, het_score_wt)
 
-het_score_pca_1 <- pca_score_df %>%
-    ggplot(aes(PC1, PC2, fill = het_score_wt, color = het_score_wt)) +
+pca_score_df %>%
+    ggplot(aes(PC1, PC2, color = het_score_wt, fill = het_score_wt)) +
     geom_point(size = .1) +
     scale_color_viridis_c(option = "inferno") +
     scale_fill_viridis_c(option = "inferno", 
-                         guide = guide_colorbar(barwidth = 0.5)) +
+                        guide = guide_colorbar(barwidth = 0.5)) +
     theme_bw() +
     theme(panel.grid = element_blank()) +
     guides(color = FALSE) +
     labs(fill = "Weighted\nscore")
 
-het_score_pca_2 <- pca_score_df %>%
-    ggplot(aes(PC3, PC4, fill = het_score_wt, color = het_score_wt)) +
-    geom_point(size = .1) +
-    scale_color_viridis_c(option = "inferno") +
-    scale_fill_viridis_c(option = "inferno", 
-                         guide = guide_colorbar(barwidth = 0.5)) +
-    theme_bw() +
-    theme(panel.grid = element_blank()) +
-    guides(color = FALSE) +
-    labs(fill = "Weighted\nscore")
-
-
-het_score_grid <- plot_grid(het_score_pca_1 + theme(legend.position = "none"),
-                            het_score_pca_2 + theme(legend.position = "none"),
-                            ncol = 1)
-
-plot_grid(het_score_grid, 
-          get_legend(het_score_pca_1),
-          nrow = 1, rel_widths = c(1, .3))
-
-
-ggsave("./plots/pca_het_scores.png", width = 5, height = 5)
+ggsave("./plots/pca_het_scores.png", width = 4, height = 2.5)
 
 
 

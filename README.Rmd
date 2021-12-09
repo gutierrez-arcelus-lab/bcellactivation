@@ -116,6 +116,19 @@ include_graphics("./plots/scatter_resting_conditions.png")
 include_graphics("./plots/fc_24vs72.png")
 ```
 
+#### 1.3.8. Expression of candidate SLE genes
+
+
+We looked at the expression of candidate genes suggested by [Bentham et al. 2015, Table 2](http://www.nature.com/articles/ng.3434).
+
+```{r sle}
+include_graphics("./plots/bentham.png")
+```
+
+```{r sle_fc}
+include_graphics("./plots/bentham_fc.png")
+```
+
 
 ### 1.4. TO DO:
 
@@ -236,7 +249,7 @@ Since we are not intested in the direction of effect, I converted all ORs < 1 to
 This is the relationship between the two scores:
 
 ```{r het_score}
-include_graphics("./plots/het_scores_jitterplot.png")
+include_graphics("./plots/het_scores_points.png")
 ```
 
 This are the distributions according the European ancestry:

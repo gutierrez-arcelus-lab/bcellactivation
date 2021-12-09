@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH -N 1
-#SBATCH -c 1
+#SBATCH -c 8
 #SBATCH --mem=64gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
@@ -17,4 +17,4 @@ PREFIX=allchr.merged.pruned
 VCF=${DIR}/${PREFIX}.vcf.gz
 OUT=${DIR}/${PREFIX}.pca
 
-plink --vcf $VCF --pca --out $OUT
+plink --vcf $VCF --pca --threads $SLURM_CPUS_PER_TASK --out $OUT

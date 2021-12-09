@@ -83,7 +83,7 @@ increase in read counts can lead to large increases in TPM values.
 PCA shows a separation of the RSQ and IgG treatments (PC1), and of the
 24h/72h conditions (PC2).
 
-<img src="./plots/pca_bcell_expression.png" width="2275" />
+<img src="./plots/pca_bcell_expression.png" width="1500" />
 
 #### 1.3.3. Fold change in comparison with “resting”
 
@@ -110,6 +110,15 @@ resting or test condition.
 #### 1.3.7. Comparison of FC for each stimulant
 
 <img src="./plots/fc_24vs72.png" width="1800" />
+
+#### 1.3.8. Expression of candidate SLE genes
+
+We looked at the expression of candidate genes suggested by [Bentham et
+al. 2015, Table 2](http://www.nature.com/articles/ng.3434).
+
+<img src="./plots/bentham.png" width="2400" />
+
+<img src="./plots/bentham_fc.png" width="2003" />
 
 ### 1.4. TO DO:
 
@@ -234,16 +243,16 @@ ORs &lt; 1 to the reciprocal 1/OR.
 
 This is the relationship between the two scores:
 
-<img src="./plots/het_scores_jitterplot.png" width="1500" />
+<img src="./plots/het_scores_points.png" width="1800" />
 
 This are the distributions according the European ancestry:
 
-<img src="./plots/het_score_density.png" width="1800" />
+<img src="./plots/het_score_density.png" width="1350" />
 
 We can see that heterozygosity increases with European ancestry. We can
 also see that if we color the PCA plot by heterozygosity.
 
-<img src="./plots/pca_het_scores.png" width="1500" />
+<img src="./plots/pca_het_scores.png" width="1200" />
 
 ## TO DO:
 

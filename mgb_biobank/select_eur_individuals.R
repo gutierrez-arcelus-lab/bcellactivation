@@ -41,7 +41,7 @@ mgb_selected <- pca_mgb %>%
     filter(between(z_pc1, 0, 3),
 	   between(z_pc2, 0, 3),
 	   between(z_pc3, 0, 3),
-	   between(z_pc4, 0, 3))
+	   between(z_pc4, 0, 2))
 
 mgb_selected %>%
     pull(sample_id) %>%
