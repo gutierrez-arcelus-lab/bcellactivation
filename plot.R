@@ -210,14 +210,19 @@ ggsave("./plots/scatter_resting_conditions.png", width = 6, height = 3)
 
 # Genes in Bentham et al.
 
+library(rvest)
+
 bentham_genes <- 
-    c("PTPN22", "FCGR2A", "FCGR2B", "FCGR3B", "TNFSF4", "SMG7", "NCF2", "IL10",
-      "LYST", "SPRED2", "IFIH1", "STAT4", "IKZF2", "ABHD6", "PXK", "IL12A",
-      "BANK1", "TCF7", "SKP1", "TNIP1", "MIR146A", "UHRF1BP1", "PRDM1", "ATG5",
-      "TNFAIP3", "JAZF1", "IKZF1", "IRF5", "BLK", "WDFY4", "ARID5B", "IRF7",
-      "CD44", "DHCR7", "NADSYN1", "ETS1", "FLI1", "SH2B3", "SLC15A4", "RAD51B",
-      "CSK", "CIITA", "SOCS1", "ITGAM", "IRF8", "PLD2", "IKZF3", "TYK2", 
-      "UBE2L3", "CXorf21", "IRAK1", "MECP2")
+    "https://www.nature.com/articles/ng.3434/tables/2" %>%
+    read_html() %>%
+    html_node("table") %>%
+    html_table(header = TRUE, fill = TRUE) %>%
+    select(gene = `Likely causal genec`) %>%
+    slice(-1) %>%
+    separate_rows(gene, sep = ",") %>%
+    mutate(gene = trimws(gene)) %>%
+    filter(gene != "") %>%
+    pull(gene)
 
 bentham_genes[bentham_genes == "CXorf21"] <- "TASL"
 
@@ -226,8 +231,7 @@ conditions <- c("16hr_resting", "24hr_IgG", "72hr_IgG", "24hr_RSQ", "72hr_RSQ")
 bentham_tpm <- gene_df %>%
     left_join(gene_names) %>%
     filter(gene_name %in% bentham_genes) %>%
-    mutate(condition_id = factor(condition_id, levels = conditions),
-           gene_name = factor(gene_name, levels = bentham_genes))
+    mutate(condition_id = factor(condition_id, levels = conditions))
 
 bentham_plot <- ggplot(bentham_tpm, aes(gene_name, tpm)) +
     geom_col(aes(fill = condition_id), position = "dodge",
