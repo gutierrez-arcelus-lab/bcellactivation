@@ -22,9 +22,9 @@ CHR=$SLURM_ARRAY_TASK_ID
 
 # Define IO
 OUTDIR=${TEMP_WORK}/VCF
-VCFMGB=${OUTDIR}/chr${CHR}.MGB.04{01..07}.vcf.gz
+VCFMGB=${OUTDIR}/chr${CHR}.MGB.04{01..08}.vcf.gz
 VCFKGP=${OUTDIR}/chr${CHR}.1000G.vcf.gz
-VARSMGB=${OUTDIR}/chr${CHR}.MGB.04{01..07}.variants.txt
+VARSMGB=${OUTDIR}/chr${CHR}.MGB.04{01..08}.variants.txt
 VARS1KG=${OUTDIR}/chr${CHR}.1000G.variants.txt
 OUTPOS=${OUTDIR}/chr${CHR}.commonvars.pos
 

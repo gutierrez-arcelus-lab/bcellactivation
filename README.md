@@ -154,9 +154,7 @@ al. 2015, Table 2](http://www.nature.com/articles/ng.3434).
 | 0405  | 5,491 |    \~81.9     |   MEG\_C\_TopMed   |
 | 0406  | 5,143 |    \~80.0     |   MEG\_D\_TopMed   |
 | 0407  | 4,847 |    \~76.4     |   MEG\_E\_TopMed   |
-| 0408  |       |               |                    |
-| 0409  |       |               |                    |
-| 0410  |       |               |                    |
+| 0408  |  866  |    \~40.0     |  MEG\_X1\_TopMed   |
 
 -   1000 Genomes data:
     -   \~2,500 individuals low coverage data realigned to GRCh38 (not
@@ -221,25 +219,34 @@ have high European ancestry.
 ##### Selecting individuals with high European ancestry
 
 In order to select individuals with European ancestry given PC
-coordinates, I computed the mean and SD for PC1 –PC4 in 1000 Genomes
+coordinates, we computed the mean and SD for PC1 –PC4 in 1000 Genomes
 Europeans, and computed a z-score for each MGB individuals, selecting
-all individuals falling between -3 and +3 SDs at each PC.
+all individuals falling between -3 and +3 SDs for PC 1 and 2, and ±2 for
+PC 3 and 4.
 
 <img src="./plots/pca_eur.png" width="2400" />
 
 #### SLE variants
 
-We selected SLE risk variants from the Langefeld et al. study.
+We selected SLE risk variants from Langefeld et al. and Bentham et al.
 
-Then, I computed a heterozygosity score that corresponds to the number
-of variants at which the individuals are heterozygotes. I also computed
+From Langefeld et al., we took all variants at FDR = 5%. From Bentham,
+we selected the variants which are not in LD with any variant in
+Langefeld et al. (
+*r*<sup>2</sup> &lt; 0.6
+).
+
+<img src="./plots/sle_ld.png" width="2168" />
+
+Then, we computed a heterozygosity score that corresponds to the number
+of variants at which the individuals are heterozygotes. We also computed
 a weighted score that is simply the number of alleles times the log(OR),
 summed over all variants. Since the number of alleles for heterozygotes
 is equal to 1, that corresponds to simply summing the log(OR) over all
 SLE SNPs.
 
-Since we are not intested in the direction of effect, I converted all
-ORs &lt; 1 to the reciprocal 1/OR.
+Since we are not interested in the direction of effect, we converted all
+ORs &lt; 1 to their reciprocal (1/OR).
 
 This is the relationship between the two scores:
 
@@ -253,11 +260,3 @@ We can see that heterozygosity increases with European ancestry. We can
 also see that if we color the PCA plot by heterozygosity.
 
 <img src="./plots/pca_het_scores.png" width="1200" />
-
-## TO DO:
-
-Selecting individuals with European ancestry:
-
--   Select on the whole data (&gt;50,000);
--   Include variants from other studies;
--   Include independent signals in the same genomic region;

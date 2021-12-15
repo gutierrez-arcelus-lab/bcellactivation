@@ -36,7 +36,6 @@ We take the supplementary table from Langefeld et al. (2017) with 3 tiers with s
 
 
 - With the R script `parse_sle_variants.R`, we select all variants at FDR < 5% for Europeans;
-- Lift the original coordinates in hg19 to hg38 with the script `liftsle.sh`;
 - Extract the genotypes for the selected variants from each chromosome and merge into a single VCF file with `extract_sle_vcf.sh`.
 
 

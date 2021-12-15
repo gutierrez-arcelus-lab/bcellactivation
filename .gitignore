@@ -6,6 +6,7 @@ log
 *gz
 *gz.tbi
 *.tsv
+*.txt
 *results
 .Rhistory
 mgb_biobank/allchr*

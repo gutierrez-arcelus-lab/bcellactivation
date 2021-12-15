@@ -15,7 +15,7 @@ sample_annotation <- read_tsv(index_1000G, comment = "##") %>%
 pca_genos <-
     file.path("/lab-share/IM-Gutierrez-e2/Public/vitor",
 	      "ase/mgb_biobank/results/allchr.merged.pruned.pca.eigenvec") %>%
-    read_table(col_names = FALSE) %>%
+    read_table2(col_names = FALSE) %>%
     select(-1) %>%
     select(X2:X6) %>%
     setNames(c("sample_id", paste0("PC", 1:4)))
@@ -27,6 +27,22 @@ pca_eur <- pca_genos %>%
 
 eur_mu <- pca_eur %>%
     summarise_at(vars(PC1:PC4), list(mean = mean, sd = sd))
+
+####
+ggplot(pca_eur, aes(PC1)) +
+    geom_density() +
+    geom_vline(xintercept = eur_mu$PC1_mean + (eur_mu$PC1_sd * 3)) +
+    geom_vline(xintercept = eur_mu$PC1_mean + (eur_mu$PC1_sd * -3))
+
+ggplot(pca_eur, aes(PC2)) +
+    geom_density() +
+    geom_vline(xintercept = eur_mu$PC2_mean + (eur_mu$PC2_sd * 3)) +
+    geom_vline(xintercept = eur_mu$PC2_mean + (eur_mu$PC2_sd * -3))
+
+shapiro.test(pca_eur$PC1)
+shapiro.test(pca_eur$PC2)
+
+####
 
 pca_mgb <- pca_genos %>%
     anti_join(sample_annotation) %>%
@@ -40,7 +56,7 @@ mgb_selected <- pca_mgb %>%
 	   z_pc4 = abs(PC4 - eur_mu$PC4_mean)/eur_mu$PC4_sd) %>%
     filter(between(z_pc1, 0, 3),
 	   between(z_pc2, 0, 3),
-	   between(z_pc3, 0, 3),
+	   between(z_pc3, 0, 2),
 	   between(z_pc4, 0, 2))
 
 mgb_selected %>%

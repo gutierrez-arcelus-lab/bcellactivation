@@ -1,37 +1,44 @@
 library(tidyverse)
 
-bed_hg19 <- 
-    read_tsv("./sle_variants/sle.bed", col_names = FALSE) %>%
-    select(chr = X1, pos_hg19 = X3, snp_id = X4)
-
-bed_hg38 <- 
-    read_tsv("./sle_variants/sle_hg38.bed", col_names = FALSE) %>%
-    select(chr = X1, pos_hg38 = X3, snp_id = X4)
-
-bed <- left_join(bed_hg19, bed_hg38, by = c("chr", "snp_id")) %>%
-    select(-snp_id)
-
-# If OR < 0, use the reciprocal for risk
-sle_vars <- read_tsv("./sle_variants/sle.tsv") %>%
-    select(pos, or) %>%
+info_df <- "./sle_variants/sle_langefeld_bentham_info.tsv" %>%
+    read_tsv() %>%
     mutate(or = ifelse(or < 1L, 1L/or, or))
 
-# import VCF
+ld_vars <- read_tsv("./sle_variants/sle_ld.tsv") %>%
+    filter(r2 >= 0.6) %>%
+    distinct(bentham) %>%
+    pull(bentham)
+
+var_df <- "./sle_variants/sle_langefeld_bentham_hg38.bed" %>%
+    read_tsv(col_names = FALSE) %>%
+    separate(X4, c("snp_id", "study"), sep = "-") %>%
+    select(chr = 1, pos = 2, snp_id, study) %>%
+    left_join(info_df, by = c("chr", "study", "snp_id")) %>%
+    filter(!(study == "bentham" & snp_id %in% ld_vars))
 
 vcf <- read_tsv("./sle_variants/sle.MGB.vcf", comment = "##") %>%
-    filter(nchar(REF) == 1L, nchar(ALT) == 1L) %>%
-    select(-(QUAL:FORMAT)) %>%
-    select(chr = 1, pos = POS, snp_id = ID, ref = REF, alt = ALT, everything()) %>%
-    pivot_longer(-(chr:alt), names_to = "sample_id", values_to = "genotype") %>%
+
+vcf_long <- vcf %>%
+    select(-(REF:FORMAT)) %>%
+    select(chr = 1, pos = POS, snp_id = ID, everything()) %>%
+    inner_join(select(var_df, chr, pos)) %>%
+    pivot_longer(-(chr:snp_id), names_to = "sample_id", values_to = "genotype")
+
+vcf_long %>% count(genotype)
+
+vcf_recode <- vcf_long %>%
     mutate(dose = case_when(genotype == "0|0" ~ "0",
 			    genotype == "1|0" ~ "1",
 			    genotype == "0|1" ~ "1",
 			    genotype == "1|1" ~ "2",
-			    TRUE ~ NA_character_))
+			    genotype == "0|2" ~ "1",
+			    TRUE ~ NA_character_)) %>%
+    group_by(snp_id) %>%
+    filter(!any(is.na(dose))) %>%
+    ungroup()
 
-dosage_df <- vcf %>%
-    left_join(bed, by = c("chr", "pos" = "pos_hg38")) %>%
-    left_join(sle_vars, by = c("pos_hg19" = "pos")) %>%
+dosage_df <- vcf_recode %>%
+    left_join(select(var_df, chr, pos, or)) %>%
     mutate(beta = log(or))
 
 out <- dosage_df %>%

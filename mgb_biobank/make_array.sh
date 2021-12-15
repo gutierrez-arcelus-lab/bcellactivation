@@ -2,7 +2,7 @@
 
 echo -n > array_design.txt
 
-for i in {01..07} 
+for i in {01..08} 
 do 
     for j in {1..22}
     do 
