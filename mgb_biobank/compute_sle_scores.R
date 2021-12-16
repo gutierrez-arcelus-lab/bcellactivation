@@ -16,7 +16,7 @@ var_df <- "./sle_variants/sle_langefeld_bentham_hg38.bed" %>%
     left_join(info_df, by = c("chr", "study", "snp_id")) %>%
     filter(!(study == "bentham" & snp_id %in% ld_vars))
 
-vcf <- read_tsv("./sle_variants/sle.MGB.vcf", comment = "##") %>%
+vcf <- read_tsv("./sle_variants/sle.MGB.vcf", comment = "##")
 
 vcf_long <- vcf %>%
     select(-(REF:FORMAT)) %>%
