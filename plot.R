@@ -387,6 +387,66 @@ ggplot(markers_tpm, aes(gene_name, tpm)) +
 ggsave("./plots/activation_markers.png")
 
 
+# TLRs and IG genes
+
+immune_genes <- read_tsv("./data/transc_to_gene.tsv") %>%
+  distinct(gene_id, gene_name, gene_type) %>%
+  filter((grepl("TLR", gene_name) & gene_type == "protein_coding") |
+           grepl("^IG_.+_gene$", gene_type) |
+           gene_name == "UNC93B1")
+    
+
+immune_df <- gene_df %>%
+  inner_join(immune_genes, by = "gene_id") %>%
+  mutate(gene_name = case_when(grepl("^IG", gene_type) ~ gene_type,
+                               TRUE ~ gene_name)) %>%
+  group_by(condition_id, gene_name) %>%
+  summarise(tpm = sum(tpm)) %>%
+  ungroup() %>%
+  mutate(condition_id = factor(condition_id, levels = conditions)) %>%
+  group_by(gene_name) %>%
+  filter(any(tpm > 5)) %>%
+  ungroup() %>%
+  mutate(gene_name = factor(gene_name, levels = immune_gene_levels))
+
+ggplot(immune_df, aes(gene_name, tpm)) +
+  geom_col(aes(fill = condition_id), position = "dodge",
+           color = "black", size = .15) +
+  scale_fill_manual(values = c("grey70", "gold2", "gold3",
+                               "mediumpurple1", "mediumpurple3")) +
+  scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+  facet_wrap(~gene_name, scales = "free", ncol = 3) +
+  theme_minimal() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_blank()) +
+  labs(x = NULL, y = "TPM", fill = NULL)
+
+ggsave("./plots/immune_genes.png", width = 6, height = 4)
+
+
+ig_c_genes <- gene_df %>%
+  inner_join(immune_genes, by = "gene_id") %>%
+  filter(gene_type == "IG_C_gene") %>%
+  mutate(condition_id = factor(condition_id, levels = conditions)) %>%
+  group_by(gene_name) %>%
+  filter(any(tpm > 5)) %>%
+  ungroup()
+
+ggplot(ig_c_genes, aes(gene_name, tpm)) +
+  geom_col(aes(fill = condition_id), position = "dodge",
+           color = "black", size = .15) +
+  scale_fill_manual(values = c("grey70", "gold2", "gold3",
+                               "mediumpurple1", "mediumpurple3")) +
+  scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+  facet_wrap(~gene_name, scales = "free", ncol = 3) +
+  theme_minimal() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_blank()) +
+  labs(x = NULL, y = "TPM", fill = NULL)
+
+ggsave("./plots/ig_c_genes.png", width = 6, height = 4.2)
+
+
 # # Look at genes previously found by Jing
 # gene_names_v2 <- gene_names %>%
 #     mutate(ensembl = sub("\\.\\d+$", "", gene_id)) 
@@ -615,6 +675,23 @@ pca_df <- bind_rows(pca_mgb, pca_kgp) %>%
     mutate(dataset = ifelse(grepl("MGB", population), "MGB", "1000 Genomes"),
            dataset = factor(dataset, levels = rev(c("1000 Genomes", "MGB")))) 
 
+pca_thresholds <- pca_kgp %>%
+  filter(population %in% c("GBR", "CEU", "TSI", "IBS", "FIN")) %>%
+  select(sample_id, population, PC1:PC4) %>%
+  pivot_longer(PC1:PC4, names_to = "pc") %>%
+  group_by(pc) %>%
+  slice(-which.max(value)) %>%
+  slice(-which.min(value)) %>%
+  summarise(value = range(value)) %>%
+  mutate(i = c("min", "max"),
+         value = value * 1.1) %>%
+  ungroup() %>%
+  pivot_wider(names_from = pc, values_from = value) %>%
+  mutate(dataset = "MGB",
+         dataset = factor(dataset, levels = c("1000 Genomes", "MGB")))
+
+
+
 
 pca_plot_1 <- pca_df %>%
     ggplot(aes(PC1, PC2, color = population, alpha = dataset)) +
@@ -665,9 +742,16 @@ pca_df %>%
 ggsave("./plots/pca_histogram.png", width = 5, height = 2.5)
 
 
-
 ## Select based on PC1:PC4 coordinates
-mgb_eur_inds <- read_lines("./mgb_biobank/results/mgb_eur.txt")
+mgb_eur_inds <- pca_df %>%
+  filter(dataset == "MGB") %>%
+  filter(between(PC1, pca_thresholds$PC1[1], pca_thresholds$PC1[2]),
+         between(PC2, pca_thresholds$PC2[1], pca_thresholds$PC2[2]),
+         between(PC3, pca_thresholds$PC3[1], pca_thresholds$PC3[2]),
+         between(PC4, pca_thresholds$PC4[1], pca_thresholds$PC4[2])) %>%
+  pull(sample_id)
+  
+write_lines(mgb_eur_inds, "./mgb_biobank/results/mgb_eur.txt")
 
 pca_eur_df <- pca_df %>%
     select(sample_id, dataset, population, PC1:PC4) %>%
@@ -675,12 +759,15 @@ pca_eur_df <- pca_df %>%
            population = ifelse(sample_id %in% mgb_eur_inds, "MGB_eur", population),
            population = factor(population, levels = names(all_cols)))
 
-
 all_cols[1:2] <- c("grey", "black")
 
 pca_eur_plot_1 <- pca_eur_df %>%
     ggplot(aes(PC1, PC2, color = population, alpha = dataset)) +
     geom_point(size = .5) +
+    geom_vline(data = pca_thresholds, 
+               aes(xintercept = PC1), linetype = 2, alpha = .5, color = "red") +
+    geom_hline(data = pca_thresholds, 
+               aes(yintercept = PC2), linetype = 2, alpha = .5, color = "red") +
     scale_color_manual(values = all_cols) +
     scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
     facet_wrap(~dataset) +
@@ -691,10 +778,13 @@ pca_eur_plot_1 <- pca_eur_df %>%
     guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
            alpha = FALSE)
 
-
 pca_eur_plot_2 <- pca_eur_df %>%
     ggplot(aes(PC3, PC4, color = population, alpha = dataset)) +
     geom_point(size = .5) +
+    geom_vline(data = pca_thresholds, 
+               aes(xintercept = PC3), linetype = 2, alpha = .5, color = "red") +
+    geom_hline(data = pca_thresholds, 
+               aes(yintercept = PC4), linetype = 2, alpha = .5, color = "red") +
     scale_color_manual(values = all_cols) +
     scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
     facet_wrap(~dataset) +

@@ -219,10 +219,8 @@ have high European ancestry.
 ##### Selecting individuals with high European ancestry
 
 In order to select individuals with European ancestry given PC
-coordinates, we computed the mean and SD for PC1 –PC4 in 1000 Genomes
-Europeans, and computed a z-score for each MGB individuals, selecting
-all individuals falling between -3 and +3 SDs for PC 1 and 2, and ±2 for
-PC 3 and 4.
+coordinates, we gate the PCA plot based on the range of values for
+PC1–PC4 in the 1000 Genomes European set.
 
 <img src="./plots/pca_eur.png" width="2400" />
 
