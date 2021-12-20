@@ -5,7 +5,7 @@ export BCFTOOLS_X=1.12
 
 # convert Hg19 coordinations to Hg38
 LABSHARE=/lab-share/IM-Gutierrez-e2/Public 
-BED=${LABSHARE}/vitor/ase/mgb_biobank/sle_variants/sle_langefeld_bentham.bed 
+BED=${LABSHARE}/vitor/ase/mgb_biobank/sle_variants/sle_variants.bed 
 CHAIN=/reference_databases/ReferenceGenome/liftover_chain/hg19/hg19ToHg38.over.chain.gz
 
 PREFIX="${BED%.*}"

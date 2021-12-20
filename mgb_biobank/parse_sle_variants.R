@@ -1,7 +1,6 @@
 library(tidyverse)
 library(readxl)
 library(rvest)
-#library(furrr)
 
 # Functions to read data
 parse_pvalues <- function(p) {
@@ -44,20 +43,6 @@ read_bentham <- function(url_address) {
 	   or = parse_number(or))
 }
 
-#get_var_info <- function(dbSNP_id) {
-#    
-#    "https://www.ncbi.nlm.nih.gov/snp/%s" %>%
-#    sprintf(dbSNP_id) %>%
-#    read_html() %>%    
-#    html_nodes("div") %>%
-#    html_nodes(".summary-box .usa-width-one-half") %>%
-#    html_nodes("dd") %>%
-#    html_text() %>%
-#    .[4] %>%
-#    trimws() %>%
-#    gsub("^([^\n]+).*$", "\\1", .)
-#}
-
 # Import Langefeld data
 tier1_ea <- read_langefeld("./sle_variants/langefeld_tableS2.xlxs", 1)
 tier2_ea <- read_langefeld("./sle_variants/langefeld_tableS2.xlxs", 2)
@@ -65,8 +50,6 @@ tier3_ea <- read_langefeld("./sle_variants/langefeld_tableS2.xlxs", 3)
 
 langefeld_df <- bind_rows("1" = tier1_ea, "2" = tier2_ea, "3" = tier3_ea, .id = "tier") %>%
     arrange(tier, region_rank, p)
-
-langefeld_df %>% filter(grepl("imm", snp_id))
 
 # Process Bentham et al. data
 bentham_df <- read_bentham("https://www.nature.com/articles/ng.3434/tables/1")
@@ -84,8 +67,8 @@ bentham_supp <-
 # TLR7 variant (see review by Teruel & Arlacon-Riquelme)
 deng_df <- 
     tibble(snp_id = "rs3853839",
-	   chr = "X", 
-	   pos = 12889539, 
+	   chr = "chrX", 
+	   pos = 12907658, 
 	   locus = "TLR7", 
 	   p = 2e-9,
 	   or = 1.12)
@@ -118,7 +101,9 @@ info_df <-
     mutate(chr = factor(chr, levels = paste0("chr", c(1:22, "X")))) %>%
     arrange(chr, pos)
 
-#info_out <- info_df %>%
-#    mutate(type = future_map_chr(snp_id, get_var_info))
+bed <- info_df %>%
+    select(chr, start = pos) %>%
+    mutate(end = start)
 
 write_tsv(info_df, "./sle_variants/sle_variants.tsv")
+write_tsv(bed, "./sle_variants/sle_variants.bed", col_names = FALSE)
