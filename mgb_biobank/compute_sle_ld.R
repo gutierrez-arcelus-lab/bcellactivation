@@ -1,23 +1,31 @@
 library(tidyverse)
 
-vars_df <- 
-    "./sle_variants/sle_langefeld_bentham_hg38.bed" %>%
-    read_tsv(col_names = c("chr", "start", "end", "info")) %>% 
-    separate(info, c("var_id", "study"), sep = "-")
+list.files("./sle_variants")
+
+bed <- 
+    "./sle_variants/sle_variants_hg38.bed" %>%
+    read_tsv(col_names = c("chr", "start", "end")) %>% 
+    select(chr, pos_hg38 = start)
+
+vars_df <- read_tsv("./sle_variants/sle_variants.tsv") %>%
+    add_column(pos_hg38 = bed$pos_hg38, .after = "pos")
 
 langefeld_df <- filter(vars_df, study == "langefeld") %>%
-    select(chr, var_id, pos = start, study)
+    select(chr, snp_id, pos = pos_hg38, study)
 
 bentham_df <- filter(vars_df, study == "bentham") %>%
-    select(chr, var_id, pos = start, study)
+    select(chr, snp_id, pos = pos_hg38, study)
 
 pairs_df <- right_join(langefeld_df, bentham_df, by = "chr") %>%
-    filter(!is.na(var_id.x))
+    filter(!is.na(snp_id.x))
 
+# inspect why I get 3 variants more even after removing dups;
+# and why I get 3 variants less after inner_join
 vcf <- "./sle_variants/sle.MGB.vcf" %>%
     read_tsv(comment = "##") %>%
     select(chr = 1, pos = 2, matches("^[0-9]")) %>%
-    inner_join(select(vars_df, chr, pos = start)) %>%
+    distinct(chr, pos, .keep_all = TRUE) %>%
+    inner_join(select(vars_df, chr, pos = pos_hg38)) %>%
     pivot_longer(-(1:2), names_to = "sample_id", values_to = "genotype") %>%
     group_by(chr, pos) %>%
     filter(!(any(genotype == "./."))) %>%

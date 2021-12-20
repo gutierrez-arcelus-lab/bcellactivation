@@ -1,6 +1,8 @@
 library(tidyverse)
 
-info_df <- "./sle_variants/sle_langefeld_bentham_info.tsv" %>%
+list.files("./sle_variants")
+
+info_df <- "./sle_variants/sle_variants.tsv" %>%
     read_tsv() %>%
     mutate(or = ifelse(or < 1L, 1L/or, or))
 
