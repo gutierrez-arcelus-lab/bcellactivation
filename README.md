@@ -135,7 +135,9 @@ al. 2015, Table 2](http://www.nature.com/articles/ng.3434).
     European ancestry;
 -   Among those, select individuals who are more heterozygous at SLE
     loci;
--   We will use the SLE loci reported by Langefeld et al. (2017);
+-   We will use the SLE loci reported by Bentham et al. (2015),
+    Langefeld et al. (2017), and the TLR7 variant (see Teruel &
+    Alarcon-Riquelme, 2016);
 -   Recruit these individuals to donate samples;
 -   Perform transcriptomic (ASE) and other analyses in multiple
     timepoints and stims;
@@ -201,6 +203,12 @@ homozygosity &lt; 0.985, which we assume to be females. That includes
 
 <img src="./plots/chrX_het.png" width="1500" />
 
+There are \~30,000 variants which were actually genotyped on chrX, and
+rest was imputed. If we select the genotyped variants, we see higher
+heterozygosity.
+
+<img src="./plots/chrX_het_genotyped.png" width="1200" />
+
 #### Ancestry information from genotype data
 
 ##### PCA
@@ -234,7 +242,7 @@ Langefeld et al. (
 *r*<sup>2</sup> &lt; 0.6
 ).
 
-<img src="./plots/sle_ld.png" width="2168" />
+<img src="./plots/sle_ld.png" width="2100" />
 
 Then, we computed a heterozygosity score that corresponds to the number
 of variants at which the individuals are heterozygotes. We also computed

@@ -1,7 +1,5 @@
 library(tidyverse)
 
-list.files("./sle_variants")
-
 bed <- 
     "./sle_variants/sle_variants_hg38.bed" %>%
     read_tsv(col_names = c("chr", "start", "end")) %>% 
@@ -19,8 +17,6 @@ bentham_df <- filter(vars_df, study == "bentham") %>%
 pairs_df <- right_join(langefeld_df, bentham_df, by = "chr") %>%
     filter(!is.na(snp_id.x))
 
-# inspect why I get 3 variants more even after removing dups;
-# and why I get 3 variants less after inner_join
 vcf <- "./sle_variants/sle.MGB.vcf" %>%
     read_tsv(comment = "##") %>%
     select(chr = 1, pos = 2, matches("^[0-9]")) %>%
@@ -31,6 +27,9 @@ vcf <- "./sle_variants/sle.MGB.vcf" %>%
     filter(!(any(genotype == "./."))) %>%
     ungroup()
 
+# transforming allele "2" here to a dose of 1 for simplicity;
+# there is only 1 individual
+# It should not disturb LD calculation
 vcf_dose <- vcf %>%
     mutate(dose = case_when(genotype == "0|0" ~ 0L,
 			    genotype == "0|1" ~ 1L,
@@ -43,16 +42,16 @@ cor_df <- pairs_df %>%
     left_join(vcf_dose, by = c("chr", "pos.x" = "pos")) %>%
     filter(!is.na(sample_id)) %>%
     left_join(vcf_dose, by = c("chr", "sample_id", "pos.y" = "pos")) %>%
-    group_by(chr, study.x, var_id.x, study.y, var_id.y) %>%
+    group_by(chr, study.x, snp_id.x, study.y, snp_id.y) %>%
     summarise(r2 = cor(dose.x, dose.y)^2) %>%
     ungroup()
 
 out <- cor_df %>%
     mutate(chr = factor(chr, levels = paste0("chr", c(1:22, "X")))) %>%
-    left_join(select(langefeld_df, var_id, pos), by = c("var_id.x" = "var_id")) %>% 
+    left_join(select(langefeld_df, snp_id, pos), by = c("snp_id.x" = "snp_id")) %>% 
     arrange(chr, pos) %>%
-    mutate(var_id.y = fct_inorder(var_id.y)) %>%
-    mutate(region = group_indices(., var_id.y)) %>%
-    select(chr, region, langefeld = var_id.x, bentham = var_id.y, pos, r2)
+    mutate(snp_id.y = fct_inorder(snp_id.y)) %>%
+    mutate(region = group_indices(., snp_id.y)) %>%
+    select(chr, region, langefeld = snp_id.x, bentham = snp_id.y, pos, r2)
    
 write_tsv(out, "./sle_variants/sle_ld.tsv")

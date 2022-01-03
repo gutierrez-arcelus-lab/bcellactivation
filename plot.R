@@ -287,34 +287,6 @@ bentham_fc_plot <- ggplot(bentham_fc, aes(fc, reorder_within(gene_name, fc, cond
 ggsave("./plots/bentham_fc.png", bentham_fc_plot, height = 6.5)
 
 
-# LD between Langefeld and Bentham
-
-ld_df <- read_tsv("./mgb_biobank/sle_variants/sle_ld.tsv") %>%
-  mutate(region = paste(chr, bentham),
-         region = fct_inorder(region))
-
-
-ld_plot <- ggplot(ld_df, aes(pos, r2)) +
-  geom_hline(yintercept = .6, color = "grey", alpha = .5, linetype = 2) +
-  geom_point(aes(color = r2), show.legend = FALSE) +
-  geom_text_repel(data = filter(ld_df, r2 >= .6),
-                  aes(label = langefeld),
-                  size = 3, segment.size = .5, segment.color = "grey45") +
-  scale_x_continuous(labels = function(x) ceiling(x/1e6L),
-                      breaks = scales::pretty_breaks(3)) +
-  scale_y_continuous(breaks = c(0, .5, 1)) +
-  scale_color_continuous_tableau() +
-  facet_wrap(~region, scales = "free_x") +
-  theme_bw() +
-  theme(panel.grid = element_blank(),
-        axis.text.x = element_text(hjust = 1, vjust = 1)) +
-  coord_cartesian(ylim = c(0, 1.1)) +
-  labs(x = "Pos (Mb)", y = expression("r"^2))
-
-ggsave("./plots/sle_ld.png", ld_plot, height = 6)
-
-
-
 # HLA
 hla_df <- gene_df %>%
     left_join(gene_names) %>%
@@ -617,6 +589,24 @@ het %>%
     walk2(.x = .$data, .y = .$out, .f = ~write_lines(.x, .y))
     
 
+# Look at genotyped SNPs only (not imputed)
+
+het_genot <- 
+  paste0("/temp_work/ch229163/VCF/chrX.", batches, ".genotyped.het") %>%
+  setNames(batches) %>%
+  map_dfr(read_tsv, .id = "batch") %>%
+  mutate(hom = `O(HOM)`/N_SITES) 
+
+ggplot(het_genot, aes(hom)) +
+  geom_histogram(bins = 50) +
+  scale_x_continuous(labels = function(x) round(x, 2)) +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank()) +
+  labs(x = "Homozygosity")
+
+ggsave("./plots/chrX_het_genotyped.png", width = 4)
 
 
 ## PCA on genotype data
@@ -637,13 +627,13 @@ mgb_cols <- c("black", "grey") %>%
 afr_cols <- brewer.pal("Oranges", n = 9)[3:9] %>%
     setNames(c("ACB", "ESN", "GWD", "LWK", "MSL", "YRI", "ASW"))
 
-eur_cols <- brewer.pal("Blues", n =9)[5:9] %>%
+eur_cols <- brewer.pal("Blues", n = 9)[5:9] %>%
     setNames(c("GBR", "IBS", "TSI", "CEU", "FIN"))
 
-sas_cols <- brewer.pal("Greens", n =9)[5:9] %>%
+sas_cols <- brewer.pal("Greens", n = 9)[5:9] %>%
     setNames(c("BEB", "PJL", "GIH", "ITU", "STU"))
 
-eas_cols <- brewer.pal("Purples", n =9)[5:9] %>%
+eas_cols <- brewer.pal("Purples", n = 9)[5:9] %>%
     setNames(c("CHB", "CHS", "CDX", "KHV", "JPT"))
 
 amr_cols <- c("lightpink1", "hotpink", "hotpink3", "deeppink") %>%
@@ -689,8 +679,6 @@ pca_thresholds <- pca_kgp %>%
   pivot_wider(names_from = pc, values_from = value) %>%
   mutate(dataset = "MGB",
          dataset = factor(dataset, levels = c("1000 Genomes", "MGB")))
-
-
 
 
 pca_plot_1 <- pca_df %>%
@@ -807,6 +795,34 @@ pca_eur_plot <- plot_grid(pca_eur_grid, get_legend(pca_eur_plot_1),
 ggsave("./plots/pca_eur.png", pca_eur_plot, width = 8, height = 5)
 
 
+
+
+# LD between Langefeld and Bentham
+
+ld_df <- read_tsv("./mgb_biobank/sle_variants/sle_ld.tsv") %>%
+  mutate(region = paste(chr, bentham),
+         region = fct_inorder(region))
+
+
+ld_plot <- ggplot(ld_df, aes(pos, r2)) +
+  geom_hline(yintercept = .6, color = "grey", alpha = .5, linetype = 2) +
+  geom_point(aes(color = r2), show.legend = FALSE) +
+  geom_text_repel(data = filter(ld_df, r2 >= .6),
+                  aes(label = langefeld),
+                  size = 3, segment.size = .5, segment.color = "grey45") +
+  scale_x_continuous(labels = function(x) ceiling(x/1e6L),
+                     breaks = scales::pretty_breaks(3)) +
+  scale_y_continuous(breaks = c(0, .5, 1)) +
+  scale_color_continuous_tableau() +
+  facet_wrap(~region, scales = "free_x") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(hjust = 1, vjust = 1)) +
+  coord_cartesian(ylim = c(0, 1.1)) +
+  labs(x = "Pos (Mb)", y = expression("r"^2))
+
+ggsave("./plots/sle_ld.png", ld_plot, height = 6)
+
 # Heterozygosity scores
 
 scores_df <- read_tsv("./mgb_biobank/sle_variants/scores.tsv") %>%
@@ -816,7 +832,7 @@ scores_df <- read_tsv("./mgb_biobank/sle_variants/scores.tsv") %>%
   
 candidate_inds <- scores_df %>%
     filter(top_eur) %>%
-    top_n(400, het_score_wt) %>%
+    top_n(800, het_score) %>%
     pull(sample_id)
 
 scores_df <- scores_df %>%

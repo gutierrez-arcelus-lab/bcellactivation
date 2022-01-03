@@ -143,7 +143,7 @@ include_graphics("./plots/bentham_fc.png")
 
 - Among the individuals in MGB Biobank, select those who carry more European ancestry;
 - Among those, select individuals who are more heterozygous at SLE loci;
-- We will use the SLE loci reported by Langefeld et al. (2017);
+- We will use the SLE loci reported by Bentham et al. (2015), Langefeld et al. (2017), and the TLR7 variant (see Teruel & Alarcon-Riquelme, 2016);
 - Recruit these individuals to donate samples;
 - Perform transcriptomic (ASE) and other analyses in multiple timepoints and stims;
 - Identify dysregulated loci.
@@ -204,6 +204,13 @@ After visual inspection of the plot below, we select individuals with homozygosi
 
 ```{r sex}
 include_graphics("./plots/chrX_het.png")
+```
+
+
+There are ~30,000 variants which were actually genotyped on chrX, and rest was imputed. If we select the genotyped variants, we see higher heterozygosity.
+
+```{r sex_genotyped}
+include_graphics("./plots/chrX_het_genotyped.png")
 ```
 
 
