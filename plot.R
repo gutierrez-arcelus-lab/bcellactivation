@@ -832,8 +832,17 @@ scores_df <- read_tsv("./mgb_biobank/sle_variants/scores.tsv") %>%
   
 candidate_inds <- scores_df %>%
     filter(top_eur) %>%
-    top_n(800, het_score) %>%
+    arrange(desc(het_score)) %>%
+    slice(1:800) %>%
     pull(sample_id)
+
+
+candidate_inds %>%
+  str_split("-") %>%
+  map_chr(2) %>%
+  as.numeric() %>%
+  sort() %>%
+  write_lines("./mgb_biobank/candidate_individuals_ids.txt")
 
 scores_df <- scores_df %>%
   mutate(candidate = sample_id %in% candidate_inds)

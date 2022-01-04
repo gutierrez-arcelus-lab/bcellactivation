@@ -6,7 +6,7 @@
 #SBATCH --mem=48gb
 #SBATCH -p bch-compute
 #SBATCH --job-name=STAR-index
-#SBATCH --mail-user=vitor.RezendeDaCostaAguiar@childrens.harvard.edu
+#SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBACTH --mail-type=END,FAIL
 #SBATCH -o STARindex.o%j
 
@@ -15,7 +15,7 @@ export STAR_X=2.7.9a
 
 GENOME=/reference_databases/ReferenceGenome/STAR/GRCh38.v32/GRCh38.primary_assembly.genome.fa
 GTF=/reference_databases/ReferenceGenome/STAR/GRCh38.v32/gencode.v32.primary_assembly.annotation.gtf 
-OUT=/lab-share/IM-Gutierrez-e2/Public/vitor/starindex
+OUT=/lab-share/IM-Gutierrez-e2/Public/vitor/ase/indices/starindex
 
 mkdir -p $OUT
 
