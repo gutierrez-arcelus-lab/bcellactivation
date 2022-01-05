@@ -1,6 +1,5 @@
 bcell_quant
 bcell_samples.txt
-data
 indices
 log
 *gz
@@ -9,5 +8,12 @@ log
 *.txt
 *results
 .Rhistory
+*vcf
+*vcf.idx
+*dict
+*fa
+*fai
+*gtf
+data/pca
 mgb_biobank/allchr*
 mgb_biobank/sle_variants
