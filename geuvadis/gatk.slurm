@@ -1,7 +1,7 @@
 #! /usr/bin/env bash
 
 #SBATCH -N 1
-#SBATCH -c 8
+#SBATCH -c 4
 #SBATCH --mem=32gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
@@ -46,7 +46,7 @@ gatk MarkDuplicatesSpark \
     --spark-master local[$SLURM_CPUS_PER_TASK]
 
 
-## Split'N'Trim and reassign mapping qualities
+# Split'N'Trim and reassign mapping qualities
 GENOME=$HOME/ase/data/GRCh38.primary_assembly.genome.fa
 OUT3=${PREFIX}_splitn.bam
 
@@ -68,21 +68,28 @@ gatk SplitNCigarReads \
     -O $OUT3
 
 # Base Recalibration
-
 gatk BaseRecalibrator \
     -R $GENOME \
     -I $OUT3 \
     -O ${PREFIX}_bqsr.report \
-    --known-sites $HOME/ase/data/1000G.phase3.integrated.sites_only.no_MATCHED_REV.hg38.vcf \
-    --known-sites $HOME/ase/data/GCF_000001405.39.gz \
-    --known-sites $HOME/ase/data/Homo_sapiens_assembly38.known_indels.vcf.gz \
-    --known-sites $HOME/ase/data/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz 
+    --known-sites $HOME/ase/data/dbsnp_155.hg38.vcf.gz
 
-## Next: ApplyBQSR replaces PrintReads in GATK4
-#
-#$GATK --java-options "-Xmx64g" ApplyBQSR \
-#    -R $GENOME \
-#    -I $OUT3 \
-#    --bqsr-recal-file ./output/gatk/${SAMPLE}_recal_data.table \
-#    -O ./output/gatk/${SAMPLE}_split_BQSR.bam
-#
+# Apply recallibration
+OUT4=${PREFIX}_recal.bam 
+
+gatk ApplyBQSR \
+    -R $GENOME \
+    -I $OUT3 \
+    -O $OUT4 \
+    --bqsr-recal-file ${PREFIX}_bqsr.report  
+
+# HaplotypeCaller
+VCF=${PREFIX}.vcf.gz
+
+gatk HaplotypeCaller \
+    -R $GENOME \
+    -I $OUT4 \
+    -O $VCF \
+    --dont-use-soft-clipped-bases true \
+    --native-pair-hmm-threads $SLURM_CPUS_PER_TASK 
+
