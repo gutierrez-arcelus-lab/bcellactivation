@@ -91,5 +91,15 @@ gatk HaplotypeCaller \
     -I $OUT4 \
     -O $VCF \
     --dont-use-soft-clipped-bases true \
-    --native-pair-hmm-threads $SLURM_CPUS_PER_TASK 
+    -stand-call-conf 10 \	
+    --native-pair-hmm-threads $SLURM_CPUS_PER_TASK
+
+FILTVCF=${PREFIX}.filtered.vcf.gz
+LOG=${PREFIX}.snpClstr.log 
+
+gatk VariantFiltration \
+    -R $GENOME \
+    -V $VCF \
+    -O $FILTVCF \
+    -window 35 -cluster 3 &> $LOG 
 
