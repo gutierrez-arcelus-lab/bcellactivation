@@ -1,19 +1,23 @@
 library(tidyverse)
 
-report <- "./GCF_000001405.39_GRCh38.p13_assembly_report.txt" %>%
+report <- commandArgs(TRUE)[1] %>%
     read_tsv(comment = "#", col_names = FALSE) %>%
-    select(X1, X2, X7, X8, X10)
-
+    filter(X7 != "na", X10 != "na") %>%
+    select(X1, X2, X7, X8, X10) %>%
+    mutate(genc = sub("^chr[^_]+_", "", X10),
+	   genc = sub("_.+$", "", genc),
+	   genc = case_when(grepl("v[12]$", genc) ~ sub("v", ".", genc),
+			   TRUE ~ genc))
 report %>%
     select(X7, X10) %>%
-    mutate(X10 = sub("^chr[^_]+_", "", X10),
-	   X10 = sub("_random$", "", X10),
-	   X10 = case_when(grepl("v[12]$", X10) ~ sub("v", ".", X10),
-			   TRUE ~ X10)) %>%
-    write_tsv("chr_names.txt", col_names = FALSE)
+    write_tsv("/temp_work/ch229163/chr_dbsnpToGencode_names.txt", col_names = FALSE)
+
+report %>%
+    select(X10, genc) %>%
+    write_tsv("/temp_work/ch229163/chr_UcscToGencode_names.txt", col_names = FALSE)
 
 report %>%
     filter(X8 == "Primary Assembly") %>%
-    filter(X7 != "na") %>%
-    pull(X7) %>%
-    write_lines("pri_chrs.txt")
+    select(genc) %>%
+    mutate(start = 0, end = 1e9) %>%
+    write_tsv("ref_pri_chr.bed", col_names = FALSE)

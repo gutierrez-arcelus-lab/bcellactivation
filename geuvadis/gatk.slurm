@@ -95,7 +95,7 @@ gatk HaplotypeCaller \
     --native-pair-hmm-threads $SLURM_CPUS_PER_TASK
 
 FILTVCF=${PREFIX}.filtered.vcf.gz
-LOG=${PREFIX}.snpClstr.log 
+LOG=${PREFIX}.snpCluster.log 
 
 gatk VariantFiltration \
     -R $GENOME \

@@ -287,76 +287,76 @@ bentham_fc_plot <- ggplot(bentham_fc, aes(fc, reorder_within(gene_name, fc, cond
 ggsave("./plots/bentham_fc.png", bentham_fc_plot, height = 6.5)
 
 
-# HLA
-hla_df <- gene_df %>%
-    left_join(gene_names) %>%
-    filter(gene_name %in% paste0("HLA-", c("A", "B", "C", "DRA", "DRB1", "DQA1",
-                                           "DQB1", "DPA1", "DPB1"))) %>%
-    mutate(condition_id = factor(condition_id, levels = conditions))
-
-hla_plot_1 <- ggplot(hla_df, aes(gene_name, tpm)) +
-    geom_col(aes(fill = condition_id), position = "dodge") +
-    scale_fill_manual(values = c("black", "cornflowerblue", "blue",
-                                 "salmon", "tomato3"),
-                      labels = function(x) sub("_", "\n", x)) +
-    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
-    facet_wrap(~gene_name, scales = "free") +
-    theme_minimal() +
-    theme(panel.grid = element_blank(),
-          axis.text.x = element_blank(),
-          legend.position = "bottom",
-          legend.direction = "horizontal",
-          legend.background = element_blank(),
-          legend.box.background = element_rect(color = "black")) +
-    labs(x = NULL, y = "TPM", 
-         fill = NULL)
-
-hla_fc <- hla_df %>%
-    mutate(gene_name = as.character(gene_name)) %>%
-    select(-cpm) %>%
-    mutate(tpm = tpm + 1L) %>%
-    pivot_wider(names_from = condition_id, values_from = tpm) %>%
-    pivot_longer(-(1:3), names_to = "condition_id", values_to = "tpm") %>%
-    select(gene_id, gene_name, condition_id, resting_tpm = 3, tpm) %>%
-    mutate(fc = log2(tpm) - log2(resting_tpm)) %>%
-    group_by(condition_id, gene_id) %>%
-    ungroup() %>%
-    mutate(condition_id = factor(condition_id, levels = conditions))
-
-hla_plot_2 <- ggplot(hla_fc, aes(fc, reorder_within(gene_name, fc, condition_id))) +
-    geom_col(aes(fill = fc), show.legend = FALSE) +
-    facet_wrap(~condition_id, scales = "free_y") +
-    scale_y_reordered() +
-    scale_fill_gradient2() +
-    theme_minimal() +
-    theme(panel.grid = element_blank(),
-          plot.caption = element_text(hjust = 0),
-          axis.text.y = element_text(size = 7)) +
-    labs(x = expression(paste("Log"[2], FC)),
-         y = NULL)
-
-ggsave("./plots/hla.png", hla_plot_1, height = 4)
-ggsave("./plots/hla_fc.png", hla_plot_2, height = 4)
-
-
-# Activation markers
-
-markers <- c("CD69", "CD86")
-
-markers_tpm <- gene_df %>%
-    left_join(gene_names) %>%
-    filter(gene_name %in% markers) %>%
-    mutate(condition_id = factor(condition_id, levels = conditions))
-
-ggplot(markers_tpm, aes(gene_name, tpm)) +
-    geom_col(aes(fill = condition_id), position = "dodge") +
-    scale_fill_manual(values = c("black", "cornflowerblue", "blue",
-                                 "salmon", "tomato3")) +
-    theme_bw() +
-    theme(panel.grid = element_blank()) +
-    labs(x = NULL, y = "TPM", fill = NULL)
-
-ggsave("./plots/activation_markers.png")
+# # HLA
+# hla_df <- gene_df %>%
+#     left_join(gene_names) %>%
+#     filter(gene_name %in% paste0("HLA-", c("A", "B", "C", "DRA", "DRB1", "DQA1",
+#                                            "DQB1", "DPA1", "DPB1"))) %>%
+#     mutate(condition_id = factor(condition_id, levels = conditions))
+# 
+# hla_plot_1 <- ggplot(hla_df, aes(gene_name, tpm)) +
+#     geom_col(aes(fill = condition_id), position = "dodge") +
+#     scale_fill_manual(values = c("black", "cornflowerblue", "blue",
+#                                  "salmon", "tomato3"),
+#                       labels = function(x) sub("_", "\n", x)) +
+#     scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+#     facet_wrap(~gene_name, scales = "free") +
+#     theme_minimal() +
+#     theme(panel.grid = element_blank(),
+#           axis.text.x = element_blank(),
+#           legend.position = "bottom",
+#           legend.direction = "horizontal",
+#           legend.background = element_blank(),
+#           legend.box.background = element_rect(color = "black")) +
+#     labs(x = NULL, y = "TPM", 
+#          fill = NULL)
+# 
+# hla_fc <- hla_df %>%
+#     mutate(gene_name = as.character(gene_name)) %>%
+#     select(-cpm) %>%
+#     mutate(tpm = tpm + 1L) %>%
+#     pivot_wider(names_from = condition_id, values_from = tpm) %>%
+#     pivot_longer(-(1:3), names_to = "condition_id", values_to = "tpm") %>%
+#     select(gene_id, gene_name, condition_id, resting_tpm = 3, tpm) %>%
+#     mutate(fc = log2(tpm) - log2(resting_tpm)) %>%
+#     group_by(condition_id, gene_id) %>%
+#     ungroup() %>%
+#     mutate(condition_id = factor(condition_id, levels = conditions))
+# 
+# hla_plot_2 <- ggplot(hla_fc, aes(fc, reorder_within(gene_name, fc, condition_id))) +
+#     geom_col(aes(fill = fc), show.legend = FALSE) +
+#     facet_wrap(~condition_id, scales = "free_y") +
+#     scale_y_reordered() +
+#     scale_fill_gradient2() +
+#     theme_minimal() +
+#     theme(panel.grid = element_blank(),
+#           plot.caption = element_text(hjust = 0),
+#           axis.text.y = element_text(size = 7)) +
+#     labs(x = expression(paste("Log"[2], FC)),
+#          y = NULL)
+# 
+# ggsave("./plots/hla.png", hla_plot_1, height = 4)
+# ggsave("./plots/hla_fc.png", hla_plot_2, height = 4)
+# 
+# 
+# # Activation markers
+# 
+# markers <- c("CD69", "CD86")
+# 
+# markers_tpm <- gene_df %>%
+#     left_join(gene_names) %>%
+#     filter(gene_name %in% markers) %>%
+#     mutate(condition_id = factor(condition_id, levels = conditions))
+# 
+# ggplot(markers_tpm, aes(gene_name, tpm)) +
+#     geom_col(aes(fill = condition_id), position = "dodge") +
+#     scale_fill_manual(values = c("black", "cornflowerblue", "blue",
+#                                  "salmon", "tomato3")) +
+#     theme_bw() +
+#     theme(panel.grid = element_blank()) +
+#     labs(x = NULL, y = "TPM", fill = NULL)
+# 
+# ggsave("./plots/activation_markers.png")
 
 
 # TLRs and IG genes
@@ -607,6 +607,19 @@ ggplot(het_genot, aes(hom)) +
   labs(x = "Homozygosity")
 
 ggsave("./plots/chrX_het_genotyped.png", width = 4)
+
+females_all_snps <- het %>%
+  filter(hom < .985) %>%
+  select(1:2)
+
+females_genot_snps <- het_genot %>%
+  filter(hom < .9) %>%
+  select(1:2)
+
+anti_join(females_genot_snps, females_all_snps)
+
+anti_join(females_all_snps, females_genot_snps) %>%
+  left_join(het)
 
 
 ## PCA on genotype data
