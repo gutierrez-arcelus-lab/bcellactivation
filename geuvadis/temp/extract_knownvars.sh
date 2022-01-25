@@ -3,7 +3,7 @@
 SAMPLE=ERR188022
 SAMPLE_1KG=$( awk -v var="$SAMPLE" '$0 ~ var {print $1}' E-GEUV-1.sdrf.txt | uniq )
 DIR=./results/gatk
-VCF=${DIR}/${SAMPLE}.filtered.vcf.gz
+VCF=${DIR}/${SAMPLE}.filtered.denorm.vcf.gz
 
 # 1000 Genomes remapped to GRCh38
 for i in {1..22}
@@ -38,9 +38,9 @@ DBSNP_OUT=${DIR}/${SAMPLE}_dbsnp.vcf.gz
 
 zcat $VCF |\
     grep -v "^#" |\
-    awk '{ print $1"\t"$2 }' > $ALLPOS
+    awk '{ print $1"\t"$2 }' |\
+    uniq > $ALLPOS
 
-bcftools view -R $ALLPOS $DBSNP |
-    bcftools annotate -x INFO -O z -o $DBSNP_OUT
+bcftools view -R $ALLPOS -O z -o $DBSNP_OUT $DBSNP
 
 rm $ALLPOS

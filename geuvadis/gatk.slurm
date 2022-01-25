@@ -12,6 +12,7 @@
 #SBATCH -o /temp_work/ch229163/log/GATK.%A.%a.out
 
 source /programs/biogrids.shrc
+export BCFTOOLS_X=1.12
 export PICARD_X=2.18.14
 
 
@@ -103,3 +104,4 @@ gatk VariantFiltration \
     -O $FILTVCF \
     -window 35 -cluster 3 &> $LOG 
 
+bcftools norm -m -both $FILTVCF -O z -o ${PREFIX}.filtered.denorm.vcf.gz
