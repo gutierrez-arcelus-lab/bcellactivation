@@ -14,7 +14,8 @@
 source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
 export PICARD_X=2.18.14
-
+export GATK_X=4.1.4.1
+export R_X=4.1
 
 SAMPLELIST=/home/ch229163/ase/samples.txt
 SAMPLE=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $SAMPLELIST )
@@ -29,13 +30,13 @@ mkdir -p $OUTDIR
 
 # Add a read group to the BAM file
 picard AddOrReplaceReadGroups \
-    -I $BAM \
-    -O $OUT \
-    -RGID readGroupID \
-    -RGLB libraryID \
-    -RGPL ILLUMINA \
-    -RGPU HiSeq \
-    -RGSM $SAMPLE 
+    I=$BAM \
+    O=$OUT \
+    RGID=readGroupID \
+    RGLB=libraryID \
+    RGPL=ILLUMINA \
+    RGPU=HiSeq \
+    RGSM=$SAMPLE 
 
 # Mark duplicated reads
 OUT2=${PREFIX}_deduplicated.bam 
@@ -104,4 +105,37 @@ gatk VariantFiltration \
     -O $FILTVCF \
     -window 35 -cluster 3 &> $LOG 
 
-bcftools norm -m -both $FILTVCF -O z -o ${PREFIX}.filtered.denorm.vcf.gz
+# Save only SNVs
+FILTVCF_SNV=${PREFIX}.filtered.biallelic.het.SNVs.vcf.gz 
+
+bcftools norm -m -both $FILTVCF |\
+    bcftools view --types snps - |\
+    bcftools norm -m +snps - |\
+    bcftools view -m2 -M2 --genotype ^hom -O z -o $FILTVCF_SNV
+
+# Extract only SNVs reported by dbSNP
+DBSNP=${HOME}/ase/data/dbsnp_155.hg38pri.vcf.gz
+POS=${PREFIX}.pos
+DBSNP_VCF=${PREFIX}.dbSNP.vcf.gz
+
+# Extract dbSNP SNV variants for the current sample
+zcat $FILTVCF_SNV |\
+    grep -v "^#" |\
+    awk '{ print $1"\t"$2 }' |\
+    uniq > $POS
+
+bcftools view -R $POS --types snps -O z -o $DBSNP_VCF $DBSNP
+
+# Now refilter the sample VCF for the SNV variants present in dbSNP
+FINAL_POS=${PREFIX}.final.pos
+
+zcat $DBSNP_VCF |\
+    grep -v "^#" |\
+    awk '{ print $1"\t"$2 }' |\
+    uniq > $FINAL_POS
+
+FINAL_VCF=${PREFIX}.knownSNVs.biallelic.het.vcf
+
+tabix -p vcf $FILTVCF_SNV  
+bcftools view -R $FINAL_POS -O v -o $FINAL_VCF $FILTVCF_SNV 
+

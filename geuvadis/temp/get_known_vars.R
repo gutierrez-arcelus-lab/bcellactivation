@@ -12,7 +12,7 @@ get_vartype <- function(REF, ALT) {
 prefix <- commandArgs(TRUE)[1]
 sampleid <- basename(prefix)
 
-rna_vcf <- paste0(prefix, ".filtered.denorm.vcf.gz") %>%
+rna_vcf <- paste0(prefix, ".knownSNVs.vcf.gz") %>%
     read_tsv(comment = "##") %>%
     separate({{ sampleid }}, c("geno", "AD", "depth", "GQ", "PL"), sep = ":", convert = TRUE) %>%
     select(chr = 1, pos = 2, ref = 4, alt = 5, filter = 7, geno, depth) %>%
@@ -26,7 +26,7 @@ rna_vcf <- paste0(prefix, ".filtered.denorm.vcf.gz") %>%
 #	   geno = ifelse(geno == "1/0", "0/1", geno),
 #	   var_type = map2_chr(ref, alt, get_vartype))
 #
-dbsnp_vcf <- paste0(prefix, "_dbsnp.vcf.gz") %>% 
+dbsnp_vcf <- paste0(prefix, ".dbSNP.vcf.gz") %>% 
     read_tsv(comment = "##") %>%
     mutate(var_type = str_extract(INFO, "(?<=VC=)[^;]+")) %>%
     select(chr = 1, pos = 2, ref = 4, alt = 5, var_type)
@@ -45,5 +45,5 @@ filtered_positions <- rna_vcf %>%
     distinct(chr, pos)
 
 write_tsv(filtered_positions, 
-	  paste0(prefix, ".mergeDBSNP.pos"),
+	  paste0(prefix, ".knownvars.pos"),
 	  col_names = FALSE)
