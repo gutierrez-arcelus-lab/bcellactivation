@@ -2,7 +2,7 @@
 
 #SBATCH -N 1
 #SBATCH -c 4
-#SBATCH --mem=64gb
+#SBATCH --mem=32gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
 #SBATCH --array=1-5
