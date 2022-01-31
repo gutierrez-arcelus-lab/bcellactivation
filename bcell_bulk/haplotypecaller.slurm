@@ -36,7 +36,6 @@ GENOME=${LABSHR}/vitor/ase/data/GRCh38.primary_assembly.genome.fa
 OUTDIR=${TEMP_WORK}/gatk
 PREFIX=${OUTDIR}/${ID}.${CHR}
 MERGED=${PREFIX}.merged.bam
-UNIQ=${PREFIX}.merged.uniq.bam
 VCF=${PREFIX}.vcf.gz
 
 # Merge stim conditions into single BAM
