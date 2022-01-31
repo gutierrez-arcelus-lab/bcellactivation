@@ -43,13 +43,10 @@ VCF=${PREFIX}.vcf.gz
 samtools merge -@ $SLURM_CPUS_PER_TASK -R $CHR -o $MERGED "${BAMS[@]}"
 samtools index -@ $SLURM_CPUS_PER_TASK $MERGED
 
-samtools view -@ $SLURM_CPUS_PER_TASK -b -h -q 255 $MERGED > $UNIQ
-samtools index -@ $SLURM_CPUS_PER_TASK $UNIQ
-
 # HaplotypeCaller
 gatk HaplotypeCaller \
     -R $GENOME \
-    -I $UNIQ \
+    -I $MERGED \
     -O $VCF \
     --dont-use-soft-clipped-bases true \
     -stand-call-conf 10 \

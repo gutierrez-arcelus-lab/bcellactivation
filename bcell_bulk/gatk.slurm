@@ -28,7 +28,7 @@ PREFIX=${OUTDIR}/${SAMPLE}
 
 mkdir -p $OUTDIR
 
-#samtools view -b -h -q 255 $BAM > $BAMUNIQ
+samtools view -b -h -q 255 $BAM > $BAMUNIQ
 
 # Add a read group to the BAM file
 OUT=${PREFIX}_rg.bam 
