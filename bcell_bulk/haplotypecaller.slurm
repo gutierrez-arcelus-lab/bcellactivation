@@ -1,10 +1,11 @@
 #! /usr/bin/env bash
 
 #SBATCH -N 1
-#SBATCH -c 8
-#SBATCH --mem=64gb
-#SBATCH --time=72:00:00
+#SBATCH -c 2
+#SBATCH --mem=32gb
+#SBATCH --time=24:00:00
 #SBATCH -p bch-compute
+#SBATCH --array=1-23
 #SBATCH --job-name=HapCall
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
@@ -15,28 +16,46 @@ export BCFTOOLS_X=1.12
 export GATK_X=4.1.4.1
 export SAMTOOLS_X=1.13
 
+# Chromosome name
+if [ "$SLURM_ARRAY_TASK_ID" -lt 23 ]; then
+    
+    CHR=chr${SLURM_ARRAY_TASK_ID}
+
+elif [ "SLURM_ARRAY_TASK_ID" -eq 23 ]; then
+    
+    CHR=chrX
+fi
+
+# IO
 LABSHR=/lab-share/IM-Gutierrez-e2/Public
+ID=MG8989
 SAMPLES=( $(cat ${LABSHR}/vitor/ase/bcell_bulk/bcell_samples.txt) )
-BAMS=( "${SAMPLES[@]/#/$TEMP_WORK/gatk}" )
+BAMS=( "${SAMPLES[@]/#/$TEMP_WORK/gatk/}" )
 BAMS=( "${BAMS[@]/%/_recal.bam}" )
-GENOME=${LABSHE}/vitor/ase/data/GRCh38.primary_assembly.genome.fa
+GENOME=${LABSHR}/vitor/ase/data/GRCh38.primary_assembly.genome.fa
 OUTDIR=${TEMP_WORK}/gatk
-PREFIX=${OUTDIR}/MG8989
+PREFIX=${OUTDIR}/${ID}.${CHR}
 MERGED=${PREFIX}.merged.bam
-
-samtools merge -@ $SLURM_CPUS_PER_TASK $MERGED "${BAMS[@]}"
-
-# HaplotypeCaller
+UNIQ=${PREFIX}.merged.uniq.bam
 VCF=${PREFIX}.vcf.gz
 
+# Merge stim conditions into single BAM
+samtools merge -@ $SLURM_CPUS_PER_TASK -R $CHR -o $MERGED "${BAMS[@]}"
+samtools index -@ $SLURM_CPUS_PER_TASK $MERGED
+
+samtools view -@ $SLURM_CPUS_PER_TASK -b -h -q 255 $MERGED > $UNIQ
+samtools index -@ $SLURM_CPUS_PER_TASK $UNIQ
+
+# HaplotypeCaller
 gatk HaplotypeCaller \
     -R $GENOME \
-    -I $MERGED \
+    -I $UNIQ \
     -O $VCF \
     --dont-use-soft-clipped-bases true \
-    -stand-call-conf 10 \	
+    -stand-call-conf 10 \
     --native-pair-hmm-threads $SLURM_CPUS_PER_TASK
 
+# Variant filtering
 FILTVCF=${PREFIX}.filtered.vcf.gz
 LOG=${PREFIX}.snpCluster.log 
 
@@ -75,7 +94,7 @@ zcat $DBSNP_VCF |\
     awk '{ print $1"\t"$2 }' |\
     uniq > $FINAL_POS
 
-FINAL_VCF=${LABSHR}/vitor/bcell_bulk/results/gatk/${SAMPLE}.knownSNVs.biallelic.het.vcf
+FINAL_VCF=${PREFIX}.knownSNVs.biallelic.het.vcf
 
 tabix -p vcf $FILTVCF_SNV  
 bcftools view -R $FINAL_POS -O v -o $FINAL_VCF $FILTVCF_SNV 
