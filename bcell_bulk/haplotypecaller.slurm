@@ -1,7 +1,7 @@
 #! /usr/bin/env bash
 
 #SBATCH -N 1
-#SBATCH -c 2
+#SBATCH -c 4
 #SBATCH --mem=32gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
@@ -21,9 +21,12 @@ if [ "$SLURM_ARRAY_TASK_ID" -lt 23 ]; then
     
     CHR=chr${SLURM_ARRAY_TASK_ID}
 
-elif [ "SLURM_ARRAY_TASK_ID" -eq 23 ]; then
+elif [ "$SLURM_ARRAY_TASK_ID" -eq 23 ]; then
     
     CHR=chrX
+
+else
+    echo "ERROR in chr spec"
 fi
 
 # IO
@@ -49,7 +52,8 @@ gatk HaplotypeCaller \
     -O $VCF \
     --dont-use-soft-clipped-bases true \
     -stand-call-conf 10 \
-    --native-pair-hmm-threads $SLURM_CPUS_PER_TASK
+    --native-pair-hmm-threads $SLURM_CPUS_PER_TASK \
+    --tmp-dir ${TEMP_WORK}/temp
 
 # Variant filtering
 FILTVCF=${PREFIX}.filtered.vcf.gz
@@ -59,6 +63,7 @@ gatk VariantFiltration \
     -R $GENOME \
     -V $VCF \
     -O $FILTVCF \
+    --tmp-dir ${TEMP_WORK}/temp \
     -window 35 -cluster 3 &> $LOG 
 
 # Save only SNVs
@@ -66,8 +71,13 @@ FILTVCF_SNV=${PREFIX}.filtered.biallelic.het.SNVs.vcf.gz
 
 bcftools norm -m -both $FILTVCF |\
     bcftools view --types snps - |\
+    awk '/^#/ || ($4 !~ /[ACGT]{2,}/ && $5 !~ /[ACGT]{2,}/)' |\
     bcftools norm -m +snps - |\
     bcftools view -m2 -M2 --genotype ^hom -O z -o $FILTVCF_SNV
+
+# bcftools is still leaving an indel at position chr1:26327481
+# after 2nd line above.
+# So I included the awk command to remove them.
 
 # Extract only SNVs reported by dbSNP
 DBSNP=${LABSHR}/vitor/ase/data/dbsnp_155.hg38pri.vcf.gz

@@ -8,4 +8,8 @@ JOB3=$( sbatch --parsable --dependency=afterok:$JOB2 gatk.slurm )
 
 JOB4=$( sbatch --parsable --dependency=afterok:$JOB3 haplotypecaller.slurm )
 
-JOB5=$( sbatch --parsable --dependency=afterok:$JOB4 asereadcounter.slurm )
+./concat_vcf.sh
+
+JOB5=$( sbatch --parsable --dependency=afterok:$JOB4 star_wasp.slurm )
+
+JOB6=$( sbatch --parsable --dependency=afterok:$JOB5 asereadcounter.slurm )

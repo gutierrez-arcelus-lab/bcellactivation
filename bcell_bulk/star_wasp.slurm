@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #SBATCH -N 1
-#SBATCH -c 4
+#SBATCH -c 8
 #SBATCH --mem=48gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
@@ -27,7 +27,7 @@ INDEX=${LABSHR}/vitor/ase/indices/starindex
 STAR2ND=${TEMP_WORK}/star/pass_2nd
 SJDB=$( find $STAR2ND -name "*SJ*" | grep -f $SAMPLELIST)
 VCF=${LABSHR}/vitor/ase/bcell_bulk/results/gatk/${ID}.knownSNVs.biallelic.het.vcf
-OUTDIR=${LABSHR}/vitor/ase/bcell_bulk/results/star/pass_wasp
+OUTDIR=${TEMP_WORK}/star/pass_wasp
 OUT=${OUTDIR}/${SAMPLE}
 
 mkdir -p $OUTDIR

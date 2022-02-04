@@ -40,7 +40,8 @@ picard AddOrReplaceReadGroups \
     RGLB=libraryID \
     RGPL=ILLUMINA \
     RGPU=HiSeq \
-    RGSM=$ID
+    RGSM=$ID \
+    --TMP_DIR=$TEMP_WORK/temp \
 
 # Mark duplicated reads
 OUT2=${PREFIX}_mkdups.bam 
@@ -72,7 +73,8 @@ fi
 gatk SplitNCigarReads \
     -R $GENOME \
     -I $OUT2 \
-    -O $OUT3
+    -O $OUT3 \
+    --tmp-dir $TEMP_WORK/temp
 
 # Base Recalibration
 DBSNP=${LABSHR}/vitor/ase/data/dbsnp_155.hg38pri.vcf.gz
@@ -81,7 +83,8 @@ gatk BaseRecalibrator \
     -R $GENOME \
     -I $OUT3 \
     -O ${PREFIX}_bqsr.report \
-    --known-sites $DBSNP
+    --known-sites $DBSNP \
+    --tmp-dir $TEMP_WORK/temp
 
 # Apply recallibration
 OUT4=${PREFIX}_recal.bam 
@@ -90,5 +93,6 @@ gatk ApplyBQSR \
     -R $GENOME \
     -I $OUT3 \
     -O $OUT4 \
-    --bqsr-recal-file ${PREFIX}_bqsr.report  
+    --bqsr-recal-file ${PREFIX}_bqsr.report \
+    --tmp-dir $TEMP_WORK/temp
 
