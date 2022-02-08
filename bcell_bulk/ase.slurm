@@ -2,7 +2,7 @@
 
 #SBATCH -N 1
 #SBATCH -c 4
-#SBATCH --mem=48gb
+#SBATCH --mem=32gb
 #SBATCH --time=48:00:00
 #SBATCH -p bch-compute
 #SBATCH --array=1-5
@@ -60,10 +60,6 @@ samtools view -h ${BAMPREFIX}.uniq.mkdups.bam |\
     samtools view -Sb - > ${BAMPREFIX}.uniq.mkdups.wasp.bam
 
 # Compute ASE
-if [[ ! -f "$VCF".idx  ]]; then
-    gatk IndexFeatureFile -I $VCF
-fi
-
 gatk ASEReadCounter \
     -R $GENOME \
     -I ${BAMPREFIX}.uniq.mkdups.wasp.bam \

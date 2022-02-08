@@ -2,6 +2,7 @@
 
 source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
+export GATK_X=4.1.4.1
 
 LABSHR=/lab-share/IM-Gutierrez-e2/Public
 ID=MG8989
@@ -13,3 +14,5 @@ do
 done
 
 bcftools concat -o $OUT "${VCFS[@]}"
+
+gatk IndexFeatureFile -I $OUT

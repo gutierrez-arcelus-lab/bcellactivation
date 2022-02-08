@@ -69,15 +69,7 @@ gatk VariantFiltration \
 # Save only SNVs
 FILTVCF_SNV=${PREFIX}.filtered.biallelic.het.SNVs.vcf.gz 
 
-bcftools norm -m -both $FILTVCF |\
-    bcftools view --types snps - |\
-    awk '/^#/ || ($4 !~ /[ACGT]{2,}/ && $5 !~ /[ACGT]{2,}/)' |\
-    bcftools norm -m +snps - |\
-    bcftools view -m2 -M2 --genotype ^hom -O z -o $FILTVCF_SNV
-
-# bcftools is still leaving an indel at position chr1:26327481
-# after 2nd line above.
-# So I included the awk command to remove them.
+bcftools view -m2 -M2 -v snps -O z -o $FILTVCF_SNV $FILTVCF 
 
 # Extract only SNVs reported by dbSNP
 DBSNP=${LABSHR}/vitor/ase/data/dbsnp_155.hg38pri.vcf.gz
@@ -90,7 +82,7 @@ zcat $FILTVCF_SNV |\
     awk '{ print $1"\t"$2 }' |\
     uniq > $POS
 
-bcftools view -R $POS --types snps -O z -o $DBSNP_VCF $DBSNP
+bcftools view -R $POS -v snps -O z -o $DBSNP_VCF $DBSNP
 
 # Now refilter the sample VCF for the SNV variants present in dbSNP
 FINAL_POS=${PREFIX}.final.pos

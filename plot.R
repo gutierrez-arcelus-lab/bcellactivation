@@ -419,6 +419,30 @@ ggplot(ig_c_genes, aes(gene_name, tpm)) +
 ggsave("./plots/ig_c_genes.png", width = 6, height = 4.2)
 
 
+# IL21
+
+il21 <- gene_names %>%
+  filter(gene_name %in% c("IL21", "IL21R", "CD40", "CD40LG",
+                          "CD27", "CXCR5", "ITGAX", "TBX21")) %>%
+  inner_join(gene_df) %>%
+  mutate(condition_id = factor(condition_id, levels = conditions))
+  
+ggplot(il21, aes(gene_name, tpm)) +
+  geom_col(aes(fill = condition_id), position = "dodge",
+           color = "black", size = .15) +
+  scale_fill_manual(values = c("grey70", "gold2", "gold3",
+                               "mediumpurple1", "mediumpurple3")) +
+  scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+  facet_wrap(~gene_name, scales = "free", ncol = 2) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  labs(x = NULL, y = "TPM", fill = NULL)
+
+ggsave("./plots/il21.png", width = 6, height = 5)
+
+
 # # Look at genes previously found by Jing
 # gene_names_v2 <- gene_names %>%
 #     mutate(ensembl = sub("\\.\\d+$", "", gene_id)) 

@@ -93,7 +93,7 @@ gatk HaplotypeCaller \
     -I $OUT4 \
     -O $VCF \
     --dont-use-soft-clipped-bases true \
-    -stand-call-conf 10 \	
+    -stand-call-conf 10 \
     --native-pair-hmm-threads $SLURM_CPUS_PER_TASK
 
 FILTVCF=${PREFIX}.filtered.vcf.gz
