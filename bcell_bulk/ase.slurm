@@ -18,10 +18,10 @@ export SAMTOOLS_X=1.13
 export QTLTOOLS_X=1.3.1
 
 LABSHR=/lab-share/IM-Gutierrez-e2/Public
-DATA=${LABSHR}/vitor/ase/data 
-RESULTS=${LABSHR}/vitor/ase/bcell_bulk/results 
+DATA=${LABSHR}/vitor/lupus/data 
+RESULTS=${LABSHR}/vitor/lupus/bcell_bulk/results 
 
-SAMPLELIST=${LABSHR}/vitor/ase/bcell_bulk/bcell_samples.txt
+SAMPLELIST=${LABSHR}/vitor/lupus/bcell_bulk/bcell_samples.txt
 SAMPLE=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $SAMPLELIST )
 ID=MG8989
 
@@ -65,7 +65,8 @@ gatk ASEReadCounter \
     -I ${BAMPREFIX}.uniq.mkdups.wasp.bam \
     -V $VCF \
     -O ${PREFIX}.asereadcounter.txt \
-    -min-depth 10
+    -min-depth 10 \
+    --max-depth-per-sample 100
 
 # QTLtools ase
 GTF=${DATA}/gencode.v38.primary_assembly.annotation.gtf
@@ -83,30 +84,6 @@ QTLtools ase \
     --gtf $GTF \
     --filter-duplicates \
     --cov 10 \
-    --subsample 0.25 \
-    --out ${PREFIX}.subsamp25.qtltools
-
-QTLtools ase \
-    --bam ${BAMPREFIX}.wasp.sorted.bam \
-    --vcf $VCF \
-    --ind $ID \
-    --mapq 255 \
-    --fasta $GENOME2 \
-    --gtf $GTF \
-    --filter-duplicates \
-    --cov 10 \
-    --subsample 0.50 \
-    --out ${PREFIX}.subsamp50.qtltools
-
-QTLtools ase \
-    --bam ${BAMPREFIX}.wasp.sorted.bam \
-    --vcf $VCF \
-    --ind $ID \
-    --mapq 255 \
-    --fasta $GENOME2 \
-    --gtf $GTF \
-    --filter-duplicates \
-    --cov 10 \
-    --subsample 0.75 \
-    --out ${PREFIX}.subsamp75.qtltools
+    --max-depth 100 \
+    --out ${PREFIX}.qtltools
 

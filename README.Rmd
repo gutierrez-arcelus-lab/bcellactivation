@@ -130,11 +130,47 @@ include_graphics("./plots/bentham_fc.png")
 ```
 
 
-### 1.4. TO DO:
+### 1.4 Allelic Imbalance
 
-- Select genes in LD with SLE variants and look at their DE status;
-- Run Maria's script to model expression given condition;
-- Run kallisto + sleuth once we have more samples, and call significant genes.
+#### 1.4.1 Methods
+
+- Variant calling from the RNA-seq data with the GATK best practices' pipeline;
+- ASE analysis with GATK ASEReadCounter or QTLtools ase;
+- Statistical test: binomial test with p = overall reference allele ratio;
+- P-value adjustment via FDR (Qvalue R package).
+
+#### 1.4.2 Results
+
+##### Significat ASE per read depth bin
+
+```{r}
+include_graphics("./bcell_bulk/plots/imbalance_cutoffs.png")
+```
+
+##### Coverage histogram
+
+```{r}
+include_graphics("./bcell_bulk/plots/coverage_hist.png")
+```
+
+##### Number of sites
+
+```{r}
+include_graphics("./bcell_bulk/plots/number_of_sites.png")
+```
+
+##### Distribution of reference allele fractions
+
+```{r}
+include_graphics("./bcell_bulk/plots/ref_fraction_hist.png")
+```
+
+##### SLE genes
+
+```{r}
+include_graphics("./bcell_bulk/plots/sle_genes_refalt.png")
+```
+
 
 
 ## 2. MGB Biobank analysis

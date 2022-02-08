@@ -11,16 +11,21 @@ annotations <- "../data/gencode.v38.primary_assembly.annotation.gtf" %>%
 
 sampleids <- read_lines("./bcell_samples.txt")
 
-
 aseread <- "./results/ase/%s.asereadcounter.txt" %>%
     sprintf(sampleids) %>%
     setNames(sampleids) %>%
     map_df(. %>% read_tsv() %>% 
-	   mutate(p = map2_dbl(refCount, totalCount, 
-			       ~binom.test(.x, .y, p = .5, alternative = "two.sided")$p.value)) %>%
-	   select(chr = 1, pos = 2, ref = 4, alt = 5, ref_n = 6, total = 8, p) %>%
-	   mutate(q = qvalue(p)$qvalues), 
-           .id = "id")
+	   select(chr = 1, pos = 2, ref = 4, alt = 5, ref_n = 6, depth = 8),
+           .id = "id") %>%
+    mutate(id = sub("^20210615_(\\d+hr_[^_]+)_.+$", "\\1", id),
+	   ref_ratio = ref_n/depth) %>%
+    group_by(id) %>%
+    mutate(ref_ratio_avg = mean(ref_ratio)) %>%
+    ungroup() %>%
+    mutate(p = pmap_dbl(list(ref_n, depth, ref_ratio_avg), 
+			function(x, y, z) binom.test(x, y, p = z, alternative = "two.sided")$p.value),
+	   q = qvalue(p)$qvalues) %>%
+    select(id, chr, pos, ref, alt, ref_n, depth, q)
 
 aseread_dt <- aseread %>%
     distinct(chr, pos) %>%
@@ -50,28 +55,27 @@ annot_positions <-
     ungroup()
     
 aseread_annotated <- aseread %>%
-    left_join(annot_positions, by = c("chr", "pos")) %>%
-    add_column(method = "ASEReadCounter", .before = 1)
+    left_join(annot_positions, by = c("chr", "pos"))
 
 
-ase_qtltools <- "./results/ase/%s.subsamp%d.qtltools.ase" %>%
-    sprintf(sampleids, rep(c(25, 50, 75), each = 5)) %>%
-    setNames(paste0(sampleids, "-QTLtools.", rep(c(25, 50, 75), each = 5))) %>%
+ase_qtltools <- "./results/ase/%s.qtltools.ase" %>%
+    sprintf(sampleids) %>%
+    setNames(sub("^20210615_(\\d+hr_[^_]+)_.+$", "\\1", sampleids)) %>%
     map_df(. %>% read_tsv() %>%
 	   select(chr = CHR, pos = POS, ref = REF_ALLELE, alt = ALT_ALLELE,
-		  ref_n = REF_COUNT, total = TOTAL_COUNT, p = PVALUE, 
+		  ref_n = REF_COUNT, depth = TOTAL_COUNT, p = PVALUE, 
 		  annot = EXON_INFO) %>%
 	   mutate(q = qvalue(p)$qvalues) %>%
 	   extract(annot, c("gene_id", "gene_name"), "(ENSG[^:]+):.+:.+:(.+)") %>%
 	   rowwise() %>%
 	   mutate(annot = case_when(!is.na(gene_id) & !is.na(gene_name) ~ paste(gene_id, gene_name, sep = ":"),
 				    TRUE ~ NA_character_)) %>%
-	   select(chr, pos, ref, alt, ref_n, total, p, q, annot),
-           .id = "id") %>%
-    separate(id, c("id", "method"), sep = "-") %>%
-    select(method, id, everything())
+	   select(chr, pos, ref, alt, ref_n, depth, q, annot),
+           .id = "id")
 
-out <- bind_rows(aseread_annotated, ase_qtltools) 
+out <- bind_rows("ASEReadCounter" = aseread_annotated, 
+		 "QTLtools" = ase_qtltools,
+		 .id = "method")
 
 write_tsv(out, "./results/ase/ase_compiled.tsv")
 
