@@ -179,14 +179,16 @@ genes_ase <- ase_df %>%
     group_by(chr, pos, ref, alt) %>%
     filter(all(conditions %in% id) & any(q < 0.05)) %>%
     ungroup() %>%
-    unite("var_id", c("gene_name", "pos", "ref", "alt")) %>%
+    unite("var_id", c("gene_name", "pos", "ref", "alt")) 
+
+genes_ase_pivot <- genes_ase %>%
     mutate(alt_n = depth - ref_n) %>%
     select(id, var_id, REF = ref_n, ALT = alt_n) %>%
     pivot_longer(REF:ALT, names_to = "allele", values_to = "count") %>%
     mutate(allele = factor(allele, levels = c("REF", "ALT")))
 
 
-ggplot(genes_ase, aes(id, count, fill = allele)) +
+ggplot(genes_ase_pivot, aes(id, count, fill = allele)) +
     geom_bar(stat = "identity", position = "dodge") +
     scale_fill_manual(values = c("REF" = "grey30", "ALT" = "grey")) +
     scale_x_discrete(labels = function(x) sub("_", "\n", x)) +
@@ -200,11 +202,45 @@ ggplot(genes_ase, aes(id, count, fill = allele)) +
 ggsave("./plots/sle_genes_refalt.png", height = 8, width = 8)
 
 
+genes_ase %>%
+    mutate(gene_name = sub("^([^_]+).*$", "\\1", var_id)) %>%
+    select(condition = id, gene_name, var_id, qvalue = q) %>%
+    mutate(condition = factor(condition, levels = conditions)) %>%
+    arrange(gene_name, var_id, condition) %>%
+    write_tsv("./results/ase/ase_pvalues_SLEgenes.tsv")
+    
 
+# Most extreme imbalances
 
+ase_df %>%
+    filter(method == "ASEReadCounter") %>%
+    filter(eff_size > .2) %>%
+    arrange(desc(eff_size), q) %>%
+    select(-method) %>%
+    print(n=50)
 
+hla_range <- ase_df %>%
+    filter(method == "ASEReadCounter") %>%
+    filter(chr == "chr6", grepl("HLA-DQB1", annot)) %>%
+    summarise(range(pos)) %>%
+    pull(1)
 
-
+ase_df %>%
+    filter(method == "ASEReadCounter") %>%
+    filter(chr == "chr6", between(pos, hla_range[1], hla_range[2])) %>%
+    mutate(alt_n = depth - ref_n) %>%
+    select(id, pos, REF = ref_n, ALT = alt_n) %>%
+    pivot_longer(REF:ALT, names_to = "allele", values_to = "count") %>%
+    group_by(id, pos) %>%
+    mutate(p = count/sum(count)) %>%
+    ungroup() %>%
+    ggplot(aes(factor(pos), count, fill = allele)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    ggsci::scale_fill_npg() +
+    facet_wrap(~id, ncol = 1) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1),
+          panel.grid = element_blank())
     
     
     
