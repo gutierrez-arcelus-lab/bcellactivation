@@ -81,42 +81,8 @@ PCA shows a separation of the RSQ and IgG treatments (PC1), and of the 24h/72h c
 include_graphics("./plots/pca_bcell_expression.png")
 ```
 
-#### 1.3.3. Fold change in comparison with "resting"
 
-Here we have a scatter plot of CPM values in each condition against the log2 Fold-change in respect to the resting state.
-
-Extreme values correspond to genes that have no expression in either the resting or test condition.
-
-```{r fc, echo=FALSE}
-include_graphics("./plots/foldchange.png")
-```
-
-#### 1.3.4. Subset of the plot above:
-
-```{r fcsub, echo=FALSE}
-include_graphics("./plots/foldchange_subset.png")
-```
-
-#### 1.3.5. Summary of direction of regulation
-
-```{r updown}
-include_graphics("./plots/foldchange_summary.png")
-```
-
-
-#### 1.3.6. Correlations with resting state:
-
-```{r corr, echo=FALSE}
-include_graphics("./plots/scatter_resting_conditions.png")
-```
-
-#### 1.3.7. Comparison of FC for each stimulant
-
-```{r stims}
-include_graphics("./plots/fc_24vs72.png")
-```
-
-#### 1.3.8. Expression of candidate SLE genes
+#### 1.3.3. Expression of candidate SLE genes
 
 
 We looked at the expression of candidate genes suggested by [Bentham et al. 2015, Table 2](http://www.nature.com/articles/ng.3434).
@@ -137,7 +103,8 @@ include_graphics("./plots/bentham_fc.png")
 - Variant calling from the RNA-seq data with the GATK best practices' pipeline;
 - ASE analysis with GATK ASEReadCounter or QTLtools ase;
 - Statistical test: binomial test with p = overall reference allele ratio;
-- P-value adjustment via FDR (Qvalue R package).
+- P-value adjustment via FDR (Qvalue R package);
+- Gene-level ASE with phASER.
 
 #### 1.4.2 Results
 
@@ -165,11 +132,32 @@ include_graphics("./bcell_bulk/plots/number_of_sites.png")
 include_graphics("./bcell_bulk/plots/ref_fraction_hist.png")
 ```
 
-##### SLE genes
+##### Selected variants
+
+Example variants selected after filtering for:
+
+- No imbalance at resting state;
+- Depth > 20;
+- Imbalance > 0.2;
+- FDR = 5%.
+
 
 ```{r}
-include_graphics("./bcell_bulk/plots/sle_genes_refalt.png")
+include_graphics("./bcell_bulk/plots/selected_genes_ai.png")
 ```
+
+#### Gene-level ASE
+
+Gene-level ASE reveals additional genes in respect to the SNP-level ASE. Here we show selected genes after filtering for:
+
+- No imbalance at resting state;
+- Depth >= 16;
+- Imbalance > 0.2
+
+```{r}
+include_graphics("./bcell_bulk/plots/gene_level_ai.png")
+```
+
 
 
 

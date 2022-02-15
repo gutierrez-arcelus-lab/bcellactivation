@@ -116,44 +116,6 @@ ggsave("./plots/number_of_sites.png", width = 5)
 
 
 
-# Manhattan-like plot
-# 
-# ase_manhat_df <- ase_df %>%
-#     filter(method == "ASEReadCounter") %>%
-#     select(id, chr, pos, ref_ratio, q) %>%
-#     mutate(chr = sub("chr", "", chr),
-#            chr = factor(chr, levels = c(1:22, "X")))
-# 
-# manhat_ix <- ase_manhat_df %>%
-#     distinct(chr, pos) %>%
-#     arrange(chr, pos) %>%
-#     group_by(chr) %>%
-#     mutate(ix = 1:n()) %>%
-#     ungroup() 
-# 
-# ase_manhat_df_ix <- left_join(ase_manhat_df, manhat_ix, by = c("chr", "pos"))
-# 
-# 
-# ggplot(ase_manhat_df_ix, aes(ix, ref_r, color = q < 0.05)) +
-#     geom_point(size = .2, alpha = .5, show.legend = FALSE) +
-#     scale_y_continuous(breaks = c(0, .5, 1)) +
-#     scale_color_manual(values = c("FALSE" = "grey", "TRUE" = "black")) +
-#     facet_grid(id~chr, 
-#                scales = "free_x", 
-#                space = "free_x",
-#                switch = "x") +
-#     theme_minimal() +
-#     theme(panel.grid = element_blank(),
-#           axis.text.x = element_blank(),
-#           panel.spacing.x = unit(0, "lines"),
-#           strip.text.x = element_text(size = 7),
-#           strip.text.y = element_text(angle = 0)) +
-#     labs(x = NULL, y = "REF ratio", 
-#          caption = "Significant ASE (FDR = 5%) in black")
-# 
-# ggsave("./plots/ref_ratio.png", width = 8, height = 3)
-
-
 # SLE genes
 
 bentham_genes <- 
@@ -210,45 +172,88 @@ genes_ase %>%
     write_tsv("./results/ase/ase_pvalues_SLEgenes.tsv")
     
 
-# Most extreme imbalances
-
-ase_df %>%
-    filter(method == "ASEReadCounter") %>%
-    filter(eff_size > .2) %>%
-    arrange(desc(eff_size), q) %>%
+all_genes <- ase_df %>%
+    filter(method == "ASEReadCounter", !is.na(annot)) %>%
+    separate_rows(annot, sep = ";") %>%
+    separate(annot, c("gene_id", "gene_name"), sep = ":") %>%
     select(-method) %>%
-    print(n=50)
-
-hla_range <- ase_df %>%
-    filter(method == "ASEReadCounter") %>%
-    filter(chr == "chr6", grepl("HLA-DQB1", annot)) %>%
-    summarise(range(pos)) %>%
-    pull(1)
-
-ase_df %>%
-    filter(method == "ASEReadCounter") %>%
-    filter(chr == "chr6", between(pos, hla_range[1], hla_range[2])) %>%
-    mutate(alt_n = depth - ref_n) %>%
-    select(id, pos, REF = ref_n, ALT = alt_n) %>%
-    pivot_longer(REF:ALT, names_to = "allele", values_to = "count") %>%
-    group_by(id, pos) %>%
-    mutate(p = count/sum(count)) %>%
+    arrange(gene_name, chr, pos, id) %>%
+    group_by(chr, pos, ref, alt) %>%
+    filter(all(conditions %in% id) &
+               first(eff_size < .1) &
+               any(depth > 20 & eff_size > .2 & q < 0.05)) %>%
     ungroup() %>%
-    ggplot(aes(factor(pos), count, fill = allele)) +
-    geom_bar(stat = "identity", position = "dodge") +
-    ggsci::scale_fill_npg() +
-    facet_wrap(~id, ncol = 1) +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1),
-          panel.grid = element_blank())
+    unite("var_id", c("gene_name", "pos", "ref", "alt")) 
+
+all_genes %>%
+    mutate(score = eff_size - first(eff_size)) %>%
+    group_by(var_id) %>%
+    slice(which.max(score)) %>%
+    ungroup() %>%
+    select(var_id, score) %>%
+    arrange(desc(score)) %>%
+    print(n = 30)
+
+selected_vars <- all_genes %>% 
+    filter(var_id %in% c("TYK2_10351440_T_C", "GINS1_25447658_A_G", 
+                         "ANKRD36C_95882317_A_C", "IGHV4-4_106012373_T_C")) %>%
+    mutate(alt_n = depth - ref_n) %>%
+    select(id, var_id, REF = ref_n, ALT = alt_n) %>%
+    pivot_longer(REF:ALT, names_to = "allele", values_to = "count") %>%
+    mutate(allele = factor(allele, levels = c("REF", "ALT")))
+
+ggplot(selected_vars, aes(id, count, fill = id)) +
+    geom_bar(aes(linetype = allele), 
+             stat = "identity", position = "dodge", size = .5, 
+             color = "black") +
+    scale_fill_manual(values = condition_colors) +
+    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+    scale_linetype_manual(values = c("REF" = 1, "ALT" = 3)) +
+    facet_wrap(~var_id, scales = "free_y") +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          axis.text.x = element_blank()) +
+    labs(x = NULL, y = "Allele counts") +
+    guides(linetype = guide_legend(override.aes = list(fill = NA)))
+
+ggsave("./plots/selected_genes_ai.png", width = 6, height = 3)
+
+
+
+# ASE gene-level
+
+ase_gene <- read_tsv("./results/phaser/MG8989_gene_ae.txt") %>%
+    mutate(bam = sub("20210615_(\\d+hr_[^_]+)_.+$", "\\1", bam),
+           bam = factor(bam, levels = conditions)) %>%
+    extract(name, c("gene_id", "gene_name"), "(ENSG[0-9.]+)_(.+)") %>%
+    select(condition = bam, everything()) %>%
+    arrange(contig, start, gene_name, condition)
     
     
+ase_gene_selected <- ase_gene %>%
+    filter(gene_name %in% c("C22orf34", "FCER2")) %>%
+    select(condition, gene_name, aCount, bCount, variants) %>%
+    rename(Hap1 = aCount, Hap2 = bCount) %>%
+    pivot_longer(Hap1:Hap2, names_to = "hap", values_to = "count") %>%
+    mutate(variants = gsub("chr\\d+_", "", variants),
+           variants = paste(gene_name, variants, sep = ": "))
     
+ggplot(ase_gene_selected, aes(condition, count, fill = condition)) +
+    geom_bar(aes(linetype = hap), 
+             stat = "identity", position = "dodge", size = .5, 
+             color = "black") +
+    scale_fill_manual(values = condition_colors) +
+    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+    scale_linetype_manual(values = c("Hap1" = 1, "Hap2" = 3)) +
+    facet_wrap(~variants, scales = "free_y", ncol = 1) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          axis.text.x = element_blank(), 
+          text = element_text(size = 8)) +
+    labs(x = NULL, y = "Haplotypic count") +
+    guides(linetype = guide_legend(override.aes = list(fill = NA)))    
     
-    
-    
-    
-    
+ggsave("./plots/gene_level_ai.png", height = 3, width = 6.5)
     
 
 
