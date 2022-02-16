@@ -171,7 +171,7 @@ genes_ase %>%
     arrange(gene_name, var_id, condition) %>%
     write_tsv("./results/ase/ase_pvalues_SLEgenes.tsv")
     
-
+## 
 all_genes <- ase_df %>%
     filter(method == "ASEReadCounter", !is.na(annot)) %>%
     separate_rows(annot, sep = ";") %>%
@@ -221,7 +221,6 @@ ggsave("./plots/selected_genes_ai.png", width = 6, height = 3)
 
 
 # ASE gene-level
-
 ase_gene <- read_tsv("./results/phaser/MG8989_gene_ae.txt") %>%
     mutate(bam = sub("20210615_(\\d+hr_[^_]+)_.+$", "\\1", bam),
            bam = factor(bam, levels = conditions)) %>%
@@ -238,25 +237,116 @@ ase_gene_selected <- ase_gene %>%
     mutate(variants = gsub("chr\\d+_", "", variants),
            variants = paste(gene_name, variants, sep = ": "))
     
-ggplot(ase_gene_selected, aes(condition, count, fill = condition)) +
-    geom_bar(aes(linetype = hap), 
-             stat = "identity", position = "dodge", size = .5, 
-             color = "black") +
+# check same variants in the SNP-based data
+ase_vars_df <- ase_gene_selected %>%
+    distinct(gene_name, variants) %>%
+    mutate(variants = sub("^([A-Za-z0-9]+: )", "", variants)) %>%
+    separate_rows(variants, sep = ",")  %>%
+    separate(variants, c("pos", "ref", "alt"), sep = "_", convert = TRUE) %>%
+    inner_join(distinct(ase_gene, chr = contig, gene_name))
+
+
+separate_variants <- ase_df %>% 
+    filter(method == "ASEReadCounter") %>%
+    select(-method) %>%
+    inner_join(ase_vars_df, by = c("chr", "pos", "ref", "alt")) %>%
+    unite(var_id, c("pos", "ref", "alt"), sep = "_") %>%
+    mutate(alt_n = depth - ref_n) %>%
+    select(condition = id, var_id, REF = ref_n, ALT = alt_n, gene_name) %>%
+    pivot_longer(REF:ALT, names_to = "allele", values_to = "count") %>%
+    complete(condition, 
+             nesting(var_id, gene_name, allele), 
+             fill = list(count = 0)) %>%
+    mutate(allele = factor(allele, levels = c("REF", "ALT"))) %>%
+    arrange(gene_name, condition, var_id, allele)
+    
+
+
+
+
+
+# compare them
+
+corf_ase_plot <- ase_gene_selected %>%
+    filter(gene_name == "C22orf34") %>%
+    unite(label_x, c("hap", "condition"), sep = ":", remove = FALSE) %>%
+    mutate(label_x = fct_inorder(label_x)) %>%
+    ggplot(aes(label_x, count, fill = condition)) +
+    geom_bar(stat = "identity", position = "dodge") +
     scale_fill_manual(values = condition_colors) +
+    scale_x_discrete(labels = function(x) sub("^(Hap[12]):.+$", "\\1", x)) +
     scale_y_continuous(breaks = scales::pretty_breaks(3)) +
-    scale_linetype_manual(values = c("Hap1" = 1, "Hap2" = 3)) +
     facet_wrap(~variants, scales = "free_y", ncol = 1) +
     theme_bw() +
+    theme(panel.grid = element_blank()) +
+    labs(x = NULL, y = "Haplotypic count") 
+
+fcer2_ase_plot <- ase_gene_selected %>%
+    filter(gene_name == "FCER2") %>%
+    unite(label_x, c("hap", "condition"), sep = ":", remove = FALSE) %>%
+    mutate(label_x = fct_inorder(label_x)) %>%
+    ggplot(aes(label_x, count, fill = condition)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    scale_fill_manual(values = condition_colors) +
+    scale_x_discrete(labels = function(x) sub("^(Hap[12]):.+$", "\\1", x)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+    facet_wrap(~variants, scales = "free_y", ncol = 1) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    labs(x = NULL, y = "Haplotypic count") 
+
+
+corf_snp_plot <- separate_variants %>%
+    filter(gene_name == "C22orf34") %>%
+    unite(label_x, c("allele", "condition"), sep = ":", remove = FALSE) %>%
+    mutate(label_x = fct_inorder(label_x)) %>%
+    ggplot(aes(label_x, count, fill = condition)) +
+    geom_bar(stat = "identity", position = "dodge", show.legend = FALSE) +
+    scale_fill_manual(values = condition_colors) +
+    scale_x_discrete(labels = function(x) sub("^([^:]+):.+$", "\\1", x)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+    facet_wrap(~var_id) +
+    theme_bw() +
     theme(panel.grid = element_blank(),
-          axis.text.x = element_blank(), 
-          text = element_text(size = 8)) +
-    labs(x = NULL, y = "Haplotypic count") +
-    guides(linetype = guide_legend(override.aes = list(fill = NA)))    
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+    labs(x = NULL, y = "Allele counts")
+
+fcer2_snp_plot <- separate_variants %>%
+    filter(gene_name == "FCER2") %>%
+    unite(label_x, c("allele", "condition"), sep = ":", remove = FALSE) %>%
+    mutate(label_x = fct_inorder(label_x)) %>%
+    ggplot(aes(label_x, count, fill = condition)) +
+    geom_bar(stat = "identity", position = "dodge", show.legend = FALSE) +
+    scale_fill_manual(values = condition_colors) +
+    scale_x_discrete(labels = function(x) sub("^([^:]+):.+$", "\\1", x)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+    facet_wrap(~var_id, ncol = 4) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1, vjust = 1)) +
+    labs(x = NULL, y = "Allele counts")
+
+
+plot_grid(corf_ase_plot + theme(legend.position = "none") + labs(title = "Haplotype"), 
+          NULL,
+          corf_snp_plot + labs(title = "SNP-level"), 
+          rel_heights = c(1, .1, 1),
+          ncol = 1) %>%
+    plot_grid(get_legend(corf_ase_plot), rel_widths = c(1, .2))
+
+ggsave("./plots/gene_level_ai_c22orf.png", height = 5, width = 7)
+
+
+plot_grid(fcer2_ase_plot + 
+              theme(strip.text = element_text(size = 7),
+                    legend.position = "none") + 
+              labs(title = "Haplotype"), 
+          NULL,
+          fcer2_snp_plot + labs(title = "SNP-level"), 
+          rel_heights = c(.75, .1, 1),
+          ncol = 1) %>%
+    plot_grid(get_legend(corf_ase_plot), rel_widths = c(1, .2))
     
-ggsave("./plots/gene_level_ai.png", height = 3, width = 6.5)
-    
-
-
-
+ggsave("./plots/gene_level_ai_fcer2.png", height = 5, width = 7)
 
 

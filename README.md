@@ -144,7 +144,15 @@ Here we show selected genes after filtering for:
 -   Depth &gt;= 16;
 -   Imbalance &gt; 0.2
 
-<img src="./bcell_bulk/plots/gene_level_ai.png" width="1950" />
+And the comparison with the SNP-level ASE:
+
+###### C22orf34 gene
+
+<img src="./bcell_bulk/plots/gene_level_ai_c22orf.png" width="2100" />
+
+###### FCER2 gene
+
+<img src="./bcell_bulk/plots/gene_level_ai_fcer2.png" width="2100" />
 
 ## 2. MGB Biobank analysis
 

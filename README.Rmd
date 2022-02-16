@@ -154,10 +154,19 @@ Gene-level ASE reveals additional genes in respect to the SNP-level ASE. Here we
 - Depth >= 16;
 - Imbalance > 0.2
 
+And the comparison with the SNP-level ASE:
+
+###### C22orf34 gene
+
 ```{r}
-include_graphics("./bcell_bulk/plots/gene_level_ai.png")
+include_graphics("./bcell_bulk/plots/gene_level_ai_c22orf.png")
 ```
 
+###### FCER2 gene
+
+```{r}
+include_graphics("./bcell_bulk/plots/gene_level_ai_fcer2.png")
+```
 
 
 
