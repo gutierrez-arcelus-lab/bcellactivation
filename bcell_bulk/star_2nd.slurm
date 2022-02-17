@@ -25,7 +25,7 @@ FQ1=${FQDIR}/${SAMPLE}_R1_001.fastq.gz
 FQ2=${FQDIR}/${SAMPLE}_R2_001.fastq.gz
 
 # Specify Junction files
-ALLSAMPLES=( $( awk '{ print $1}' $SAMPLELIST) )
+ALLSAMPLES=( $( cat $SAMPLELIST) )
 STAR1ST=${TEMP_WORK}/star/pass_1st
 SJDB=( "${ALLSAMPLES[@]/#/$STAR1ST/}" )
 SJDB=( "${SJDB[@]/%/_SJ.out.tab}" )
@@ -45,6 +45,6 @@ STAR --runMode alignReads \
     --readFilesCommand zcat  \
     --outFilterMismatchNoverReadLmax 0.04 \
     --sjdbFileChrStartEnd $SJDBLIST \
-    --outSAMtype BAM Unsorted \
+    --outSAMtype BAM SortedByCoordinate \
     --outFileNamePrefix ${OUT}_
 
