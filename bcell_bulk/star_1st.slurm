@@ -40,6 +40,7 @@ STAR --runMode alignReads \
     --outFilterType BySJout \
     --outSJfilterReads Unique \
     --outSJfilterCountUniqueMin 6 2 2 2 \
+    --outSJfilterCountTotalMin 6 2 2 2 \
     --outSAMtype None \
     --outFileNamePrefix ${OUT}_
 
