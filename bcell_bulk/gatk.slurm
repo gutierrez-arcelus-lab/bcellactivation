@@ -28,7 +28,7 @@ PREFIX=${OUTDIR}/${SAMPLE}
 
 mkdir -p $OUTDIR
 
-samtools view -b -h -q 255 $BAM > $BAMUNIQ
+samtools view -@ $SLURM_CPUS_PER_TASK -b -h -q 255 $BAM > $BAMUNIQ
 
 # Add a read group to the BAM file
 OUT=${PREFIX}_rg.bam 
@@ -41,7 +41,7 @@ picard AddOrReplaceReadGroups \
     RGPL=ILLUMINA \
     RGPU=HiSeq \
     RGSM=$ID \
-    --TMP_DIR=$TEMP_WORK/temp \
+    --TMP_DIR=$TEMP_WORK/temp
 
 # Mark duplicated reads
 OUT2=${PREFIX}_mkdups.bam 
@@ -67,7 +67,7 @@ if [[ ! -f "$GENOME".fai ]]; then
 fi
 
 if [[ ! -f "$GENOME".dict ]]; then
-    $GATK CreateSequenceDictionary -R $GENOME
+    GATK CreateSequenceDictionary -R $GENOME
 fi
 
 gatk SplitNCigarReads \
