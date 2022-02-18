@@ -18,7 +18,7 @@ export GATK_X=4.1.4.1
 export SAMTOOLS_X=1.13
 
 LABSHR=/lab-share/IM-Gutierrez-e2/Public
-SAMPLELIST=${LABSHR}/vitor/ase/bcell_bulk/bcell_samples.txt
+SAMPLELIST=${LABSHR}/vitor/lupus/bcell_bulk/bcell_samples.txt
 SAMPLE=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $SAMPLELIST )
 ID=MG8989
 BAM=${TEMP_WORK}/star/pass_2nd/${SAMPLE}_Aligned.out.bam
@@ -55,7 +55,7 @@ gatk MarkDuplicatesSpark \
 
 
 # Split'N'Trim and reassign mapping qualities
-GENOME=${LABSHR}/vitor/ase/data/GRCh38.primary_assembly.genome.fa
+GENOME=${LABSHR}/vitor/lupus/data/GRCh38.primary_assembly.genome.fa
 OUT3=${PREFIX}_splitn.bam
 
 if [[ ! -f "$GENOME" ]]; then
@@ -77,7 +77,7 @@ gatk SplitNCigarReads \
     --tmp-dir $TEMP_WORK/temp
 
 # Base Recalibration
-DBSNP=${LABSHR}/vitor/ase/data/dbsnp_155.hg38pri.vcf.gz
+DBSNP=${LABSHR}/vitor/lupus/data/dbsnp_155.hg38pri.vcf.gz
 
 gatk BaseRecalibrator \
     -R $GENOME \

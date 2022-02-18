@@ -8,14 +8,14 @@
 #SBATCH --job-name=PCA
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /home/ch229163/ase/log/PCA_expression.%j
+#SBATCH -o /temp_work/ch229163/log/PCA_expression.%j
 
 
 # BED file with expression data
-PHENO=$HOME/ase/phenotypes.bed.gz
+PHENO=$HOME/lupus/phenotypes.bed.gz
 
 # Results
-OUT=$HOME/ase/data/pca
+OUT=$HOME/lupus/data/pca
 mkdir -p $OUT
 
 # Run QTLtools pca on expression data

@@ -8,19 +8,19 @@
 #SBATCH --job-name=RSEM
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /home/ch229163/ase/log/RSEM.%j
+#SBATCH -o /temp_work/ch229163/log/RSEM.%j
 
 source /programs/biogrids.shrc
 export RSEM_X=1.2.25
 
 # Genome sequence
-GENOME=$HOME/ase/data/GRCh38.primary_assembly.genome.fa
+GENOME=$HOME/lupus/data/GRCh38.primary_assembly.genome.fa
 
 # Gencode annotations
-GTF=$HOME/ase/data/gencode.v38.primary_assembly.annotation.gtf
+GTF=$HOME/lupus/data/gencode.v38.primary_assembly.annotation.gtf
 
 # Results
-OUT=$HOME/ase/data/gencode
+OUT=$HOME/lupus/data/gencode
 
 # Temporarily unzip because rsem does not take zipped files
 zcat $GENOME.gz > $GENOME

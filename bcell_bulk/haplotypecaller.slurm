@@ -32,10 +32,10 @@ fi
 # IO
 LABSHR=/lab-share/IM-Gutierrez-e2/Public
 ID=MG8989
-SAMPLES=( $(cat ${LABSHR}/vitor/ase/bcell_bulk/bcell_samples.txt) )
+SAMPLES=( $(cat ${LABSHR}/vitor/lupus/bcell_bulk/bcell_samples.txt) )
 BAMS=( "${SAMPLES[@]/#/$TEMP_WORK/gatk/}" )
 BAMS=( "${BAMS[@]/%/_recal.bam}" )
-GENOME=${LABSHR}/vitor/ase/data/GRCh38.primary_assembly.genome.fa
+GENOME=${LABSHR}/vitor/lupus/data/GRCh38.primary_assembly.genome.fa
 OUTDIR=${TEMP_WORK}/gatk
 PREFIX=${OUTDIR}/${ID}.${CHR}
 MERGED=${PREFIX}.merged.bam
@@ -72,7 +72,7 @@ FILTVCF_SNV=${PREFIX}.filtered.biallelic.het.SNVs.vcf.gz
 bcftools view -m2 -M2 -v snps -O z -o $FILTVCF_SNV $FILTVCF 
 
 # Extract only SNVs reported by dbSNP
-DBSNP=${LABSHR}/vitor/ase/data/dbsnp_155.hg38pri.vcf.gz
+DBSNP=${LABSHR}/vitor/lupus/data/dbsnp_155.hg38pri.vcf.gz
 POS=${PREFIX}.pos
 DBSNP_VCF=${PREFIX}.dbSNP.vcf.gz
 

@@ -16,9 +16,9 @@ export STAR_X=2.7.9a
 
 # Input
 LABSHR=/lab-share/IM-Gutierrez-e2/Public
-INDEX=${LABSHR}/vitor/ase/indices/starindex
+INDEX=${LABSHR}/vitor/lupus/indices/starindex
 FQDIR=${LABSHR}/B_cells/bulkTCpilot_1/34.198.31.178/210618_MG8989_fastq
-SAMPLELIST=${LABSHR}/vitor/ase/bcell_bulk/bcell_samples.txt
+SAMPLELIST=${LABSHR}/vitor/lupus/bcell_bulk/bcell_samples.txt
 SAMPLE=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $SAMPLELIST )
 
 FQ1=${FQDIR}/${SAMPLE}_R1_001.fastq.gz

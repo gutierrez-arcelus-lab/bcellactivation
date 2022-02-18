@@ -5,7 +5,6 @@ library(cowplot)
 
 
 #plot colors
-
 condition_colors <- c("16hr_resting" = "grey60", 
                       "24hr_IgG" = "gold2",
                       "72hr_IgG" = "gold3",
@@ -194,9 +193,18 @@ all_genes %>%
     arrange(desc(score)) %>%
     print(n = 30)
 
-selected_vars <- all_genes %>% 
-    filter(var_id %in% c("TYK2_10351440_T_C", "GINS1_25447658_A_G", 
-                         "ANKRD36C_95882317_A_C", "IGHV4-4_106012373_T_C")) %>%
+selected_vars <- ase_df %>%
+    filter(method == "ASEReadCounter") %>%
+    filter((chr == "chr20" & pos == 25447658) |
+           (chr == "chr8" & pos == 11494547) |
+           (chr == "chr19" & pos == 7696361) |
+           (chr == "chr19" & pos == 10351440)) %>%
+    separate_rows(annot, sep = ";") %>%
+    separate(annot, c("gene_id", "gene_name"), sep = ":") %>%
+    select(-method) %>%
+    arrange(gene_name, chr, pos, id) %>%
+    mutate(gene_name = ifelse(is.na(gene_name), "FCER2", gene_name)) %>%
+    unite("var_id", c("gene_name", "pos", "ref", "alt")) %>%
     mutate(alt_n = depth - ref_n) %>%
     select(id, var_id, REF = ref_n, ALT = alt_n) %>%
     pivot_longer(REF:ALT, names_to = "allele", values_to = "count") %>%
@@ -213,10 +221,11 @@ ggplot(selected_vars, aes(id, count, fill = id)) +
     theme_bw() +
     theme(panel.grid = element_blank(),
           axis.text.x = element_blank()) +
-    labs(x = NULL, y = "Allele counts") +
-    guides(linetype = guide_legend(override.aes = list(fill = NA)))
+    labs(x = NULL, y = "Allele counts", fill = "stim") +
+    guides(linetype = guide_legend(override.aes = list(fill = NA)),
+           fill = guide_legend(override.aes = list(linetype = 0)))
 
-ggsave("./plots/selected_genes_ai.png", width = 6, height = 3)
+ggsave("./plots/selected_vars_ai.png", width = 6, height = 3)
 
 
 
@@ -349,4 +358,47 @@ plot_grid(fcer2_ase_plot +
     
 ggsave("./plots/gene_level_ai_fcer2.png", height = 5, width = 7)
 
+
+### test
+ase_df %>%
+    filter(method == "ASEReadCounter", !is.na(annot)) %>%
+    separate_rows(annot, sep = ";") %>%
+    separate(annot, c("gene_id", "gene_name"), sep = ":") %>%
+    select(-method) %>%
+    arrange(gene_name, chr, pos, id) %>%
+    filter(gene_name == "FCER2")
+
+gene_exp_df <- read_tsv("../data/gene_quants.tsv")
+
+fcer_id <- ase_gene %>%
+    filter(gene_name == "FCER2") %>%
+    pull(gene_id) %>%
+    unique()
+
+gene_exp_df %>%
+    filter(gene_id == fcer_id)
+
+ase_gene %>%
+    select(-gw_phased) %>%
+    mutate(ai = abs(0.5 - aCount/totalCount)) %>%
+    group_by(gene_name) %>%
+    filter(all(!is.na(variants))) %>%
+    filter(any(totalCount >= 20)) %>%
+    group_by(gene_name, variants) %>%
+    filter(first(ai) < .1 & any(ai > .2 & totalCount >= 16)) %>%
+    mutate(score = ai - first(ai)) %>%
+    summarise(score = max(score)) %>%
+    separate_rows(variants, sep = ",") %>%
+    filter(n() >= 4) %>%
+    summarise(variants = paste(variants, collapse = ","),
+              score = unique(score)) %>%
+    ungroup() %>%
+    arrange(desc(score)) %>%
+    print(n = 50)
+
+ase_gene %>% filter(gene_name %in% "TYK2") %>%
+    select(-gw_phased) %>%
+    mutate(ai = round(abs(0.5 - aCount/totalCount), 2))
+    
+    
 

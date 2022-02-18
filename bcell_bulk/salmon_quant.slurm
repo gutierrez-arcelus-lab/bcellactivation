@@ -9,7 +9,7 @@
 #SBATCH --job-name=Salmon-quant
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /home/ch229163/ase/log/Salmon-quant.%j
+#SBATCH -o /temp_work/ch229163/log/Salmon-quant.%j
 
 source /programs/biogrids.shrc
 export SALMON_X=1.5.1
@@ -19,10 +19,10 @@ LABSHARE=/lab-share/IM-Gutierrez-e2/Public
 FQDIR=$LABSHARE/B_cells/bulkTCpilot_1/34.198.31.178/210618_MG8989_fastq
 
 # Alignment index
-INDEX=$HOME/ase/indices/SALMON
+INDEX=$HOME/lupus/indices/SALMON
 
 # Defining the samples
-SAMPLELIST=/home/ch229163/ase/bcell_bulk/bcell_samples.txt
+SAMPLELIST=/home/ch229163/lupus/bcell_bulk/bcell_samples.txt
 SAMPLE=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $SAMPLELIST )
 
 # Defining the fastq files for each sample
@@ -30,7 +30,7 @@ FQ1=${FQDIR}/${SAMPLE}_R1_001.fastq.gz
 FQ2=${FQDIR}/${SAMPLE}_R2_001.fastq.gz 
 
 # Results
-OUT=$HOME/ase/bcell_bulk/results/salmon/${SAMPLE}
+OUT=$HOME/lupus/bcell_bulk/results/salmon/${SAMPLE}
 mkdir -p $OUT
 
 # Run Salmon quantification
