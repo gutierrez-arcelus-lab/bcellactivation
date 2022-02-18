@@ -67,7 +67,7 @@ if [[ ! -f "$GENOME".fai ]]; then
 fi
 
 if [[ ! -f "$GENOME".dict ]]; then
-    GATK CreateSequenceDictionary -R $GENOME
+    gatk CreateSequenceDictionary -R $GENOME
 fi
 
 gatk SplitNCigarReads \
