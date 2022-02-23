@@ -14,10 +14,10 @@ source /programs/biogrids.shrc
 export SALMON_X=1.5.1
 
 LABSHR=/lab-share/IM-Gutierrez-e2/Public
-GENCODE=${LABSHR}/vitor/ase/data/gencode_plusEBV.transcripts.fa
-INDEX=${LABSHR}/vitor/ase/indices
+GENCODE=${LABSHR}/vitor/lupus/data/gencode_plusEBV.transcripts.fa
+INDEX=${LABSHR}/vitor/lupus/indices/SALMON_HUMAN_EBV 
 
 mkdir -p $INDEX
 
-salmon index -t $GENCODE -i $INDEX/SALMON_HUMAN_EBV
+salmon index -t $GENCODE -i $INDEX
 

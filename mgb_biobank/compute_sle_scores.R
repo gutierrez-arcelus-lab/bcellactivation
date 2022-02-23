@@ -1,7 +1,5 @@
 library(tidyverse)
 
-list.files("./sle_variants")
-
 ld_vars <- read_tsv("./sle_variants/sle_ld.tsv") %>%
     filter(r2 >= 0.6) %>%
     distinct(bentham) %>%

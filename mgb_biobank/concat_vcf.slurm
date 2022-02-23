@@ -14,7 +14,7 @@ source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
 
 # Merge VCFs for each chromosome into a single VCF
-OUTDIR=/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank/results 
+OUTDIR=${SLURM_SUBMIT_DIR}/results 
 VCFIN=${TEMP_WORK}/VCF/chr{1..22}.merged.pruned.vcf
 PREFIX=${OUTDIR}/allchr.merged.pruned 
 VCFOUT=${PREFIX}.vcf.gz
@@ -29,6 +29,7 @@ plink --vcf $VCFOUT \
     --out $PREFIX
 
 ## Subset VCF for individuals in 1000G or MGB
+## I used to do this in order to run ADMIXTURE
 #VCF1000G=${PREFIX}.1000G.vcf.gz
 #VCFMGB=${PREFIX}.MGB.vcf.gz
 #

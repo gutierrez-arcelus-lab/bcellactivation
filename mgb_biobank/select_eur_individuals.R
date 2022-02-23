@@ -13,8 +13,7 @@ sample_annotation <- read_tsv(index_1000G, comment = "##") %>%
 
 # read PCA results into R
 pca_genos <-
-    file.path("/lab-share/IM-Gutierrez-e2/Public/vitor",
-	      "ase/mgb_biobank/results/allchr.merged.pruned.pca.eigenvec") %>%
+    "./results/allchr.merged.pruned.pca.eigenvec" %>%
     read_table2(col_names = FALSE) %>%
     select(-1) %>%
     select(X2:X6) %>%
@@ -27,22 +26,6 @@ pca_eur <- pca_genos %>%
 
 eur_mu <- pca_eur %>%
     summarise_at(vars(PC1:PC4), list(mean = mean, sd = sd))
-
-####
-ggplot(pca_eur, aes(PC1)) +
-    geom_density() +
-    geom_vline(xintercept = eur_mu$PC1_mean + (eur_mu$PC1_sd * 3)) +
-    geom_vline(xintercept = eur_mu$PC1_mean + (eur_mu$PC1_sd * -3))
-
-ggplot(pca_eur, aes(PC2)) +
-    geom_density() +
-    geom_vline(xintercept = eur_mu$PC2_mean + (eur_mu$PC2_sd * 3)) +
-    geom_vline(xintercept = eur_mu$PC2_mean + (eur_mu$PC2_sd * -3))
-
-shapiro.test(pca_eur$PC1)
-shapiro.test(pca_eur$PC2)
-
-####
 
 pca_mgb <- pca_genos %>%
     anti_join(sample_annotation) %>%

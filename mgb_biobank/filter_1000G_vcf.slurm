@@ -9,7 +9,7 @@
 #SBATCH --job-name=filter_1000G
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /home/ch229163/log/filter_1000G.%A.%a
+#SBATCH -o /temp_work/ch229163/log/filter_1000G.%A.%a
 
 # Load tools
 source /programs/biogrids.shrc
@@ -18,13 +18,13 @@ export BCFTOOLS_X=1.12
 # Define IO
 CHR=$SLURM_ARRAY_TASK_ID
 LABSHARE=/lab-share/IM-Gutierrez-e2/Public
-KGDIR=$LABSHARE/vitor/vcf_1000G
-VCFIN=$KGDIR/ALL.chr${CHR}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
+KGDIR=${LABSHARE}/vcf_1000G
+VCFIN=${KGDIR}/ALL.chr${CHR}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
 
-OUTDIR=$TEMP_WORK/VCF
-VCFTMP=$OUTDIR/chr${CHR}.1000G.tmp.vcf.gz
-VCFOUT=$OUTDIR/chr${CHR}.1000G.vcf.gz
-VARSKG=$OUTDIR/chr${CHR}.1000G.variants.txt
+OUTDIR=${TEMP_WORK}/VCF
+VCFTMP=${OUTDIR}/chr${CHR}.1000G.tmp.vcf.gz
+VCFOUT=${OUTDIR}/chr${CHR}.1000G.vcf.gz
+VARSKG=${OUTDIR}/chr${CHR}.1000G.variants.txt
 
 # first adjust chr notation
 zcat $VCFIN |\

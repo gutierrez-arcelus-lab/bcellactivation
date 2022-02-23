@@ -195,6 +195,7 @@ include_graphics("./bcell_bulk/plots/gene_level_ai_fcer2.png")
 | 0406  | 5,143 | ~80.0         | MEG_D_TopMed    |
 | 0407  | 4,847 | ~76.4         | MEG_E_TopMed    |
 | 0408  | 866   | ~40.0         | MEG_X1_TopMed   |
+| 0410  | 13,140| N/A           | N/A             | 
 
 - 1000 Genomes data:
   - ~2,500 individuals low coverage data realigned to GRCh38 (not NYGC version).
@@ -236,16 +237,8 @@ The workflow for the analyses below is described in `./mgb_biobank/README.md`.
 After visual inspection of the plot below, we select individuals with homozygosity < 0.985, which we assume to be females. That includes ~54.6% of the individuals.
 
 ```{r sex}
-include_graphics("./plots/chrX_het.png")
+include_graphics("./mgb_biobank/plots/chrX_het.png")
 ```
-
-
-There are ~30,000 variants which were actually genotyped on chrX, and rest was imputed. If we select the genotyped variants, we see higher heterozygosity.
-
-```{r sex_genotyped}
-include_graphics("./plots/chrX_het_genotyped.png")
-```
-
 
 
 #### Ancestry information from genotype data
@@ -255,14 +248,14 @@ include_graphics("./plots/chrX_het_genotyped.png")
 The PCA plot shows the MGB individuals in comparison with the 1000 Genomes data. We can see that individuals are distributed according to the 5 main continental groups. 
 
 ```{r pca_genos, echo=FALSE}
-include_graphics("./plots/pca.png")
+include_graphics("./mgb_biobank/plots/pca.png")
 ```
 
 We can really see that on the plot above, but most individuals appear to have high European ancestry.
 
 
 ```{r}
-include_graphics("./plots/pca_histogram.png")
+include_graphics("./mgb_biobank/plots/pca_histogram.png")
 ```
 
 
@@ -272,7 +265,7 @@ include_graphics("./plots/pca_histogram.png")
 In order to select individuals with European ancestry given PC coordinates, we gate the PCA plot based on the range of values for PC1–PC4 in the 1000 Genomes European set.
 
 ```{r pca_selection}
-include_graphics("./plots/pca_eur.png")
+include_graphics("./mgb_biobank/plots/pca_eur.png")
 ```
 
 
@@ -283,7 +276,7 @@ We selected SLE risk variants from Langefeld et al. and Bentham et al.
 From Langefeld et al., we took all variants at FDR = 5%. From Bentham, we selected the variants which are not in LD with any variant in Langefeld et al. ($$r^2 < 0.6$$).
 
 ```{r bentham_ld}
-include_graphics("./plots/sle_ld.png")
+include_graphics("./mgb_biobank/plots/sle_ld.png")
 ```
 
 Then, we computed a heterozygosity score that corresponds to the number of variants at which the individuals are heterozygotes. We also computed a weighted score that is simply the number of alleles times the log(OR), summed over all variants. Since the number of alleles for heterozygotes is equal to 1, that corresponds to simply summing the log(OR) over all SLE SNPs.
@@ -293,17 +286,17 @@ Since we are not interested in the direction of effect, we converted all ORs < 1
 This is the relationship between the two scores:
 
 ```{r het_score}
-include_graphics("./plots/het_scores_points.png")
+include_graphics("./mgb_biobank/plots/het_scores_points.png")
 ```
 
 This are the distributions according the European ancestry:
 
 ```{r het_score_dens}
-include_graphics("./plots/het_score_density.png")
+include_graphics("./mgb_biobank/plots/het_score_density.png")
 ```
 
 We can see that heterozygosity increases with European ancestry. We can also see that if we color the PCA plot by heterozygosity.
 
 ```{r pca_het_score}
-include_graphics("./plots/pca_het_scores.png")
+include_graphics("./mgb_biobank/plots/pca_het_scores.png")
 ```

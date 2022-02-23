@@ -5,7 +5,7 @@
 #SBATCH --mem=8gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
-#SBATCH --array=1-176
+#SBATCH --array=1-198
 #SBATCH --job-name=vcf_process
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
@@ -16,18 +16,18 @@ source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
 
 # Define directory and chromosome given array design file
-DESIGN=$SLURM_SUBMIT_DIR/array_design.txt
+DESIGN=${SLURM_SUBMIT_DIR}/array_design.txt
 BATCH=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $DESIGN )
 CHR=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $2 }' $DESIGN )
 
 # Define IO
 LABSHARE=/lab-share/IM-Gutierrez-e2/Public
-MGB=$LABSHARE/mgb_biobank/$BATCH/vcf
-VCFIN=$MGB/chr${CHR}.dose.vcf.gz
-IDS=$SLURM_SUBMIT_DIR/results/females_${BATCH}.txt
+MGB=${LABSHARE}/mgb_biobank/$BATCH/vcf
+VCFIN=${MGB}/chr${CHR}.dose.vcf.gz
+IDS=${SLURM_SUBMIT_DIR}/results/females_${BATCH}.txt
 
-OUTDIR=$TEMP_WORK/VCF
-VCFOUT=$OUTDIR/chr${CHR}.MGB.$BATCH.vcf.gz
+OUTDIR=${TEMP_WORK}/VCF
+VCFOUT=${OUTDIR}/chr${CHR}.MGB.${BATCH}.vcf.gz
 
 # Select biallelic SNPs only, with MAF >= 1%;
 # remove variants with any missing genotypes;
@@ -41,7 +41,8 @@ bcftools view --samples-file $IDS --force-samples $VCFIN |\
 tabix -p vcf $VCFOUT
 
 # Save Chromosome, Position, ID, Ref and Alt alleles to a file
-VARSMGB=$OUTDIR/chr${CHR}.MGB.$BATCH.variants.txt
+
+VARSMGB=${OUTDIR}/chr${CHR}.MGB.${BATCH}.variants.txt
 
 zcat $VCFOUT |\
     grep -v '^##' |\

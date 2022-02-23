@@ -22,17 +22,26 @@ CHR=$SLURM_ARRAY_TASK_ID
 
 # Define IO
 OUTDIR=${TEMP_WORK}/VCF
-VCFMGB=${OUTDIR}/chr${CHR}.MGB.04{01..08}.vcf.gz
-VCFKGP=${OUTDIR}/chr${CHR}.1000G.vcf.gz
-VARSMGB=${OUTDIR}/chr${CHR}.MGB.04{01..08}.variants.txt
-VARS1KG=${OUTDIR}/chr${CHR}.1000G.variants.txt
+
+## VCF
+VCFMGB=( $(echo ${OUTDIR}/chr${CHR}.MGB.04{01..08}.vcf.gz) )
+VCFMGB+=( $(echo ${OUTDIR}/chr${CHR}.MGB.0410.vcf.gz) )
+VCFKGP=$(echo ${OUTDIR}/chr${CHR}.1000G.vcf.gz)
+ALLVCF=( "${VCFMGB[@]}" $VCFKGP)
+
+## Variants
+VARSMGB=( $(echo ${OUTDIR}/chr${CHR}.MGB.04{01..08}.variants.txt) )
+VARSMGB+=( $(echo ${OUTDIR}/chr${CHR}.MGB.0410.variants.txt) )
+VARS1KG=$(echo ${OUTDIR}/chr${CHR}.1000G.variants.txt)
+ALLVARS=( "${VARSMGB[@]}" $VARS1KG )
+
 OUTPOS=${OUTDIR}/chr${CHR}.commonvars.pos
 
 # Extract common variants among datasets
-Rscript ${SLURM_SUBMIT_DIR}/match_snps.R $( eval echo $VARSMGB ) $VARS1KG $OUTPOS
+Rscript ${SLURM_SUBMIT_DIR}/match_snps.R $( echo "${ALLVARS[*]}" ) $OUTPOS
 
 # Filter MGB and 1000G VCFs for the same set of variants
-for f in $( eval echo $VCFMGB; echo $VCFKGP)
+for f in "${ALLVCF[@]}"
 do
     VCFOUT=$( echo $f | sed 's/vcf\.gz/filtered.vcf.gz/' )
     VCFOUTLIST+=($VCFOUT)

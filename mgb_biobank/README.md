@@ -15,7 +15,9 @@ Filtering is carried out by the scripts `filter_mgb_vcf.slurm` and `filter_1000G
 
 ### 1.2. Merge VCFs
 
-Then we merge the VCFs from 1000G and MGB for each chromosome, for the set of variants present in all VCFs (intersect), is run LD pruning with plink. This step is carried out by the script `merge_mgb_1000G.slurm`.
+Then we merge the VCFs from 1000G and MGB for each chromosome, for the set of variants present in all VCFs (intersect), and run LD pruning with plink. 
+
+This step is carried out by the script `merge_mgb_1000G.slurm`.
 
 ### 1.3. Concatenate
 
@@ -34,9 +36,11 @@ Run the R script `select_eur_individuals.R`
 
 We take the supplementary table from Langefeld et al. (2017) with 3 tiers with significant variants for different ancestries (directory `sle_variants`).
 
+Additionally, we take variants reported by Bentham et al. (2015), and one TLR7 variant discussed in the review paper by Teruel & Arlacon-Riquelme.
 
 - With the R script `parse_sle_variants.R`, we select all variants at FDR < 5% for Europeans;
 - Extract the genotypes for the selected variants from each chromosome and merge into a single VCF file with `extract_sle_vcf.sh`.
+- In order to compute the heterozygosity scores, we preferentially take Langefeld variants + variants not in LD from the other studies.
 
 
 ## Bonus: ADMIXTURE

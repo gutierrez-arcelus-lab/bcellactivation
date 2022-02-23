@@ -174,16 +174,17 @@ And the comparison with the SNP-level ASE:
 
 -   MGB:
 
-| Batch |   N   | Variants (MM) |       Source       |
-|:-----:|:-----:|:-------------:|:------------------:|
-| 0401  | 4,921 |    \~79.1     |    MEGA\_TopMed    |
-| 0402  | 5,336 |    \~80.1     |   MEGAEX\_TopMed   |
-| 0403  | 4,780 |    \~79.8     | MEG\_A1\_A\_TopMed |
-| 0404  | 5,016 |    \~80.9     | MEG\_A1\_B\_TopMed |
-| 0405  | 5,491 |    \~81.9     |   MEG\_C\_TopMed   |
-| 0406  | 5,143 |    \~80.0     |   MEG\_D\_TopMed   |
-| 0407  | 4,847 |    \~76.4     |   MEG\_E\_TopMed   |
-| 0408  |  866  |    \~40.0     |  MEG\_X1\_TopMed   |
+| Batch |   N    | Variants (MM) |       Source       |
+|:-----:|:------:|:-------------:|:------------------:|
+| 0401  | 4,921  |    \~79.1     |    MEGA\_TopMed    |
+| 0402  | 5,336  |    \~80.1     |   MEGAEX\_TopMed   |
+| 0403  | 4,780  |    \~79.8     | MEG\_A1\_A\_TopMed |
+| 0404  | 5,016  |    \~80.9     | MEG\_A1\_B\_TopMed |
+| 0405  | 5,491  |    \~81.9     |   MEG\_C\_TopMed   |
+| 0406  | 5,143  |    \~80.0     |   MEG\_D\_TopMed   |
+| 0407  | 4,847  |    \~76.4     |   MEG\_E\_TopMed   |
+| 0408  |  866   |    \~40.0     |  MEG\_X1\_TopMed   |
+| 0410  | 13,140 |      N/A      |        N/A         |
 
 -   1000 Genomes data:
     -   \~2,500 individuals low coverage data realigned to GRCh38 (not
@@ -228,13 +229,7 @@ After visual inspection of the plot below, we select individuals with
 homozygosity &lt; 0.985, which we assume to be females. That includes
 \~54.6% of the individuals.
 
-<img src="./plots/chrX_het.png" width="1500" />
-
-There are \~30,000 variants which were actually genotyped on chrX, and
-rest was imputed. If we select the genotyped variants, we see higher
-heterozygosity.
-
-<img src="./plots/chrX_het_genotyped.png" width="1200" />
+<img src="./mgb_biobank/plots/chrX_het.png" width="1500" />
 
 #### Ancestry information from genotype data
 
@@ -244,12 +239,12 @@ The PCA plot shows the MGB individuals in comparison with the 1000
 Genomes data. We can see that individuals are distributed according to
 the 5 main continental groups.
 
-<img src="./plots/pca.png" width="2400" />
+<img src="./mgb_biobank/plots/pca.png" width="2400" />
 
 We can really see that on the plot above, but most individuals appear to
 have high European ancestry.
 
-<img src="./plots/pca_histogram.png" width="1500" />
+<img src="./mgb_biobank/plots/pca_histogram.png" width="1500" />
 
 ##### Selecting individuals with high European ancestry
 
@@ -257,7 +252,7 @@ In order to select individuals with European ancestry given PC
 coordinates, we gate the PCA plot based on the range of values for
 PC1–PC4 in the 1000 Genomes European set.
 
-<img src="./plots/pca_eur.png" width="2400" />
+<img src="./mgb_biobank/plots/pca_eur.png" width="2400" />
 
 #### SLE variants
 
@@ -269,7 +264,7 @@ Langefeld et al. (
 *r*<sup>2</sup> &lt; 0.6
 ).
 
-<img src="./plots/sle_ld.png" width="2100" />
+<img src="./mgb_biobank/plots/sle_ld.png" width="2487" />
 
 Then, we computed a heterozygosity score that corresponds to the number
 of variants at which the individuals are heterozygotes. We also computed
@@ -283,13 +278,13 @@ ORs &lt; 1 to their reciprocal (1/OR).
 
 This is the relationship between the two scores:
 
-<img src="./plots/het_scores_points.png" width="1800" />
+<img src="./mgb_biobank/plots/het_scores_points.png" width="1800" />
 
 This are the distributions according the European ancestry:
 
-<img src="./plots/het_score_density.png" width="1350" />
+<img src="./mgb_biobank/plots/het_score_density.png" width="1350" />
 
 We can see that heterozygosity increases with European ancestry. We can
 also see that if we color the PCA plot by heterozygosity.
 
-<img src="./plots/pca_het_scores.png" width="1200" />
+<img src="./mgb_biobank/plots/pca_het_scores.png" width="1200" />

@@ -12,7 +12,7 @@
 
 source /programs/biogrids.shrc
 
-DIR=/lab-share/IM-Gutierrez-e2/Public/vitor/ase/mgb_biobank/results 
+DIR=${SLURM_SUBMIT_DIR}/results 
 PREFIX=allchr.merged.pruned
 VCF=${DIR}/${PREFIX}.vcf.gz
 OUT=${DIR}/${PREFIX}.pca
