@@ -85,8 +85,9 @@ ebv_bed <- ebv_expressed %>%
     select(chr, start, end, id = gene_id, gid, strd = strand, sampleid, tpm = TPM) %>%
     pivot_wider(names_from = sampleid, values_from = tpm) %>%
     select(names(bed_humans))
-
-bed_final <- bind_rows(bed_humans, ebv_bed)
+    
+bed_final <- bind_rows(bed_humans, ebv_bed) %>%
+    distinct(chr, id, .keep_all = TRUE) %>%
+    rename(`#chr` = chr)
 
 write_tsv(bed_final, "./geuvadis_salmon_quants_ebv.bed")
-

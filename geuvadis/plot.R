@@ -18,7 +18,7 @@ ebv_df <- left_join(ebv_quant, ebv_copies, by = c("sampleid" = "samples")) %>%
     filter(!is.na(`EBV load`), pop %in% c("GBR", "CEU", "TSI", "FIN"))
 
 
-ebv_genes_plot <- ggplot(ebv_df, aes(`EBV load`, tpm)) +
+ebv_genes_plot <- ggplot(ebv_df, aes(`EBV load`, log2(tpm + 1))) +
     geom_point(size = .5, alpha = .5) +
     facet_wrap(~gene_id, scales = "free_y") +
     scale_x_continuous(breaks = scales::pretty_breaks(3)) +
@@ -29,6 +29,7 @@ ebv_genes_plot <- ggplot(ebv_df, aes(`EBV load`, tpm)) +
     labs(y = "TPM")
 
 ggsave("./plots/ebv_genes.png", ebv_genes_plot, width = 10)
+ggsave("./plots/ebv_genes_log.png", ebv_genes_plot, width = 10, height = 7)
 
 
 ggplot(distinct(ebv_df, sampleid, lab, .keep_all = TRUE),
