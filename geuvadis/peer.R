@@ -49,4 +49,4 @@ PEER_setNmax_iterations(model, 1e6)
 PEER_setAdd_mean(model, TRUE)
 PEER_update(model)
 
-saveRDS(model, "./results/peer_model.rds")
+write_rds(model, "./results/peer_model.rds")

@@ -15,23 +15,15 @@ geuvadis_info <-
     distinct() %>%
     inner_join(samples_phase3, by = c("name" = "subject"))
 
-write_lines(geuvadis_info$ena_id, "./geuvadis_samples.txt")
-
-geuvadis_info %>%
-    filter(continent == "EUR") %>%
-    pull(name) %>%
-    write_lines("./geuvadis_1000G_ids.txt")
-
-
 ebv <- read_excel("./ebv_copynumbers_pone.0179446.xlsx") %>%
-    select(-pop)
+    select(-pop) %>%
+    mutate(`EBV load` = round(`EBV load`, 4))
 
-geuvadis_info %>%
+covars <- geuvadis_info %>%
     filter(continent == "EUR") %>%
-    left_join(ebv, by = c("name" = "samples")) %>%
-    select(sampleid = ena_id, pop, sex, lab, ebv_load = `EBV load`) %>%
-    write_tsv("./geuvadis_covariates.tsv")
+    inner_join(ebv, by = c("name" = "samples")) %>%
+    select(sampleid = ena_id, kgp_id = name, pop, sex, lab, ebv_load = `EBV load`)
+    
+write_tsv(covars, "./geuvadis_covariates.tsv")
+write_lines(covars$kgp_id, "./geuvadis_kgp_ids.txt")
 
-geuvadis_info %>%
-    select(ena_id, name) %>%
-    write_tsv("./geuvadis_ids_conversionkey.tsv")

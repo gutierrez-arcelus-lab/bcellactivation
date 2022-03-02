@@ -32,14 +32,14 @@ INDIR=${LABSHARE}/vcf_1000G
 OUTDIR=${SLURM_SUBMIT_DIR}/VCF
 VCFIN=${INDIR}/ALL.chr${CHR}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
 VCFOUT=${OUTDIR}/chr${CHR}.1000G.vcf.gz
-SAMPLES=${SLURM_SUBMIT_DIR}/geuvadis_1000G_ids.txt
+SAMPLES=${SLURM_SUBMIT_DIR}/geuvadis_kgp_ids.txt
 
 mkdir -p $OUTDIR
 
 # Filter 1000G
 bcftools view --samples-file $SAMPLES $VCFIN |\
     bcftools view --genotype ^miss --min-af 0.05:minor -m2 -M2 |\
-    bcftools annotate -x INFO,FORMAT - |\
+    bcftools annotate -x INFO,FORMAT --set-id +'%CHROM\_%POS\_%REF\_%FIRST_ALT' - |\
     bgzip -c > $VCFOUT
 
 tabix -p vcf $VCFOUT

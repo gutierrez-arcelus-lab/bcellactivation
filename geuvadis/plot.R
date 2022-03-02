@@ -49,3 +49,25 @@ ggplot(hla_gts, aes(reorder(allele, `EBV load`), `EBV load`)) +
     geom_quasirandom(method = "smiley", alpha = .5) +
     facet_wrap(~locus, ncol = 1, scales = "free") +
     theme_bw()
+
+
+# PCA genotypes
+pca <- read_delim("./VCF/allchr.1000G.pca", delim = " ") %>%
+    mutate(SampleID = str_extract(SampleID, "PC\\d+$")) %>%
+    rename(pc = SampleID) %>%
+    filter(pc %in% paste0("PC", 1:10)) %>%
+    pivot_longer(-pc, names_to = "sample_id") %>%
+    pivot_wider(names_from = pc, values_from = value)
+
+ids_df <- read_tsv("./geuvadis_ids.tsv")
+pop_df <- read_tsv("./geuvadis_covariates.tsv") %>%
+    left_join(ids_df, by = c("sampleid" = "ena_id")) %>%
+    select(sample_id = name, pop)
+
+pca %>%
+    left_join(pop_df) %>%
+    ggplot(aes(PC1, PC2, color = pop)) +
+    geom_point()
+
+
+
