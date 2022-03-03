@@ -36,7 +36,6 @@ FAIL=${PREFIX}_failtolift.bed
 if [ ! -f "$BED38" ]; then
   
     liftOver $BED $CHAIN $BED38 $FAIL 
-
 fi
 
 POS=${PREFIX}_hg38.txt
@@ -47,7 +46,7 @@ for BATCH in {01..08} 10
 do
     VCFIN=${LABSHARE}/mgb_biobank/04${BATCH}/vcf/${CHR}.dose.vcf.gz 
     VCFOUT=${TEMP_WORK}/VCF/${CHR}.04${BATCH}.sle.vcf.gz
-    SAMPLES=./results/females_04${BATCH}.txt
+    SAMPLES=./results/eur_females_04${BATCH}.txt
 
     bcftools view -R $POS --samples-file $SAMPLES --force-samples $VCFIN |\
     bcftools annotate -x INFO,FORMAT -O z -o $VCFOUT -
@@ -57,7 +56,7 @@ do
     VCFSCHR+=($VCFOUT)
 done
 
-MERGEDCHR=${TEMP_WORK}/VCF/${CHR}.sle.merged.vcf.gz
+MERGEDCHR=${SLURM_SUBMIT_DIR}/results/VCF/${CHR}.sle.merged.vcf.gz
 
 bcftools merge -O z -o $MERGEDCHR $( echo "${VCFSCHR[*]}" )
 tabix -p vcf $MERGEDCHR

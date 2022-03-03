@@ -12,9 +12,8 @@
 
 source /programs/biogrids.shrc
 
-DIR=${SLURM_SUBMIT_DIR}/results 
-PREFIX=allchr.merged.pruned
-VCF=${DIR}/${PREFIX}.vcf.gz
-OUT=${DIR}/${PREFIX}.pca
+PREFIX=${SLURM_SUBMIT_DIR}/results/VCF/allchr.merged.pruned
+VCF=${PREFIX}.vcf.gz
+OUT=${PREFIX}.pca
 
 plink --vcf $VCF --pca --threads $SLURM_CPUS_PER_TASK --out $OUT

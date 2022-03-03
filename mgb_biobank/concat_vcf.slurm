@@ -14,8 +14,8 @@ source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
 
 # Merge VCFs for each chromosome into a single VCF
-OUTDIR=${SLURM_SUBMIT_DIR}/results 
-VCFIN=${TEMP_WORK}/VCF/chr{1..22}.merged.pruned.vcf
+OUTDIR=${SLURM_SUBMIT_DIR}/results/VCF
+VCFIN=${OUTDIR}/chr{1..22}.merged.pruned.vcf
 PREFIX=${OUTDIR}/allchr.merged.pruned 
 VCFOUT=${PREFIX}.vcf.gz
 

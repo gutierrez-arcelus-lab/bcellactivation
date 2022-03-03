@@ -21,7 +21,7 @@ LABSHARE=/lab-share/IM-Gutierrez-e2/Public
 KGDIR=${LABSHARE}/vcf_1000G
 VCFIN=${KGDIR}/ALL.chr${CHR}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
 
-OUTDIR=${TEMP_WORK}/VCF
+OUTDIR=${SLURM_SUBMIT_DIR}/results/VCF
 VCFTMP=${OUTDIR}/chr${CHR}.1000G.tmp.vcf.gz
 VCFOUT=${OUTDIR}/chr${CHR}.1000G.vcf.gz
 VARSKG=${OUTDIR}/chr${CHR}.1000G.variants.txt

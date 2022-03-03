@@ -29,7 +29,7 @@ Submit the script `run_pca.slurm` to run PCA with plink.
 
 ### 1.5. Select MGB individuals with high European ancestry
 
-Run the R script `select_eur_individuals.R`
+In the `plot.R` script, select European individuals by "gating" the PCA plot.
 
 
 ## 2. Process SLE risk variants

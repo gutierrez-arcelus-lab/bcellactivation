@@ -21,7 +21,7 @@ export R_X=4.1
 CHR=$SLURM_ARRAY_TASK_ID
 
 # Define IO
-OUTDIR=${TEMP_WORK}/VCF
+OUTDIR=${SLURM_SUBMIT_DIR}/results/VCF
 
 ## VCF
 VCFMGB=( $(echo ${OUTDIR}/chr${CHR}.MGB.04{01..08}.vcf.gz) )

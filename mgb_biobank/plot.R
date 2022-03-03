@@ -8,14 +8,14 @@ library(ggsci)
 ## Select females
 batches <- sprintf("04%02d", c(1:8, 10))
 
-het <- paste0("/temp_work/ch229163/VCF/chrX.MGB.", batches, ".het") %>%
+het <- paste0("/temp_work/ch229163/VCF/chrX.", batches, ".genotyped.het") %>%
     setNames(batches) %>%
     map_dfr(read_tsv, .id = "batch") %>%
     mutate(hom = `O(HOM)`/N_SITES) 
 
 sex_1 <- ggplot(het, aes(hom)) +
     geom_histogram(bins = 50) +
-    geom_vline(xintercept = .985, linetype = 2) +
+    geom_vline(xintercept = .95, linetype = 2) +
     scale_x_continuous(labels = function(x) round(x, 2)) +
     theme_bw() +
     theme(panel.grid.major.x = element_blank(),
@@ -24,7 +24,7 @@ sex_1 <- ggplot(het, aes(hom)) +
     labs(x = "Homozygosity")
 
 sex_2 <- het %>%
-    mutate(sex = ifelse(hom > .985, "male", "female")) %>%
+    mutate(sex = ifelse(hom > .95, "male", "female")) %>%
     count(sex) %>%
     mutate(p = n/sum(n)) %>%
     ggplot(aes(x = 1, y = p, fill = sex)) +
@@ -44,46 +44,18 @@ plot_grid(sex_1, NULL, sex_2, nrow = 1, rel_widths = c(1, .1, .6))
 ggsave("./plots/chrX_het.png", width = 5)
 
 # Write ID files
-het %>%
-    filter(hom < .985) %>%
-    select(1:2) %>%
+females_df <- het %>%
+    filter(hom < .95) %>%
+    select(1:2) 
+
+females_df %>%
     group_nest(batch) %>%
-    mutate(out = paste0("./mgb_biobank/results/females_", batch, ".txt"),
+    mutate(out = paste0("./results/females_", batch, ".txt"),
            data = map(data, unlist)) %>%
     walk2(.x = .$data, .y = .$out, .f = ~write_lines(.x, .y))
 
 
-# Look at genotyped SNPs only (not imputed)
 
-het_genot <- 
-    paste0("/temp_work/ch229163/VCF/chrX.", batches, ".genotyped.het") %>%
-    setNames(batches) %>%
-    map_dfr(read_tsv, .id = "batch") %>%
-    mutate(hom = `O(HOM)`/N_SITES) 
-
-ggplot(het_genot, aes(hom)) +
-    geom_histogram(bins = 50) +
-    scale_x_continuous(labels = function(x) round(x, 2)) +
-    theme_bw() +
-    theme(panel.grid.major.x = element_blank(),
-          panel.grid.minor.x = element_blank(),
-          panel.grid.minor.y = element_blank()) +
-    labs(x = "Homozygosity")
-
-ggsave("./mgb_biobank/plots/chrX_het_genotyped.png", width = 4)
-
-females_all_snps <- het %>%
-    filter(hom < .985) %>%
-    select(1:2)
-
-females_genot_snps <- het_genot %>%
-    filter(hom < .9) %>%
-    select(1:2)
-
-anti_join(females_genot_snps, females_all_snps)
-
-anti_join(females_all_snps, females_genot_snps) %>%
-    left_join(het)
 
 
 ## PCA on genotype data
@@ -121,29 +93,29 @@ all_cols <- c(mgb_cols, afr_cols, eur_cols, sas_cols, eas_cols, amr_cols)
 
 
 ### read PCA results into R
-pca_genos <- "./results/allchr.merged.pruned.pca.eigenvec" %>%
+pca_genos <- "./results/VCF/allchr.merged.pruned.pca.eigenvec" %>%
     read_table2(col_names = FALSE) %>%
-    select(-1) %>%
-    select(X2:X10) %>%
-    setNames(c("sample_id", paste0("PC", 1:8)))
+    select(X1:X6) %>%
+    setNames(c("id1", "id2", paste0("PC", 1:4)))
 
 pca_kgp <- pca_genos %>%
-    inner_join(sample_annotation) 
+    inner_join(sample_annotation, by = c("id2" = "sample_id")) %>%
+    select(sample_id = id2, population, PC1:PC4)
 
 pca_mgb <- pca_genos %>%
-    anti_join(sample_annotation) %>%
-    mutate(population = "MGB_biobank")
+    anti_join(sample_annotation, by = c("id2" = "sample_id")) %>%
+    mutate(population = "MGB_biobank") %>%
+    unite("sample_id", c("id1", "id2"), sep = "_") %>%
+    select(sample_id, population, PC1:PC4)
 
 
 pca_df <- bind_rows(pca_mgb, pca_kgp) %>%
-    select(sample_id, population, PC1:PC8) %>%
     mutate(population = factor(population, levels = names(all_cols))) %>%
     mutate(dataset = ifelse(grepl("MGB", population), "MGB", "1000 Genomes"),
            dataset = factor(dataset, levels = rev(c("1000 Genomes", "MGB")))) 
 
 pca_thresholds <- pca_kgp %>%
     filter(population %in% c("GBR", "CEU", "TSI", "IBS", "FIN")) %>%
-    select(sample_id, population, PC1:PC4) %>%
     pivot_longer(PC1:PC4, names_to = "pc") %>%
     group_by(pc) %>%
     slice(-which.max(value)) %>%
@@ -213,9 +185,15 @@ mgb_eur_inds <- pca_df %>%
            between(PC2, pca_thresholds$PC2[1], pca_thresholds$PC2[2]),
            between(PC3, pca_thresholds$PC3[1], pca_thresholds$PC3[2]),
            between(PC4, pca_thresholds$PC4[1], pca_thresholds$PC4[2])) %>%
-    pull(sample_id)
+    select(sample_id)
 
-write_lines(mgb_eur_inds, "./results/mgb_eur.txt")
+inner_join(mgb_eur_inds, females_df, by = c("sample_id" = "INDV"))  %>%
+    select(batch, sample_id) %>%
+    group_nest(batch) %>%
+    mutate(out = paste0("./results/eur_females_", batch, ".txt"),
+           data = map(data, unlist)) %>%
+    walk2(.x = .$data, .y = .$out, .f = ~write_lines(.x, .y))
+
 
 pca_eur_df <- pca_df %>%
     select(sample_id, dataset, population, PC1:PC4) %>%
@@ -300,14 +278,9 @@ ld_plot <- ggplot(ld_df, aes(pos, r2)) +
 ggsave("./plots/sle_ld.png", ld_plot, height = 6)
 
 # Heterozygosity scores
-
-scores_df <- read_tsv("./sle_variants/scores.tsv") %>%
-    extract(sample_id, c("sample_id"), ".+_(.+)") %>%
-    mutate(top_eur = sample_id %in% mgb_eur_inds) %>%
-    arrange(desc(het_score_wt))
+scores_df <- read_tsv("./sle_variants/scores.tsv")
 
 candidate_inds <- scores_df %>%
-    filter(top_eur) %>%
     group_by(sample_id) %>%
     slice(which.max(het_score)) %>%
     ungroup() %>%
@@ -329,6 +302,25 @@ scores_df <- scores_df %>%
     slice(which.max(het_score)) %>%
     ungroup()
 
+scores_df %>%
+    group_by(het_score) %>%
+    mutate(y = 1:n()) %>%
+    arrange(het_score) %>%
+    ggplot(aes(het_score, y = y, color = candidate)) +
+    geom_jitter(size = .2, show.legend = FALSE) +
+    scale_color_manual(values = c("FALSE" = "grey", "TRUE" = "slateblue")) +
+    theme_minimal() +
+    theme(panel.grid = element_blank()) +
+    labs(x = "Number of heterozygous SLE variants",
+         y = "N")
+
+ggsave("./plots/het_scores_dist.png", width = 5, height = 3)
+
+
+
+
+
+## Legacy code #################################################################
 
 ggplot(scores_df, aes(het_score, het_score_wt)) +
     geom_point(aes(color = candidate), size = .5, alpha = .25) +
@@ -338,7 +330,7 @@ ggplot(scores_df, aes(het_score, het_score_wt)) +
     labs(x = "Heterozigosity score", 
          y = "Weighted heterozygosity score",
          color = "Candidate for\nselection?")
-    
+
 
 ggsave("./plots/het_scores_points.png", width = 6, height = 4)
 
@@ -393,10 +385,6 @@ ggsave("./plots/pca_het_scores.png", width = 4, height = 2.5)
 
 
 
-
-
-
-## Legacy code #################################################################
 
 # kmeans
 

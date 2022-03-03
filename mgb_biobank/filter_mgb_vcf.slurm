@@ -26,7 +26,7 @@ MGB=${LABSHARE}/mgb_biobank/$BATCH/vcf
 VCFIN=${MGB}/chr${CHR}.dose.vcf.gz
 IDS=${SLURM_SUBMIT_DIR}/results/females_${BATCH}.txt
 
-OUTDIR=${TEMP_WORK}/VCF
+OUTDIR=${SLURM_SUBMIT_DIR}/results/VCF
 VCFOUT=${OUTDIR}/chr${CHR}.MGB.${BATCH}.vcf.gz
 
 # Select biallelic SNPs only, with MAF >= 1%;

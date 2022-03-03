@@ -174,17 +174,17 @@ And the comparison with the SNP-level ASE:
 
 -   MGB:
 
-| Batch |   N    | Variants (MM) |       Source       |
-|:-----:|:------:|:-------------:|:------------------:|
-| 0401  | 4,921  |    \~79.1     |    MEGA\_TopMed    |
-| 0402  | 5,336  |    \~80.1     |   MEGAEX\_TopMed   |
-| 0403  | 4,780  |    \~79.8     | MEG\_A1\_A\_TopMed |
-| 0404  | 5,016  |    \~80.9     | MEG\_A1\_B\_TopMed |
-| 0405  | 5,491  |    \~81.9     |   MEG\_C\_TopMed   |
-| 0406  | 5,143  |    \~80.0     |   MEG\_D\_TopMed   |
-| 0407  | 4,847  |    \~76.4     |   MEG\_E\_TopMed   |
-| 0408  |  866   |    \~40.0     |  MEG\_X1\_TopMed   |
-| 0410  | 13,140 |      N/A      |        N/A         |
+| Batch |   N    | Variants (M) |       Source       |
+|:-----:|:------:|:------------:|:------------------:|
+| 0401  | 4,921  |    \~79.1    |    MEGA\_TopMed    |
+| 0402  | 5,336  |    \~80.1    |   MEGAEX\_TopMed   |
+| 0403  | 4,780  |    \~79.8    | MEG\_A1\_A\_TopMed |
+| 0404  | 5,016  |    \~80.9    | MEG\_A1\_B\_TopMed |
+| 0405  | 5,491  |    \~81.9    |   MEG\_C\_TopMed   |
+| 0406  | 5,143  |    \~80.0    |   MEG\_D\_TopMed   |
+| 0407  | 4,847  |    \~76.4    |   MEG\_E\_TopMed   |
+| 0408  |  866   |    \~40.0    |  MEG\_X1\_TopMed   |
+| 0410  | 13,140 |   \~105.8    |   GSA\_A\_TopMed   |
 
 -   1000 Genomes data:
     -   \~2,500 individuals low coverage data realigned to GRCh38 (not
@@ -225,9 +225,11 @@ The workflow for the analyses below is described in
 
 #### Select females
 
+We extracted the genotyped variants from the chrX VCF (not imputed).
+
 After visual inspection of the plot below, we select individuals with
-homozygosity &lt; 0.985, which we assume to be females. That includes
-\~54.6% of the individuals.
+homozygosity &lt; 0.95, which we assume to be females. That includes
+\~55% of the individuals.
 
 <img src="./mgb_biobank/plots/chrX_het.png" width="1500" />
 
@@ -264,27 +266,12 @@ Langefeld et al. (
 *r*<sup>2</sup> &lt; 0.6
 ).
 
-<img src="./mgb_biobank/plots/sle_ld.png" width="2487" />
+<img src="./mgb_biobank/plots/sle_ld.png" width="2284" />
 
 Then, we computed a heterozygosity score that corresponds to the number
-of variants at which the individuals are heterozygotes. We also computed
-a weighted score that is simply the number of alleles times the log(OR),
-summed over all variants. Since the number of alleles for heterozygotes
-is equal to 1, that corresponds to simply summing the log(OR) over all
-SLE SNPs.
+of variants at which the individuals are heterozygotes.
 
-Since we are not interested in the direction of effect, we converted all
-ORs &lt; 1 to their reciprocal (1/OR).
+Here is the distribution of scores among the \~19K European females. In
+blue we have the indiviuals that would be candidates for selection.
 
-This is the relationship between the two scores:
-
-<img src="./mgb_biobank/plots/het_scores_points.png" width="1800" />
-
-This are the distributions according the European ancestry:
-
-<img src="./mgb_biobank/plots/het_score_density.png" width="1350" />
-
-We can see that heterozygosity increases with European ancestry. We can
-also see that if we color the PCA plot by heterozygosity.
-
-<img src="./mgb_biobank/plots/pca_het_scores.png" width="1200" />
+<img src="./mgb_biobank/plots/het_scores_dist.png" width="1500" />

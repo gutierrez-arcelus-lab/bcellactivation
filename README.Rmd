@@ -185,7 +185,7 @@ include_graphics("./bcell_bulk/plots/gene_level_ai_fcer2.png")
 
 - MGB: 
 
-| Batch | N     | Variants (MM) | Source          |
+| Batch | N     | Variants (M)  | Source          |
 |:-----:|:-----:|:-------------:|:---------------:|
 | 0401  | 4,921 | ~79.1         | MEGA_TopMed     |
 | 0402  | 5,336 | ~80.1         | MEGAEX_TopMed   |
@@ -195,7 +195,7 @@ include_graphics("./bcell_bulk/plots/gene_level_ai_fcer2.png")
 | 0406  | 5,143 | ~80.0         | MEG_D_TopMed    |
 | 0407  | 4,847 | ~76.4         | MEG_E_TopMed    |
 | 0408  | 866   | ~40.0         | MEG_X1_TopMed   |
-| 0410  | 13,140| N/A           | N/A             | 
+| 0410  | 13,140| ~105.8        | GSA_A_TopMed    | 
 
 - 1000 Genomes data:
   - ~2,500 individuals low coverage data realigned to GRCh38 (not NYGC version).
@@ -234,7 +234,9 @@ The workflow for the analyses below is described in `./mgb_biobank/README.md`.
 
 #### Select females
 
-After visual inspection of the plot below, we select individuals with homozygosity < 0.985, which we assume to be females. That includes ~54.6% of the individuals.
+We extracted the genotyped variants from the chrX VCF (not imputed). 
+
+After visual inspection of the plot below, we select individuals with homozygosity < 0.95, which we assume to be females. That includes ~55% of the individuals.
 
 ```{r sex}
 include_graphics("./mgb_biobank/plots/chrX_het.png")
@@ -279,24 +281,11 @@ From Langefeld et al., we took all variants at FDR = 5%. From Bentham, we select
 include_graphics("./mgb_biobank/plots/sle_ld.png")
 ```
 
-Then, we computed a heterozygosity score that corresponds to the number of variants at which the individuals are heterozygotes. We also computed a weighted score that is simply the number of alleles times the log(OR), summed over all variants. Since the number of alleles for heterozygotes is equal to 1, that corresponds to simply summing the log(OR) over all SLE SNPs.
+Then, we computed a heterozygosity score that corresponds to the number of variants at which the individuals are heterozygotes.
 
-Since we are not interested in the direction of effect, we converted all ORs < 1 to their reciprocal (1/OR).
-
-This is the relationship between the two scores:
+Here is the distribution of scores among the ~19K European females. In blue we have the indiviuals that would be candidates for selection.
 
 ```{r het_score}
-include_graphics("./mgb_biobank/plots/het_scores_points.png")
+include_graphics("./mgb_biobank/plots/het_scores_dist.png")
 ```
 
-This are the distributions according the European ancestry:
-
-```{r het_score_dens}
-include_graphics("./mgb_biobank/plots/het_score_density.png")
-```
-
-We can see that heterozygosity increases with European ancestry. We can also see that if we color the PCA plot by heterozygosity.
-
-```{r pca_het_score}
-include_graphics("./mgb_biobank/plots/pca_het_scores.png")
-```

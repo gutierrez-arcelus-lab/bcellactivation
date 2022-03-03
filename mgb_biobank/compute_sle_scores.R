@@ -1,9 +1,9 @@
 library(tidyverse)
 
 ld_vars <- read_tsv("./sle_variants/sle_ld.tsv") %>%
-    filter(r2 >= 0.6) %>%
-    distinct(bentham) %>%
-    pull(bentham)
+    filter(langefeld != bentham, r2 >= 0.6) %>%
+    distinct(chr, bentham) %>%
+    pivot_longer(-chr, names_to = "study", values_to = "snp_id") 
 
 bed <- "./sle_variants/sle_variants_hg38.bed" %>%
     read_tsv(col_names = c("chr", "pos", "end"))
@@ -12,7 +12,8 @@ var_df <- "./sle_variants/sle_variants.tsv" %>%
     read_tsv() %>%
     mutate(or = ifelse(or < 1L, 1L/or, or)) %>%
     select(-pos) %>%
-    add_column(pos = bed$pos, .after = "snp_id")
+    add_column(pos = bed$pos, .after = "snp_id") %>%
+    anti_join(ld_vars, by = c("study", "chr", "snp_id"))
 
 vcf <- read_tsv("./sle_variants/sle.MGB.vcf", comment = "##")
 
