@@ -281,26 +281,21 @@ ggsave("./plots/sle_ld.png", ld_plot, height = 6)
 scores_df <- read_tsv("./sle_variants/scores.tsv")
 
 candidate_inds <- scores_df %>%
-    group_by(sample_id) %>%
+    mutate(subject_id = str_extract(sample_id, "\\d+$")) %>%
+    group_by(subject_id) %>%
     slice(which.max(het_score)) %>%
     ungroup() %>%
-    arrange(desc(het_score)) %>%
-    slice(1:1000) %>%
-    pull(sample_id)
-
+    arrange(desc(het_score), desc(het_score_wt)) %>%
+    slice(1:1000)
 
 candidate_inds %>%
-    str_split("-") %>%
-    map_chr(2) %>%
+    pull(subject_id) %>%
     as.numeric() %>%
     sort() %>%
     write_lines("./candidate_individuals_ids.txt")
 
 scores_df <- scores_df %>%
-    mutate(candidate = sample_id %in% candidate_inds) %>%
-    group_by(sample_id) %>%
-    slice(which.max(het_score)) %>%
-    ungroup()
+    mutate(candidate = sample_id %in% candidate_inds$sample_id)
 
 scores_df %>%
     group_by(het_score) %>%
