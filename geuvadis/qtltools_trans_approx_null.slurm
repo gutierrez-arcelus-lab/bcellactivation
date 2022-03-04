@@ -2,7 +2,7 @@
 
 #SBATCH -N 1
 #SBATCH -c 1
-#SBATCH --mem=32gb
+#SBATCH --mem=16gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
 #SBATCH --job-name=QTLTRANS-permute
@@ -18,21 +18,12 @@ GENOT=${SLURM_SUBMIT_DIR}/VCF/allchr.1000G.vcf.gz
 PHENO=${SLURM_SUBMIT_DIR}/ebv_phenotypes_corrected.bed.gz
 OUTDIR=${SLURM_SUBMIT_DIR}/results/qtltools 
 SEED=123
-OUTPERMUT=${OUTDIR}/trans.perm.${SEED}
+OUTPERMUT=${OUTDIR}/trans.sample
 
 # Permutation pass
 QTLtools trans \
     --vcf $GENOT \
     --bed $PHENO \
-    --permute --threshold 1 \
-    --seed $SEED \
+    --sample 100 \
     --out $OUTPERMUT
 
-# FDR
-#NOMOUT=${OUTDIR}/trans.nominal
-#OUT=${OUTDIR}/trans.fdr.txt
-#
-#Rscript ${SLURM_SUBMIT_DIR}/qtltools_runFDR_ftrans.R \
-#    ${NOMOUT}.hits.txt.gz \
-#    ${OUTPERMUT}.hits.txt.gz \
-#    $OUT

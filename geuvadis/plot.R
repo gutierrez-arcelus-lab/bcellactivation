@@ -69,5 +69,53 @@ pca %>%
     ggplot(aes(PC1, PC2, color = pop)) +
     geom_point()
 
+# EBV trans-eQTL
+
+library(qqman)
+
+
+nominal <- "./results/qtltools/trans.adjust.hits.txt.gz" %>%
+    read_delim(delim = " ", col_types = "ccdccdddddd") %>%
+    select(SNP = VID, CHR = VCHR, BP = VPOS, P = APVAL) %>%
+    mutate(CHR = ifelse(CHR == "X", 23, CHR),
+           CHR = as.integer(CHR))
+    
+    
+fdr <- "./results/qtltools/trans.approx.fdr.txt" %>%
+    read_delim(delim = " ", col_types = "ccdccdddddd", col_names = FALSE)
+    
+png("./plots/trans_manhattan.png", width = 8, height = 3, units = "in", res = 200)
+manhattan(nominal, suggestiveline = FALSE, genomewideline = FALSE,
+          col = c("blue4", "orange3"), highlight = fdr$X4)
+dev.off()
+
+
+vcf <- "./results/qtltools/signif_var.vcf" %>%
+    read_tsv(comment = "##") %>%
+    select(snp_id = ID, starts_with("HG"), starts_with("NA")) %>%
+    pivot_longer(-snp_id, names_to = "sample_id", values_to = "gt") %>%
+    separate_rows(gt, sep = "\\|") %>%
+    mutate(gt = as.numeric(gt)) %>%
+    group_by(snp_id, sample_id) %>%
+    summarise(dosage = sum(gt)) %>%
+    ungroup()
+
+ebv_expression <- read_tsv("./ebv_phenotypes_corrected.bed.gz") %>%
+    filter(id == fdr$X1) %>%
+    select(gene_id = id, starts_with("HG"), starts_with("NA")) %>%
+    pivot_longer(-gene_id, names_to = "sample_id", values_to = "tpm")
+    
+qtl_df <- inner_join(vcf, ebv_expression)
+
+ggplot(qtl_df, aes(factor(dosage), tpm)) +
+    geom_violin(fill = "grey80", alpha = .5, color = "grey80") +
+    geom_quasirandom(method = "smiley") +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    labs(x = "Dosage", y = "STD normal corrected expression")
+    
+ggsave("./plots/trans_qtl.png", height = 4, width = 6)
+
+
 
 
