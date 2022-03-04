@@ -289,3 +289,13 @@ Here is the distribution of scores among the ~19K European females. In blue we h
 include_graphics("./mgb_biobank/plots/het_scores_dist.png")
 ```
 
+##### Duplicates
+
+In batch 0410 we have ~6,100 individuals who were included already in the biobank, but were apparently re-genotyped with the GSA array. These individuals have different genotypes at some loci, and that is reflected in the heterozigosity score.
+
+```{r}
+include_graphics("./mgb_biobank/plots/duplicates.png")
+```
+
+
+

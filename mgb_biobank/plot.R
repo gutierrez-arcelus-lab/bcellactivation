@@ -278,10 +278,10 @@ ld_plot <- ggplot(ld_df, aes(pos, r2)) +
 ggsave("./plots/sle_ld.png", ld_plot, height = 6)
 
 # Heterozygosity scores
-scores_df <- read_tsv("./sle_variants/scores.tsv")
-
+scores_df <- read_tsv("./sle_variants/scores.tsv") %>%
+    mutate(subject_id = str_extract(sample_id, "\\d+$"))
+    
 candidate_inds <- scores_df %>%
-    mutate(subject_id = str_extract(sample_id, "\\d+$")) %>%
     group_by(subject_id) %>%
     slice(which.max(het_score)) %>%
     ungroup() %>%
@@ -294,10 +294,13 @@ candidate_inds %>%
     sort() %>%
     write_lines("./candidate_individuals_ids.txt")
 
-scores_df <- scores_df %>%
-    mutate(candidate = sample_id %in% candidate_inds$sample_id)
+scores_plot_df <- scores_df %>%
+    mutate(candidate = sample_id %in% candidate_inds$sample_id) %>%
+    group_by(subject_id) %>%
+    slice(which.max(het_score)) %>%
+    ungroup()
 
-scores_df %>%
+scores_plot_df %>%
     group_by(het_score) %>%
     mutate(y = 1:n()) %>%
     arrange(het_score) %>%
@@ -311,7 +314,31 @@ scores_df %>%
 
 ggsave("./plots/het_scores_dist.png", width = 5, height = 3)
 
+# Duplicates
 
+dups_df <- scores_df %>%
+    add_count(subject_id) %>%
+    filter(n > 1) %>%
+    select(sample_id, subject_id, het_score) %>%
+    left_join(select(het, batch, sample_id = INDV)) %>%
+    arrange(subject_id, batch) %>%
+    group_by(subject_id) %>%
+    mutate(i = 1:n()) %>%
+    ungroup() %>%
+    select(-sample_id, -batch) %>%
+    pivot_wider(names_from = i, values_from = het_score) %>%
+    rename(`previous batch` = `1`, `batch 0410` = `2`)
+
+ggplot(dups_df, aes(`batch 0410`, `previous batch`)) +
+    geom_point(size = .25) +
+    theme_bw() +
+    theme(panel.grid.minor = element_blank(),
+          text = element_text(size = 8),
+          plot.title = element_text(size = 6)) +
+    coord_fixed() +
+    labs(title = "Number of SLE variants at which an individual is heterozygote\nfor duplicates in MGB Biobank")
+
+ggsave("./plots/duplicates.png", width = 3, height = 3)
 
 
 
