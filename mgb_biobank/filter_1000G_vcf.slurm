@@ -18,31 +18,14 @@ export BCFTOOLS_X=1.12
 # Define IO
 CHR=$SLURM_ARRAY_TASK_ID
 LABSHARE=/lab-share/IM-Gutierrez-e2/Public
-KGDIR=${LABSHARE}/vcf_1000G
-VCFIN=${KGDIR}/ALL.chr${CHR}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
-
+VCFIN=${LABSHARE}/vcf_1000G/ALL.chr${CHR}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
 OUTDIR=${SLURM_SUBMIT_DIR}/results/VCF
-VCFTMP=${OUTDIR}/chr${CHR}.1000G.tmp.vcf.gz
 VCFOUT=${OUTDIR}/chr${CHR}.1000G.vcf.gz
-VARSKG=${OUTDIR}/chr${CHR}.1000G.variants.txt
-
-# first adjust chr notation
-zcat $VCFIN |\
-    awk '{if($0 !~ /^#/) print "chr"$0; else print $0}' - |\
-    bgzip -c > $VCFTMP
-
-tabix -p vcf $VCFTMP
 
 # Filter 1000G
-bcftools view --genotype ^miss --types snps -m2 -M2 $VCFTMP |\
-    bcftools view --min-af 0.01:minor - |\
-    bcftools annotate -x INFO,FORMAT - |\
+bcftools annotate -x INFO,FORMAT --rename-chrs ${SLURM_SUBMIT_DIR}/chr_names.txt $VCFIN |\
+    bcftools norm -m +both |\
+    bcftools view --genotype ^miss --types snps -m2 -M2 --min-af 0.01:minor |\
     bgzip -c > $VCFOUT
 
 tabix -p vcf $VCFOUT
-
-# Save Chromosome, Position, ID, Ref and Alt alleles to a file
-zcat $VCFOUT |\
-    grep -v '^##' |\
-    awk '{print $1, $2, $3, $4, $5}' > $VARSKG
-

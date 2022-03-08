@@ -329,7 +329,7 @@ dups_df <- scores_df %>%
     pivot_wider(names_from = i, values_from = het_score) %>%
     rename(`previous batch` = `1`, `batch 0410` = `2`)
 
-ggplot(dups_df, aes(`batch 0410`, `previous batch`)) +
+dups_plot <- ggplot(dups_df, aes(`batch 0410`, `previous batch`)) +
     geom_point(size = .25) +
     theme_bw() +
     theme(panel.grid.minor = element_blank(),
@@ -338,7 +338,7 @@ ggplot(dups_df, aes(`batch 0410`, `previous batch`)) +
     coord_fixed() +
     labs(title = "Number of SLE variants at which an individual is heterozygote\nfor duplicates in MGB Biobank")
 
-ggsave("./plots/duplicates.png", width = 3, height = 3)
+ggsave("./plots/duplicates.png", dups_plot, width = 3, height = 3)
 
 
 

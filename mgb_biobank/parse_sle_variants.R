@@ -105,5 +105,20 @@ bed <- info_df %>%
     select(chr, start = pos) %>%
     mutate(end = start)
 
+bed_out <- "./sle_variants/sle_variants.bed"
+
 write_tsv(info_df, "./sle_variants/sle_variants.tsv")
-write_tsv(bed, "./sle_variants/sle_variants.bed", col_names = FALSE)
+write_tsv(bed, bed_out, col_names = FALSE)
+
+# convert to hg38
+chain = "/reference_databases/ReferenceGenome/liftover_chain/hg19/hg19ToHg38.over.chain.gz"
+bed38 = "./sle_variants/sle_variants_hg38.bed"
+fail = "./sle_variants/sle_variants_failtolift.bed"
+
+command <- sprintf("liftOver %s %s %s %s", bed_out, chain, bed38, fail) 
+system(command)
+
+read_tsv(bed38, col_names = FALSE) %>%
+    select(1:2) %>%
+    write_tsv("./sle_variants/sle_variants_hg38.txt", col_names = FALSE)
+

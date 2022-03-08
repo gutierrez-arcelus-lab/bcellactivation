@@ -27,13 +27,9 @@ vcf <- "./sle_variants/sle.MGB.vcf" %>%
     filter(!(any(genotype == "./."))) %>%
     ungroup()
 
-# transforming allele "2" here to a dose of 1 for simplicity;
-# there is only 1 individual
-# It should not disturb LD calculation
 vcf_dose <- vcf %>%
     mutate(dose = case_when(genotype == "0|0" ~ 0L,
 			    genotype == "0|1" ~ 1L,
-			    genotype == "0|2" ~ 1L,
 			    genotype == "1|0" ~ 1L,
 			    genotype == "1|1" ~ 2L)) %>%
     select(-genotype)

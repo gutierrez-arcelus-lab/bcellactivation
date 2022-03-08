@@ -15,8 +15,8 @@ export BCFTOOLS_X=1.12
 
 # Merge VCFs for each chromosome into a single VCF
 OUTDIR=${SLURM_SUBMIT_DIR}/results/VCF
-VCFIN=${OUTDIR}/chr{1..22}.merged.pruned.vcf
-PREFIX=${OUTDIR}/allchr.merged.pruned 
+VCFIN=${OUTDIR}/chr{1..22}.isec.merged.pruned.vcf
+PREFIX=${OUTDIR}/allchr.isec.merged.pruned 
 VCFOUT=${PREFIX}.vcf.gz
 
 bcftools concat -o $VCFOUT -O z $( eval echo $VCFIN )
@@ -28,27 +28,3 @@ plink --vcf $VCFOUT \
     --make-bed \
     --out $PREFIX
 
-## Subset VCF for individuals in 1000G or MGB
-## I used to do this in order to run ADMIXTURE
-#VCF1000G=${PREFIX}.1000G.vcf.gz
-#VCFMGB=${PREFIX}.MGB.vcf.gz
-#
-#grep "^NA[0-9]\|^HG[0-9]" ${PREFIX}.fam |\
-#    awk '{ print $1"_"$2 }' - > ${OUTDIR}/samples.1000G.txt
-#
-#grep "^[0-9]" ${PREFIX}.fam |\
-#    awk '{ print $1"_"$2 }' - > ${OUTDIR}/samples.MGB.txt
-#
-#bcftools view --samples-file ${OUTDIR}/samples.1000G.txt -O z -o $VCF1000G $VCFOUT
-#bcftools view --samples-file ${OUTDIR}/samples.MGB.txt -O z -o $VCFMGB $VCFOUT
-#
-#plink --vcf $VCF1000G \
-#    --keep-allele-order \
-#    --make-bed \
-#    --out ${PREFIX}.1000G
-#
-#plink --vcf $VCFMGB \
-#    --keep-allele-order \
-#    --make-bed \
-#    --out ${PREFIX}.MGB
-#

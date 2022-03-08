@@ -22,8 +22,7 @@ CHR=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $2 }' $DESIGN )
 
 # Define IO
 LABSHARE=/lab-share/IM-Gutierrez-e2/Public
-MGB=${LABSHARE}/mgb_biobank/$BATCH/vcf
-VCFIN=${MGB}/chr${CHR}.dose.vcf.gz
+VCFIN=${LABSHARE}/mgb_biobank/$BATCH/vcf/chr${CHR}.dose.vcf.gz 
 IDS=${SLURM_SUBMIT_DIR}/results/females_${BATCH}.txt
 
 OUTDIR=${SLURM_SUBMIT_DIR}/results/VCF
@@ -34,17 +33,8 @@ VCFOUT=${OUTDIR}/chr${CHR}.MGB.${BATCH}.vcf.gz
 # extract GT info and discard dosages and probabilities;
 bcftools view --samples-file $IDS --force-samples $VCFIN |\
     bcftools annotate -x INFO,FORMAT - |\
-    bcftools view --genotype ^miss --types snps -m2 -M2 - |\
-    bcftools view --min-af 0.01:minor - |\
+    bcftools norm -m +both - |\
+    bcftools view --genotype ^miss --types snps -m2 -M2 --min-af 0.01:minor - |\
     bgzip -c > $VCFOUT    
 
 tabix -p vcf $VCFOUT
-
-# Save Chromosome, Position, ID, Ref and Alt alleles to a file
-
-VARSMGB=${OUTDIR}/chr${CHR}.MGB.${BATCH}.variants.txt
-
-zcat $VCFOUT |\
-    grep -v '^##' |\
-    awk '{print $1, $2, $3, $4, $5}' > $VARSMGB
-

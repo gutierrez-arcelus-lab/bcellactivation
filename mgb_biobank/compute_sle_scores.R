@@ -31,7 +31,6 @@ vcf_recode <- vcf_long %>%
 			    genotype == "1|0" ~ "1",
 			    genotype == "0|1" ~ "1",
 			    genotype == "1|1" ~ "2",
-			    genotype == "0|2" ~ "1",
 			    TRUE ~ NA_character_)) %>%
     group_by(snp_id) %>%
     filter(!any(is.na(dose))) %>%

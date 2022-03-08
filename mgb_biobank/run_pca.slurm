@@ -12,7 +12,7 @@
 
 source /programs/biogrids.shrc
 
-PREFIX=${SLURM_SUBMIT_DIR}/results/VCF/allchr.merged.pruned
+PREFIX=${SLURM_SUBMIT_DIR}/results/VCF/allchr.isec.merged.pruned
 VCF=${PREFIX}.vcf.gz
 OUT=${PREFIX}.pca
 
