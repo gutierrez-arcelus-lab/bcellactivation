@@ -54,6 +54,14 @@ females_df %>%
            data = map(data, unlist)) %>%
     walk2(.x = .$data, .y = .$out, .f = ~write_lines(.x, .y))
 
+##
+
+females_df <- paste0("./results/females_", batches, ".txt") %>%
+    setNames(batches) %>%
+    map_df(~tibble(sample_id = read_lines(.)), .id = "batch")
+
+##
+
 ## PCA on genotype data
 
 ### Metadata for 1000G samples
@@ -89,7 +97,7 @@ all_cols <- c(mgb_cols, afr_cols, eur_cols, sas_cols, eas_cols, amr_cols)
 
 
 ### read PCA results into R
-pca_genos <- "./results/VCF/allchr.merged.pruned.pca.eigenvec" %>%
+pca_genos <- "./results/VCF/allchr.isec.merged.pruned.pca.eigenvec" %>%
     read_table2(col_names = FALSE) %>%
     select(X1:X6) %>%
     setNames(c("id1", "id2", paste0("PC", 1:4)))
@@ -183,7 +191,7 @@ mgb_eur_inds <- pca_df %>%
            between(PC4, pca_thresholds$PC4[1], pca_thresholds$PC4[2])) %>%
     select(sample_id)
 
-inner_join(mgb_eur_inds, females_df, by = c("sample_id" = "INDV"))  %>%
+inner_join(mgb_eur_inds, females_df, by = c("sample_id"))  %>%
     select(batch, sample_id) %>%
     group_nest(batch) %>%
     mutate(out = paste0("./results/eur_females_", batch, ".txt"),
@@ -194,7 +202,7 @@ inner_join(mgb_eur_inds, females_df, by = c("sample_id" = "INDV"))  %>%
 pca_eur_df <- pca_df %>%
     select(sample_id, dataset, population, PC1:PC4) %>%
     mutate(population = as.character(population),
-           population = ifelse(sample_id %in% mgb_eur_inds, "MGB_eur", population),
+           population = ifelse(sample_id %in% mgb_eur_inds$sample_id, "MGB_eur", population),
            population = factor(population, levels = names(all_cols)))
 
 all_cols[1:2] <- c("grey", "black")
@@ -287,7 +295,7 @@ scores_df <- read_tsv("./sle_variants/scores.tsv") %>%
     
 candidate_inds <- scores_df %>%
     arrange(desc(het_score), desc(het_score_wt)) %>%
-    slice(1:1000)
+    slice(1:2000)
 
 candidate_inds %>%
     pull(subject_id) %>%

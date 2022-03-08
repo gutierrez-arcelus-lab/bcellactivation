@@ -33,7 +33,10 @@ vcf_dose <- vcf %>%
     mutate(dose = case_when(genotype == "0|0" ~ 0L,
 			    genotype == "0|1" ~ 1L,
 			    genotype == "1|0" ~ 1L,
-			    genotype == "1|1" ~ 2L)) %>%
+			    genotype == "1|1" ~ 2L,
+			    genotype == "0|2" ~ 1L,
+			    genotype == "2|0" ~ 1L,
+			    genotype == "2|2" ~ 2L)) %>%
     select(-genotype)
 
 cor_df <- pairs_df %>%
@@ -76,4 +79,3 @@ out <- dosage_df %>%
 	      het_score_wt = sum(as.integer(dose == 1) * beta))
 
 write_tsv(out, "./sle_variants/scores.tsv")
-
