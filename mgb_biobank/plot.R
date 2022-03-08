@@ -54,10 +54,6 @@ females_df %>%
            data = map(data, unlist)) %>%
     walk2(.x = .$data, .y = .$out, .f = ~write_lines(.x, .y))
 
-
-
-
-
 ## PCA on genotype data
 
 ### Metadata for 1000G samples
@@ -278,13 +274,18 @@ ld_plot <- ggplot(ld_df, aes(pos, r2)) +
 ggsave("./plots/sle_ld.png", ld_plot, height = 6)
 
 # Heterozygosity scores
+batch_df <- sprintf("./results/eur_females_%s.txt", batches) %>%
+    setNames(batches) %>%
+    map_df(~tibble(sample_id = read_lines(.)), .id = "batch")
+
 scores_df <- read_tsv("./sle_variants/scores.tsv") %>%
-    mutate(subject_id = str_extract(sample_id, "\\d+$"))
+    mutate(subject_id = str_extract(sample_id, "\\d+$")) %>%
+    left_join(batch_df, by = "sample_id") %>%
+    add_count(subject_id) %>%
+    filter(n == 1 | (n > 1 & batch != "0410")) %>%
+    select(-n)
     
 candidate_inds <- scores_df %>%
-    group_by(subject_id) %>%
-    slice(which.max(het_score)) %>%
-    ungroup() %>%
     arrange(desc(het_score), desc(het_score_wt)) %>%
     slice(1:1000)
 
@@ -300,7 +301,7 @@ scores_plot_df <- scores_df %>%
     slice(which.max(het_score)) %>%
     ungroup()
 
-scores_plot_df %>%
+scores_plot <- scores_plot_df %>%
     group_by(het_score) %>%
     mutate(y = 1:n()) %>%
     arrange(het_score) %>%
@@ -312,7 +313,7 @@ scores_plot_df %>%
     labs(x = "Number of heterozygous SLE variants",
          y = "N")
 
-ggsave("./plots/het_scores_dist.png", width = 5, height = 3)
+ggsave("./plots/het_scores_dist.png", scores_plot, width = 5, height = 3)
 
 # Duplicates
 
