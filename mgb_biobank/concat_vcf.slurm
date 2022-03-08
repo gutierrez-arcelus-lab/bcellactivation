@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH -N 1
-#SBATCH -c 2
+#SBATCH -c 4
 #SBATCH --mem=8gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
@@ -19,7 +19,7 @@ VCFIN=${OUTDIR}/chr{1..22}.isec.merged.pruned.vcf
 PREFIX=${OUTDIR}/allchr.isec.merged.pruned 
 VCFOUT=${PREFIX}.vcf.gz
 
-bcftools concat -o $VCFOUT -O z $( eval echo $VCFIN )
+bcftools concat --threads $SLURM_CPUS_PER_TASK -o $VCFOUT -O z $( eval echo $VCFIN )
 tabix -p vcf $VCFOUT
 
 # Make PLINK binary files

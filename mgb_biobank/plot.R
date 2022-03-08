@@ -301,7 +301,7 @@ scores_plot_df <- scores_df %>%
     slice(which.max(het_score)) %>%
     ungroup()
 
-scores_plot <- scores_plot_df %>%
+scores_plot_df %>%
     group_by(het_score) %>%
     mutate(y = 1:n()) %>%
     arrange(het_score) %>%
@@ -313,7 +313,7 @@ scores_plot <- scores_plot_df %>%
     labs(x = "Number of heterozygous SLE variants",
          y = "N")
 
-ggsave("./plots/het_scores_dist.png", scores_plot, width = 5, height = 3)
+ggsave("./plots/het_scores_dist.png", width = 5, height = 3)
 
 # Duplicates
 
