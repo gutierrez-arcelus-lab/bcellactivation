@@ -45,3 +45,22 @@ dups_df %>%
     mutate(out = paste0("./results/duplicates_", batch, ".txt"),
 	   data = map(data, unlist)) %>%
     walk2(.x = .$data, .y = .$out, .f = ~write_lines(.x, .y))
+
+###
+
+dup_inds <- read_lines("./duplicates/sampleids.txt")
+vcf <- read_tsv("./sle_variants/sle.MGB.vcf", comment = "##")
+
+vcf_dups <- select(vcf, chr = 1, pos = POS, id = ID, ref = REF, alt = ALT, all_of(dup_inds)) %>%
+    select(chr:alt, b0401 = 6, b0410 = 7)
+
+vcf_dups %>%
+    filter(chr == "chr21", b0401 != b0410)
+
+
+
+
+
+
+
+

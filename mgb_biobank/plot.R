@@ -4,6 +4,7 @@ library(cowplot)
 library(ggrepel)
 library(ggthemes)
 library(ggsci)
+library(ggbeeswarm)
 
 ## Select females
 batches <- sprintf("04%02d", c(1:8, 10))
@@ -252,7 +253,208 @@ pca_eur_plot <- plot_grid(pca_eur_grid, get_legend(pca_eur_plot_1),
 
 ggsave("./plots/pca_eur.png", pca_eur_plot, width = 8, height = 5)
 
+##### Pca for genotyped SNPs only
+typed_pca_genos <- 
+    "/temp_work/ch229163/VCF/genotyped/allchr.isec.merged.pruned.pca.eigenvec" %>%
+    read_table2(col_names = FALSE) %>%
+    select(X1:X6) %>%
+    setNames(c("id1", "id2", paste0("PC", 1:4)))
 
+typed_pca_kgp <- typed_pca_genos %>%
+    inner_join(sample_annotation, by = c("id2" = "sample_id")) %>%
+    select(sample_id = id2, population, PC1:PC4)
+
+typed_pca_mgb <- typed_pca_genos %>%
+    anti_join(sample_annotation, by = c("id2" = "sample_id")) %>%
+    mutate(population = "MGB_biobank") %>%
+    unite("sample_id", c("id1", "id2"), sep = "_") %>%
+    select(sample_id, population, PC1:PC4)
+
+
+typed_pca_df <- bind_rows(typed_pca_mgb, typed_pca_kgp) %>%
+    mutate(population = factor(population, levels = names(all_cols))) %>%
+    mutate(dataset = ifelse(grepl("MGB", population), "MGB", "1000 Genomes"),
+           dataset = factor(dataset, levels = rev(c("1000 Genomes", "MGB")))) 
+
+typed_pca_thresholds <- typed_pca_kgp %>%
+    filter(population %in% c("GBR", "CEU", "TSI", "IBS", "FIN")) %>%
+    pivot_longer(PC1:PC4, names_to = "pc") %>%
+    group_by(pc) %>%
+    slice(-which.max(value)) %>%
+    slice(-which.min(value)) %>%
+    summarise(value = range(value)) %>%
+    mutate(i = c("min", "max"),
+           value = value * 1.1) %>%
+    ungroup() %>%
+    pivot_wider(names_from = pc, values_from = value) %>%
+    mutate(dataset = "MGB",
+           dataset = factor(dataset, levels = c("1000 Genomes", "MGB")))
+
+
+typed_pca_plot_1 <- typed_pca_df %>%
+    ggplot(aes(PC1, PC2, color = population, alpha = dataset)) +
+    geom_point(size = .5) +
+    scale_color_manual(values = all_cols) +
+    scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
+           alpha = FALSE)
+
+typed_pca_plot_2 <- typed_pca_df %>%
+    ggplot(aes(PC3, PC4, color = population, alpha = dataset)) +
+    geom_point(size = .5) +
+    scale_color_manual(values = all_cols) +
+    scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
+           alpha = FALSE)
+
+typed_pca_grid <- plot_grid(typed_pca_plot_1 + theme(legend.position = "none"),
+                      NULL,
+                      typed_pca_plot_2 + theme(legend.position = "none"),
+                      ncol = 1, rel_heights = c(1, .05, 1))
+
+typed_pca_plot <- plot_grid(typed_pca_grid, get_legend(typed_pca_plot_1),
+                      nrow = 1, rel_widths = c(1, .3))
+
+ggsave("./plots/pca_genotyped.png", typed_pca_plot, width = 8, height = 5)
+
+typed_mgb_eur_inds <- typed_pca_df %>%
+    filter(dataset == "MGB") %>%
+    filter(between(PC1, typed_pca_thresholds$PC1[1], typed_pca_thresholds$PC1[2]),
+           between(PC2, typed_pca_thresholds$PC2[1], typed_pca_thresholds$PC2[2]),
+           between(PC3, typed_pca_thresholds$PC3[1], typed_pca_thresholds$PC3[2]),
+           between(PC4, typed_pca_thresholds$PC4[1], typed_pca_thresholds$PC4[2])) %>%
+    select(sample_id)
+
+typed_pca_eur_df <- typed_pca_df %>%
+    select(sample_id, dataset, population, PC1:PC4) %>%
+    mutate(population = as.character(population),
+           population = ifelse(sample_id %in% typed_mgb_eur_inds$sample_id, "MGB_eur", population),
+           population = factor(population, levels = names(all_cols)))
+
+all_cols[1:2] <- c("grey", "black")
+
+typed_pca_eur_plot_1 <- typed_pca_eur_df %>%
+    ggplot(aes(PC1, PC2, color = population, alpha = dataset)) +
+    geom_point(size = .5) +
+    geom_vline(data = typed_pca_thresholds, 
+               aes(xintercept = PC1), linetype = 2, alpha = .5, color = "red") +
+    geom_hline(data = typed_pca_thresholds, 
+               aes(yintercept = PC2), linetype = 2, alpha = .5, color = "red") +
+    scale_color_manual(values = all_cols) +
+    scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
+           alpha = FALSE)
+
+typed_pca_eur_plot_2 <- typed_pca_eur_df %>%
+    ggplot(aes(PC3, PC4, color = population, alpha = dataset)) +
+    geom_point(size = .5) +
+    geom_vline(data = typed_pca_thresholds, 
+               aes(xintercept = PC3), linetype = 2, alpha = .5, color = "red") +
+    geom_hline(data = typed_pca_thresholds, 
+               aes(yintercept = PC4), linetype = 2, alpha = .5, color = "red") +
+    scale_color_manual(values = all_cols) +
+    scale_alpha_manual(values = c("MGB" = .1, "1000 Genomes" = 1)) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
+           alpha = FALSE)
+
+
+typed_pca_eur_grid <- plot_grid(typed_pca_eur_plot_1 + theme(legend.position = "none"),
+                          NULL,
+                          typed_pca_eur_plot_2 + theme(legend.position = "none"),
+                          ncol = 1, rel_heights = c(1, .05, 1))
+
+typed_pca_eur_plot <- plot_grid(typed_pca_eur_grid, get_legend(typed_pca_eur_plot_1),
+                          nrow = 1, rel_widths = c(1, .3))
+
+ggsave("./plots/pca_eur_genotyedvars.png", typed_pca_eur_plot, width = 8, height = 5)
+
+
+# Explore differences among PCAs
+
+genot_eur_inds <- 
+    anti_join(typed_pca_eur_df %>%
+              filter(population == "MGB_eur") %>%
+              select(sample_id),
+              pca_eur_df %>%
+              filter(population == "MGB_eur") %>%
+              select(sample_id)) %>%
+    pull(sample_id)
+
+allsnp_eur_inds <- 
+    anti_join(pca_eur_df %>%
+                  filter(population == "MGB_eur") %>%
+                  select(sample_id),
+              typed_pca_eur_df %>%
+                  filter(population == "MGB_eur") %>%
+                  select(sample_id)) %>%
+    pull(sample_id)
+
+
+pca_eur_v2 <- typed_pca_eur_df %>%
+    filter(dataset == "MGB") %>%
+    mutate(population = case_when(sample_id %in% genot_eur_inds ~ "EUR in genotyped SNPs",
+                                  sample_id %in% allsnp_eur_inds ~ "EUR in all SNPs",
+                                  TRUE ~ "MGB"))
+
+pc12 <- pca_eur_v2 %>%
+    filter(population == "MGB") %>%
+    ggplot(aes(PC1, PC2)) +
+    geom_point(size = .5, color = "grey") +
+    geom_point(data = filter(pca_eur_v2, population != "MGB"),
+               aes(PC1, PC2, color = population),
+               size = .5) +
+    scale_color_manual(values = c("black", "green")) +
+    geom_vline(data = typed_pca_thresholds, 
+               aes(xintercept = PC1), linetype = 2, alpha = .5, color = "red") +
+    geom_hline(data = typed_pca_thresholds, 
+               aes(yintercept = PC2), linetype = 2, alpha = .5, color = "red") +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    labs(color = NULL) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 2))
+
+pc34 <- pca_eur_v2 %>%
+    filter(population == "MGB") %>%
+    ggplot(aes(PC3, PC4)) +
+    geom_point(size = .5, color = "grey") +
+    geom_point(data = filter(pca_eur_v2, population != "MGB"),
+               aes(PC3, PC4, color = population),
+               size = .5) +
+    scale_color_manual(values = c("black", "green")) +
+    geom_vline(data = typed_pca_thresholds, 
+               aes(xintercept = PC3), linetype = 2, alpha = .5, color = "red") +
+    geom_hline(data = typed_pca_thresholds, 
+               aes(yintercept = PC4), linetype = 2, alpha = .5, color = "red") +
+    theme_bw() +
+    theme(panel.grid = element_blank())
+
+plot_grid(get_legend(pc12), NULL,
+          pc12 + theme(legend.position = "none"), 
+          pc34 + theme(legend.position = "none"),
+          nrow = 2, 
+          rel_heights = c(.1, 1))
+
+ggsave("./plots/pca_difference.png", height = 4)
 
 
 # LD between Langefeld and Bentham
@@ -289,9 +491,7 @@ batch_df <- sprintf("./results/eur_females_%s.txt", batches) %>%
 scores_df <- read_tsv("./sle_variants/scores.tsv") %>%
     mutate(subject_id = str_extract(sample_id, "\\d+$")) %>%
     left_join(batch_df, by = "sample_id") %>%
-    add_count(subject_id) %>%
-    filter(n == 1 | (n > 1 & batch != "0410")) %>%
-    select(-n)
+    filter(batch != "0410")
     
 candidate_inds <- scores_df %>%
     arrange(desc(het_score), desc(het_score_wt)) %>%
@@ -304,18 +504,15 @@ candidate_inds %>%
     write_lines("./candidate_individuals_ids.txt")
 
 scores_plot_df <- scores_df %>%
-    mutate(candidate = sample_id %in% candidate_inds$sample_id) %>%
-    group_by(subject_id) %>%
-    slice(which.max(het_score)) %>%
-    ungroup()
+    mutate(candidate = sample_id %in% candidate_inds$sample_id)
 
 scores_plot_df %>%
     group_by(het_score) %>%
     mutate(y = 1:n()) %>%
     arrange(het_score) %>%
     ggplot(aes(het_score, y = y, color = candidate)) +
-    geom_jitter(size = .2, show.legend = FALSE) +
-    scale_color_manual(values = c("FALSE" = "grey", "TRUE" = "slateblue")) +
+    geom_jitter(size = .1, alpha = .25, show.legend = FALSE) +
+    scale_color_manual(values = c("FALSE" = "grey", "TRUE" = "purple4")) +
     theme_minimal() +
     theme(panel.grid = element_blank()) +
     labs(x = "Number of heterozygous SLE variants",
@@ -325,7 +522,9 @@ ggsave("./plots/het_scores_dist.png", width = 5, height = 3)
 
 # Duplicates
 
-dups_df <- scores_df %>%
+dups_df <- read_tsv("./sle_variants/scores.tsv") %>%
+    mutate(subject_id = str_extract(sample_id, "\\d+$")) %>%
+    left_join(batch_df, by = "sample_id") %>%
     add_count(subject_id) %>%
     filter(n > 1) %>%
     select(sample_id, subject_id, het_score) %>%
@@ -348,6 +547,13 @@ dups_plot <- ggplot(dups_df, aes(`batch 0410`, `previous batch`)) +
     labs(title = "Number of SLE variants at which an individual is heterozygote\nfor duplicates in MGB Biobank")
 
 ggsave("./plots/duplicates.png", dups_plot, width = 3, height = 3)
+
+# Heterozygosity per batch
+
+ggplot(scores_df, aes(batch, het_score)) +
+    geom_violin() +
+    geom_quasirandom(method = "smiley", alpha = .2, size = .1) +
+    theme_bw()
 
 
 

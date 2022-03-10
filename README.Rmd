@@ -185,17 +185,17 @@ include_graphics("./bcell_bulk/plots/gene_level_ai_fcer2.png")
 
 - MGB: 
 
-| Batch | N     | Variants (M)  | Source          |
-|:-----:|:-----:|:-------------:|:---------------:|
-| 0401  | 4,921 | ~79.1         | MEGA_TopMed     |
-| 0402  | 5,336 | ~80.1         | MEGAEX_TopMed   |
-| 0403  | 4,780 | ~79.8         | MEG_A1_A_TopMed |
-| 0404  | 5,016 | ~80.9         | MEG_A1_B_TopMed |
-| 0405  | 5,491 | ~81.9         | MEG_C_TopMed    |
-| 0406  | 5,143 | ~80.0         | MEG_D_TopMed    |
-| 0407  | 4,847 | ~76.4         | MEG_E_TopMed    |
-| 0408  | 866   | ~40.0         | MEG_X1_TopMed   |
-| 0410  | 13,140| ~105.8        | GSA_A_TopMed    | 
+| Batch | N     | Total Variants | Genotyped Variants | Source          |
+|:-----:|:-----:|:--------------:|:------------------:|:---------------:|
+| 0401  | 4,921 | ~79.1M         | 976K               | MEGA_TopMed     |
+| 0402  | 5,336 | ~80.1M         | 1.1M               | MEGAEX_TopMed   |
+| 0403  | 4,780 | ~79.8M         | 1.1M               | MEG_A1_A_TopMed |
+| 0404  | 5,016 | ~80.9M         | 1.1M               | MEG_A1_B_TopMed |
+| 0405  | 5,491 | ~81.9M         | 1.1M               | MEG_C_TopMed    |
+| 0406  | 5,143 | ~80.0M         | 1.1M               | MEG_D_TopMed    |
+| 0407  | 4,847 | ~76.4M         | 1.1M               | MEG_E_TopMed    |
+| 0408  | 866   | ~40.0M         | 1.1M               | MEG_X1_TopMed   |
+| 0410  | 13,140| ~105.8M        | 231K               | GSA_A_TopMed    | 
 
 - 1000 Genomes data:
   - ~2,500 individuals low coverage data realigned to GRCh38 (not NYGC version).
@@ -269,6 +269,20 @@ In order to select individuals with European ancestry given PC coordinates, we g
 ```{r pca_selection}
 include_graphics("./mgb_biobank/plots/pca_eur.png")
 ```
+
+##### Temporary analysis: PCA with genotyped variants only
+
+PCA with ~53K variants that we have in common across arrays and also 1000 Genomes, and after pruning for LD.
+
+```{r}
+include_graphics("./mgb_biobank/plots/pca_eur_genotyedvars.png")
+```
+
+```{r}
+include_graphics("./mgb_biobank/plots/pca_difference.png")
+```
+
+
 
 
 #### SLE variants

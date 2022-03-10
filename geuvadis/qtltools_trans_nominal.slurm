@@ -21,6 +21,6 @@ NOMOUT=${OUTDIR}/trans.nominal
 QTLtools trans \
     --vcf $GENOT \
     --bed $PHENO \
-    --nominal --threshold 1 \
+    --nominal --threshold 1e-5 \
     --out $NOMOUT
 

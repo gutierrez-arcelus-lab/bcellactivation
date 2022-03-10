@@ -6,19 +6,20 @@ library(ggbeeswarm)
 quant <- read_tsv("./geuvadis_salmon_quants_ebv.bed")
 
 ebv_quant <- quant %>%
-    filter(chr == "ebv") %>%
-    select(gid, starts_with("ERR188")) %>%
-    pivot_longer(-gid, names_to = "ena_id", values_to = "tpm") %>%
+    filter(`#chr` == "ebv") %>%
+    select(gene_id = id, starts_with("ERR188")) %>%
+    mutate(gene_id = sub("^([^_]+).+_(\\d+)$", "\\1.\\2", gene_id)) %>%
+    pivot_longer(-gene_id, names_to = "ena_id", values_to = "tpm") %>%
     left_join(geuvadis_info, by = "ena_id") %>%
-    select(sampleid = name, lab, gene_id = gid, tpm)
+    select(sample_id = name, lab, gene_id, tpm)
 
 ebv_copies <- read_excel("./ebv_copynumbers_pone.0179446.xlsx")
 
-ebv_df <- left_join(ebv_quant, ebv_copies, by = c("sampleid" = "samples")) %>%
+ebv_df <- left_join(ebv_quant, ebv_copies, by = c("sample_id" = "samples")) %>%
     filter(!is.na(`EBV load`), pop %in% c("GBR", "CEU", "TSI", "FIN"))
 
 
-ebv_genes_plot <- ggplot(ebv_df, aes(`EBV load`, log2(tpm + 1))) +
+ebv_genes_plot <- ggplot(ebv_df, aes(`EBV load`, tpm)) +
     geom_point(size = .5, alpha = .5) +
     facet_wrap(~gene_id, scales = "free_y") +
     scale_x_continuous(breaks = scales::pretty_breaks(3)) +
@@ -29,13 +30,8 @@ ebv_genes_plot <- ggplot(ebv_df, aes(`EBV load`, log2(tpm + 1))) +
     labs(y = "TPM")
 
 ggsave("./plots/ebv_genes.png", ebv_genes_plot, width = 10)
-ggsave("./plots/ebv_genes_log.png", ebv_genes_plot, width = 10, height = 7)
+#ggsave("./plots/ebv_genes_log.png", ebv_genes_plot, width = 10, height = 7)
 
-
-ggplot(distinct(ebv_df, sampleid, lab, .keep_all = TRUE),
-       aes(lab, `EBV load`)) +
-    geom_jitter() +
-    theme_bw()
 
 
 # HLA

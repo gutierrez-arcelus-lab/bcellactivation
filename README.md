@@ -174,17 +174,17 @@ And the comparison with the SNP-level ASE:
 
 -   MGB:
 
-| Batch |   N    | Variants (M) |       Source       |
-|:-----:|:------:|:------------:|:------------------:|
-| 0401  | 4,921  |    \~79.1    |    MEGA\_TopMed    |
-| 0402  | 5,336  |    \~80.1    |   MEGAEX\_TopMed   |
-| 0403  | 4,780  |    \~79.8    | MEG\_A1\_A\_TopMed |
-| 0404  | 5,016  |    \~80.9    | MEG\_A1\_B\_TopMed |
-| 0405  | 5,491  |    \~81.9    |   MEG\_C\_TopMed   |
-| 0406  | 5,143  |    \~80.0    |   MEG\_D\_TopMed   |
-| 0407  | 4,847  |    \~76.4    |   MEG\_E\_TopMed   |
-| 0408  |  866   |    \~40.0    |  MEG\_X1\_TopMed   |
-| 0410  | 13,140 |   \~105.8    |   GSA\_A\_TopMed   |
+| Batch |   N    | Total Variants | Genotyped Variants |       Source       |
+|:-----:|:------:|:--------------:|:------------------:|:------------------:|
+| 0401  | 4,921  |    \~79.1M     |        976K        |    MEGA\_TopMed    |
+| 0402  | 5,336  |    \~80.1M     |        1.1M        |   MEGAEX\_TopMed   |
+| 0403  | 4,780  |    \~79.8M     |        1.1M        | MEG\_A1\_A\_TopMed |
+| 0404  | 5,016  |    \~80.9M     |        1.1M        | MEG\_A1\_B\_TopMed |
+| 0405  | 5,491  |    \~81.9M     |        1.1M        |   MEG\_C\_TopMed   |
+| 0406  | 5,143  |    \~80.0M     |        1.1M        |   MEG\_D\_TopMed   |
+| 0407  | 4,847  |    \~76.4M     |        1.1M        |   MEG\_E\_TopMed   |
+| 0408  |  866   |    \~40.0M     |        1.1M        |  MEG\_X1\_TopMed   |
+| 0410  | 13,140 |    \~105.8M    |        231K        |   GSA\_A\_TopMed   |
 
 -   1000 Genomes data:
     -   \~2,500 individuals low coverage data realigned to GRCh38 (not
@@ -255,6 +255,15 @@ coordinates, we gate the PCA plot based on the range of values for
 PC1–PC4 in the 1000 Genomes European set.
 
 <img src="./mgb_biobank/plots/pca_eur.png" width="2400" />
+
+##### Temporary analysis: PCA with genotyped variants only
+
+PCA with \~53K variants that we have in common across arrays and also
+1000 Genomes, and after pruning for LD.
+
+<img src="./mgb_biobank/plots/pca_eur_genotyedvars.png" width="2400" />
+
+<img src="./mgb_biobank/plots/pca_difference.png" width="2481" />
 
 #### SLE variants
 

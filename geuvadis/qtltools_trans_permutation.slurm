@@ -24,7 +24,7 @@ OUTPERMUT=${OUTDIR}/trans.perm.${SEED}
 QTLtools trans \
     --vcf $GENOT \
     --bed $PHENO \
-    --permute --threshold 1 \
+    --permute --threshold 1e-5 \
     --seed $SEED \
     --out $OUTPERMUT
 
