@@ -313,7 +313,7 @@ plot_grid(mki_umap, mt_umap, ncol = 1)
 ```
 
 # B cell genes (RNA)
-```{r, fig.height=8}
+```{r, fig.height=8, fig.width=8}
 bcell_genes <- 
     c("IGHD", "IGHM", "CD19", 
       "CR2", "CD27", "CD38", 
@@ -354,7 +354,7 @@ plot_grid(plotlist = bcell_genes_plot_list, ncol = 3)
 ```
 
 # B cell genes (Protein)
-```{r, fig.height=8}
+```{r, fig.height=8, fig.width=8}
 bcell_prots <- 
     c("IgD", "IgM", "CD19", 
       "CD21", "CD27", "CD38", 

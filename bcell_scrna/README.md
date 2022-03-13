@@ -183,7 +183,7 @@ str(bcells)
     #   ..@ commands    :List of 5
     #   .. ..$ NormalizeData.RNA       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:21:03"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:28:55"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "NormalizeData(bcells, normalization.method = \"LogNormalize\")"
     #   .. .. .. ..@ params     :List of 5
@@ -194,7 +194,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose             : logi TRUE
     #   .. ..$ FindVariableFeatures.RNA:Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "FindVariableFeatures.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:21:13"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:29:05"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "FindVariableFeatures(bcells, selection.method = \"mean.var.plot\")"
     #   .. .. .. ..@ params     :List of 12
@@ -212,7 +212,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose            : logi TRUE
     #   .. ..$ ScaleData.RNA           :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "ScaleData.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:21:15"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:29:07"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "ScaleData(bcells, features = VariableFeatures(bcells))"
     #   .. .. .. ..@ params     :List of 10
@@ -228,7 +228,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose           : logi TRUE
     #   .. ..$ NormalizeData.HTO       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.HTO"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:21:15"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:29:08"
     #   .. .. .. ..@ assay.used : chr "HTO"
     #   .. .. .. ..@ call.string: chr "NormalizeData(bcells, assay = \"HTO\", normalization.method = \"CLR\")"
     #   .. .. .. ..@ params     :List of 5
@@ -239,7 +239,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose             : logi TRUE
     #   .. ..$ NormalizeData.ADT       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.ADT"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:21:16"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:29:09"
     #   .. .. .. ..@ assay.used : chr "ADT"
     #   .. .. .. ..@ call.string: chr [1:2] "NormalizeData(bcells, assay = \"ADT\", normalization.method = \"CLR\", " "    margin = 2)"
     #   .. .. .. ..@ params     :List of 5
