@@ -222,7 +222,7 @@ tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
 
 ## UMAP
 
-```{r out.height=8}
+```{r, fig.height=8}
 bcells_singlet <- FindNeighbors(bcells_singlet, dims = 1:15)
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
 bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:15)

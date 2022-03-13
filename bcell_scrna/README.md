@@ -279,7 +279,7 @@ percent_mt_p <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = percent_mt)) +
 plot_grid(cell_class_p, seurat_cluster_p, percent_mt_p, nrow = 3)
 ```
 
-<img src="README_files/figure-gfm/unnamed-chunk-11-1.png" height="8" />
+![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
 ``` r
 bcells_markers <- 
