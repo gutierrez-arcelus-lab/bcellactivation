@@ -1,17 +1,19 @@
-README
+CITE-seq Pilot
 ================
 
-# Packages
+## Packages
 
 ``` r
 library(tidyverse)
 library(Seurat)
 
 # Plotting
-library(ggbeeswarm)
 library(ggridges)
-library(MetBrewer)
+library(RColorBrewer)
+library(cowplot)
 ```
+
+## Cell Ranger data
 
 ``` r
 cellranger_dir <- 
@@ -33,6 +35,8 @@ ribo_genes <- features_df %>%
 
 data10x <- Read10X(cellranger_dir, gene.column = 1)
 ```
+
+## Create the Seurat object
 
 ``` r
 gene_exp <- data10x[["Gene Expression"]]
@@ -105,7 +109,7 @@ hto_df <- hto_data %>%
 ggplot(hto_df, aes(value, maxid, fill = maxid)) +
     geom_density_ridges(show.legend = FALSE) +
     facet_wrap(~hto) +
-    scale_fill_manual(values = met.brewer("Austria", 6)) +
+    scale_fill_brewer(palette = "Paired") +
     theme_bw() +
     theme(panel.grid = element_blank()) +
     labs(x = "Expression level", y = NULL)
@@ -119,7 +123,22 @@ ggplot(hto_df, aes(value, maxid, fill = maxid)) +
 Idents(bcells) <- "HTO_classification.global"
 
 bcells_singlet <- subset(bcells, idents = "Singlet")
+
+tibble(cell_class = bcells_singlet@meta.data$HTO_classification) %>%
+    count(cell_class) %>%
+    mutate(cell_class = factor(cell_class, levels = stims)) %>%
+    ggplot(aes(cell_class, n)) +
+    geom_col(aes(fill = cell_class), show.legend = FALSE) +
+    scale_fill_brewer(palette = "Paired") +
+    theme_minimal() +
+    theme(panel.grid.major.x = element_blank(),
+          panel.grid.minor.y = element_blank()) +
+    labs(x = NULL, y = "Number of cells")
 ```
+
+![](README_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+
+## Feature quantifications
 
 ``` r
 bcells_singlet[["percent_mt"]] <- 
@@ -127,42 +146,45 @@ bcells_singlet[["percent_mt"]] <-
 
 bcells_meta <- bcells_singlet@meta.data %>%
     rownames_to_column("barcode") %>%
-    select(barcode, orig.ident, nCount_RNA, nFeature_RNA, percent_mt) %>%
-    pivot_longer(-(barcode:orig.ident), names_to = "feature")
+    mutate(cell_class = bcells_singlet@meta.data$HTO_maxID,
+           cell_class = factor(cell_class, levels = stims)) %>%
+    select(barcode, cell_class, 
+           n_reads = nCount_RNA, n_genes = nFeature_RNA, percent_mt) %>%
+    pivot_longer(-(barcode:cell_class), names_to = "feature")
 
-ggplot(bcells_meta, aes(orig.ident, value)) +
-    geom_violin(fill = "midnightblue", alpha = .5) +
+ggplot(bcells_meta, aes(cell_class, value, fill = cell_class)) +
+    geom_violin(size = .25) +
     scale_y_continuous(breaks = scales::pretty_breaks(7)) +
+    scale_fill_brewer(palette = "Paired") +
     facet_wrap(~feature, nrow = 1, scales = "free") +
     theme_bw() +
     theme(axis.text.x = element_blank(),
           axis.title = element_blank(),
           axis.ticks.x = element_blank(),
           panel.grid.major.x = element_blank(),
-          panel.grid.minor.x = element_blank())
+          panel.grid.minor = element_blank(),
+          legend.position = "bottom") +
+    labs(fill = NULL)
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
+## Filter for Mitochondrial percentage
+
 ``` r
-n_genes <- Matrix::colSums(bcells_singlet@assays$RNA@counts > 0)
-
-bcells_mt_ngenes <- bcells_meta %>%
-    filter(feature == "percent_mt") %>%
+bcells_meta %>%
+    filter(feature %in% c("n_genes", "percent_mt")) %>%
     pivot_wider(names_from = feature, values_from = value) %>%
-    left_join(tibble(barcode = names(n_genes),
-                     n_genes = n_genes), 
-              by = "barcode")
-
-ggplot(bcells_mt_ngenes, aes(percent_mt, n_genes)) +
+    ggplot(aes(percent_mt, n_genes)) +
     geom_jitter(size = .25, alpha = .25) +
     geom_density2d_filled(alpha = .5) +
     geom_density_2d(size = .25, color = "black") +
-    geom_vline(xintercept = c(5, 10, 20), linetype = 2) +
+    geom_vline(xintercept = 20, linetype = 2) +
+    geom_hline(yintercept = 500, linetype = 2) +
     scale_x_continuous(breaks = c(0, 5, 10, 20, 40, 60, 80)) +
     scale_y_continuous(breaks = seq(0, 1e4, by = 1e3)) +
     theme_minimal() +
-    theme(panel.grid = element_blank(),
+    theme(panel.grid.minor = element_blank(),
           legend.position = "none") +
     labs(x = "% Mitochondrial reads", y = "# of genes")
 ```
@@ -173,6 +195,8 @@ ggplot(bcells_mt_ngenes, aes(percent_mt, n_genes)) +
 bcells_singlet <- bcells_singlet %>%
     subset(subset = nFeature_RNA > 500 & percent_mt < 20)
 ```
+
+# PCA
 
 ``` r
 bcells_singlet <- 
@@ -193,7 +217,7 @@ tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
     ggplot(aes(pc, prop_var)) +
     geom_line(aes(group = 1)) +
     scale_y_continuous(labels = function(x) scales::percent(x, accuracy = 1L),
-                       breaks = seq(0, .3, .05)) +
+                       breaks = seq(0, .15, .01)) +
     theme_bw() +
     theme(panel.grid.minor = element_blank()) +
     labs(x = "Principal component", y = "Proportion of variance")
@@ -201,9 +225,11 @@ tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
+## UMAP
+
 ``` r
 bcells_singlet <- FindNeighbors(bcells_singlet, dims = 1:15)
-bcells_singlet <- FindClusters(bcells_singlet, resolution = .15)
+bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
 ```
 
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
@@ -212,27 +238,48 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = .15)
     # Number of edges: 218977
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.9328
+    # Maximum modularity in 10 random starts: 0.9158
     # Number of communities: 7
     # Elapsed time: 0 seconds
 
 ``` r
 bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:15)
 
-as.data.frame(bcells_singlet@reductions$umap@cell.embeddings) %>%
+umap_df <- as.data.frame(bcells_singlet@reductions$umap@cell.embeddings) %>%
     as_tibble() %>%
     mutate(cluster = bcells_singlet@meta.data$seurat_clusters,
-           stim = bcells_singlet@meta.data$HTO_classification,
-           stim = factor(stim, levels = stims)) %>%
-    ggplot(aes(UMAP_1, UMAP_2, color = stim)) +
-    geom_point(alpha = .75, size = .75) +
-    scale_color_manual(values = met.brewer("Austria", 6)) +
+           stim = bcells_singlet@meta.data$HTO_maxID,
+           stim = factor(stim, levels = stims),
+           percent_mt = bcells_singlet@meta.data$percent_mt)
+
+cell_class_p <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
+    geom_point(size = 1) +
+    scale_color_brewer(palette = "Paired") +
     theme_minimal() +
     theme(panel.grid = element_blank()) +
-    guides(color = guide_legend(override.aes = list(size = 2, alpha = 1)))
+    guides(color = guide_legend(override.aes = list(size = 2))) +
+    labs(title = "Hashtag classification")
+
+seurat_cluster_p <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = cluster)) +
+    geom_point(size = 1) +
+    scale_color_brewer(palette = "Set1") +
+    theme_minimal() +
+    theme(panel.grid = element_blank()) +
+    guides(color = guide_legend(override.aes = list(size = 2))) +
+    labs(title = "Seurat cluster res = 0.25")
+
+percent_mt_p <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = percent_mt)) +
+    geom_point(size = 1) +
+    scale_color_viridis_c() +
+    theme_minimal() +
+    theme(panel.grid = element_blank()) +
+    guides(color = guide_legend(override.aes = list(size = 2))) +
+    labs(title = "% Mitochondrial")
+
+plot_grid(cell_class_p, seurat_cluster_p, percent_mt_p, nrow = 3)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+<img src="README_files/figure-gfm/unnamed-chunk-11-1.png" height="8" />
 
 ``` r
 bcells_markers <- 
