@@ -58,7 +58,9 @@ p-values.
 
 <img src="./plots/ebv_genes.png" width="3000" />
 
-<img src="./plots/trans_manhattan.png" width="1600" />
+<img src="./plots/qqplot.png" width="1500" />
+
+<img src="./plots/trans_manhattan.png" width="3059" />
 
 ### LMP-2B expression \~ chr18:71,147,350 SNP genotypes
 

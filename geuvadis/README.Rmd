@@ -6,6 +6,7 @@ output: github_document
 ```{r setup, include=FALSE}
 library(knitr)
 opts_chunk$set(echo = FALSE)
+options(width = 999)
 ```
 
 ## Trans-eQTL analysis
@@ -57,6 +58,12 @@ Execute the `qltools_trans_fdr.sh` script to compute the adjusted p-values.
 ```{r}
 include_graphics("./plots/ebv_genes.png")
 ```
+
+
+```{r}
+include_graphics("./plots/qqplot.png")
+```
+
 
 ```{r}
 include_graphics("./plots/trans_manhattan.png")

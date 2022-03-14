@@ -53,7 +53,7 @@ for (h in 1:nrow(Nh)) {
 }
 
 #Plot the QQplot
-pdf(args[1], 5, 5)
+png(args[1], 5, 5, units = "in", res = 300)
 plot(-log10(MP[, 2]), -log10(MP[, 1]), xlab="-log10(permutation P-values)", ylab="-log10(nominal P-values)", main="QQplot")
 abline(0, 1, col="red")
 dev.off()

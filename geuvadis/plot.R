@@ -66,24 +66,31 @@ pca %>%
     geom_point()
 
 # EBV trans-eQTL
-
-library(qqman)
-
-
 nominal <- "./results/qtltools/trans.adjust.hits.txt.gz" %>%
     read_delim(delim = " ", col_types = "ccdccdddddd") %>%
     select(SNP = VID, CHR = VCHR, BP = VPOS, P = APVAL) %>%
     mutate(CHR = ifelse(CHR == "X", 23, CHR),
            CHR = as.integer(CHR))
     
-    
 fdr <- "./results/qtltools/trans.approx.fdr.txt" %>%
     read_delim(delim = " ", col_types = "ccdccdddddd", col_names = FALSE)
     
-png("./plots/trans_manhattan.png", width = 8, height = 3, units = "in", res = 200)
-manhattan(nominal, suggestiveline = FALSE, genomewideline = FALSE,
-          col = c("blue4", "orange3"), highlight = fdr$X4)
-dev.off()
+
+ggplot(nominal, aes(BP, P, color = factor(CHR))) +
+    geom_hline(yintercept = fdr$X8, linetype = 2, alpha = .5) +
+    geom_point(show.legend = FALSE) +
+    scale_y_reverse() +
+    scale_color_manual(values = rep(c("midnightblue", "tomato3"), 24)[1:23]) +
+    facet_grid(~CHR, scales = "free_x", space = "free", switch = "x") +
+    theme_minimal() +
+    theme(panel.spacing = unit(0, "lines"),
+          axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          panel.grid = element_blank()) +
+    labs(y = "Adjusted p-value")
+
+ggsave("./plots/trans_manhattan.png", height = 3)
 
 
 vcf <- "./results/qtltools/signif_var.vcf" %>%
