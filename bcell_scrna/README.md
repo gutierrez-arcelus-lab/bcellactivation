@@ -183,7 +183,7 @@ str(bcells)
     #   ..@ commands    :List of 5
     #   .. ..$ NormalizeData.RNA       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:24:28"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:50:09"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "NormalizeData(bcells, normalization.method = \"LogNormalize\")"
     #   .. .. .. ..@ params     :List of 5
@@ -194,7 +194,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose             : logi TRUE
     #   .. ..$ FindVariableFeatures.RNA:Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "FindVariableFeatures.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:24:33"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:50:14"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "FindVariableFeatures(bcells, selection.method = \"mean.var.plot\")"
     #   .. .. .. ..@ params     :List of 12
@@ -212,7 +212,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose            : logi TRUE
     #   .. ..$ ScaleData.RNA           :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "ScaleData.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:24:35"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:50:15"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "ScaleData(bcells, features = VariableFeatures(bcells))"
     #   .. .. .. ..@ params     :List of 10
@@ -228,7 +228,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose           : logi TRUE
     #   .. ..$ NormalizeData.HTO       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.HTO"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:24:35"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:50:16"
     #   .. .. .. ..@ assay.used : chr "HTO"
     #   .. .. .. ..@ call.string: chr "NormalizeData(bcells, assay = \"HTO\", normalization.method = \"CLR\")"
     #   .. .. .. ..@ params     :List of 5
@@ -239,7 +239,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose             : logi TRUE
     #   .. ..$ NormalizeData.ADT       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.ADT"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:24:36"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:50:16"
     #   .. .. .. ..@ assay.used : chr "ADT"
     #   .. .. .. ..@ call.string: chr [1:2] "NormalizeData(bcells, assay = \"ADT\", normalization.method = \"CLR\", " "    margin = 2)"
     #   .. .. .. ..@ params     :List of 5
@@ -657,7 +657,7 @@ sle_genes_quant <- bcells_singlet@assays$RNA@data %>%
 sle_genes_plot_list <- umap_df %>%
     select(barcode, UMAP_1, UMAP_2) %>%
     left_join(sle_genes_quant, by = "barcode") %>%
-    group_split(gene_id) %>%
+    split(.$gene_name) %>%
     map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = gene_exp)) +
             geom_point(size = .2) +
             scale_color_viridis_c(labels = function(x) str_pad(x, 3),
@@ -673,6 +673,8 @@ plot_grid(plotlist = sle_genes_plot_list, ncol = 4)
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+
+## TLR genes
 
 ``` r
 bcells_markers <- 
