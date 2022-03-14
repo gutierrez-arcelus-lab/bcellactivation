@@ -183,7 +183,7 @@ str(bcells)
     #   ..@ commands    :List of 5
     #   .. ..$ NormalizeData.RNA       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:28:55"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:24:28"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "NormalizeData(bcells, normalization.method = \"LogNormalize\")"
     #   .. .. .. ..@ params     :List of 5
@@ -194,7 +194,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose             : logi TRUE
     #   .. ..$ FindVariableFeatures.RNA:Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "FindVariableFeatures.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:29:05"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:24:33"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "FindVariableFeatures(bcells, selection.method = \"mean.var.plot\")"
     #   .. .. .. ..@ params     :List of 12
@@ -212,7 +212,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose            : logi TRUE
     #   .. ..$ ScaleData.RNA           :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "ScaleData.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:29:07"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:24:35"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "ScaleData(bcells, features = VariableFeatures(bcells))"
     #   .. .. .. ..@ params     :List of 10
@@ -228,7 +228,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose           : logi TRUE
     #   .. ..$ NormalizeData.HTO       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.HTO"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:29:08"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:24:35"
     #   .. .. .. ..@ assay.used : chr "HTO"
     #   .. .. .. ..@ call.string: chr "NormalizeData(bcells, assay = \"HTO\", normalization.method = \"CLR\")"
     #   .. .. .. ..@ params     :List of 5
@@ -239,7 +239,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose             : logi TRUE
     #   .. ..$ NormalizeData.ADT       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.ADT"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-13 12:29:09"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:24:36"
     #   .. .. .. ..@ assay.used : chr "ADT"
     #   .. .. .. ..@ call.string: chr [1:2] "NormalizeData(bcells, assay = \"ADT\", normalization.method = \"CLR\", " "    margin = 2)"
     #   .. .. .. ..@ params     :List of 5
@@ -424,7 +424,7 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
     # Res00 Res24 IgG24 IgG72 RSQ24 RSQ72 
     #   846   826  1599  1650  1060   195
 
-# PCA
+## PCA
 
 ``` r
 bcells_singlet <- 
@@ -468,7 +468,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.9158
     # Number of communities: 7
-    # Elapsed time: 1 seconds
+    # Elapsed time: 0 seconds
 
 ``` r
 bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:15)
@@ -541,7 +541,7 @@ plot_grid(mki_umap, mt_umap, ncol = 1)
 
 ![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
-# B cell genes (RNA)
+## B cell genes (RNA)
 
 ``` r
 bcell_genes <- 
@@ -584,7 +584,7 @@ plot_grid(plotlist = bcell_genes_plot_list, ncol = 3)
 
 ![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
-# B cell genes (Protein)
+## B cell genes (Protein)
 
 ``` r
 bcell_prots <- 
@@ -619,6 +619,60 @@ plot_grid(plotlist = bcell_prots_plot_list, ncol = 3)
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+## Lupus genes
+
+``` r
+library(rvest)
+
+sle_genes <- 
+    "https://www.nature.com/articles/ng.3434/tables/2" %>%
+    read_html() %>%
+    html_node("table") %>%
+    html_table(header = TRUE, fill = TRUE) %>%
+    select(gene = `Likely causal genec`) %>%
+    slice(-1) %>%
+    separate_rows(gene, sep = ",") %>%
+    mutate(gene = trimws(gene)) %>%
+    filter(gene != "") %>%
+    pull(gene)
+
+sle_genes_df <- features_df %>%
+    filter(phenotype == "Gene Expression", 
+           gene_name %in% sle_genes) %>%
+    select(gene_id, gene_name)
+
+sle_genes_quant <- bcells_singlet@assays$RNA@data %>% 
+    .[sle_genes_df$gene_id, ] %>%
+    as.data.frame() %>%
+    rownames_to_column("gene_id") %>%
+    as_tibble() %>%
+    left_join(sle_genes_df, by = "gene_id") %>%
+    pivot_longer(-c("gene_id", "gene_name"), 
+                 names_to = "barcode", values_to = "gene_exp") %>%
+    group_by(gene_id) %>%
+    filter(mean(gene_exp > 0) > .01) %>%
+    ungroup()
+
+sle_genes_plot_list <- umap_df %>%
+    select(barcode, UMAP_1, UMAP_2) %>%
+    left_join(sle_genes_quant, by = "barcode") %>%
+    group_split(gene_id) %>%
+    map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = gene_exp)) +
+            geom_point(size = .2) +
+            scale_color_viridis_c(labels = function(x) str_pad(x, 3),
+                                  guide = guide_colorbar(barwidth = .5)) +
+            facet_wrap(~gene_name) +
+            theme_minimal() +
+            theme(panel.grid = element_blank(),
+                  axis.title = element_blank(),
+                  axis.text = element_blank()) +
+            labs(color = NULL))
+
+plot_grid(plotlist = sle_genes_plot_list, ncol = 4)
+```
+
+![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ``` r
 bcells_markers <- 
