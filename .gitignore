@@ -17,3 +17,4 @@ log
 data/pca
 mgb_biobank/allchr*
 mgb_biobank/sle_variants
+*test.R
