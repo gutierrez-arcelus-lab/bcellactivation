@@ -183,7 +183,7 @@ str(bcells)
     #   ..@ commands    :List of 5
     #   .. ..$ NormalizeData.RNA       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:50:09"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-15 09:26:39"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "NormalizeData(bcells, normalization.method = \"LogNormalize\")"
     #   .. .. .. ..@ params     :List of 5
@@ -194,7 +194,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose             : logi TRUE
     #   .. ..$ FindVariableFeatures.RNA:Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "FindVariableFeatures.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:50:14"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-15 09:26:48"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "FindVariableFeatures(bcells, selection.method = \"mean.var.plot\")"
     #   .. .. .. ..@ params     :List of 12
@@ -212,7 +212,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose            : logi TRUE
     #   .. ..$ ScaleData.RNA           :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "ScaleData.RNA"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:50:15"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-15 09:26:50"
     #   .. .. .. ..@ assay.used : chr "RNA"
     #   .. .. .. ..@ call.string: chr "ScaleData(bcells, features = VariableFeatures(bcells))"
     #   .. .. .. ..@ params     :List of 10
@@ -228,7 +228,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose           : logi TRUE
     #   .. ..$ NormalizeData.HTO       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.HTO"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:50:16"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-15 09:26:50"
     #   .. .. .. ..@ assay.used : chr "HTO"
     #   .. .. .. ..@ call.string: chr "NormalizeData(bcells, assay = \"HTO\", normalization.method = \"CLR\")"
     #   .. .. .. ..@ params     :List of 5
@@ -239,7 +239,7 @@ str(bcells)
     #   .. .. .. .. ..$ verbose             : logi TRUE
     #   .. ..$ NormalizeData.ADT       :Formal class 'SeuratCommand' [package "SeuratObject"] with 5 slots
     #   .. .. .. ..@ name       : chr "NormalizeData.ADT"
-    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-14 17:50:16"
+    #   .. .. .. ..@ time.stamp : POSIXct[1:1], format: "2022-03-15 09:26:52"
     #   .. .. .. ..@ assay.used : chr "ADT"
     #   .. .. .. ..@ call.string: chr [1:2] "NormalizeData(bcells, assay = \"ADT\", normalization.method = \"CLR\", " "    margin = 2)"
     #   .. .. .. ..@ params     :List of 5
@@ -435,7 +435,9 @@ bcells_singlet <-
 
 bcells_singlet <-
     RunPCA(bcells_singlet, features = VariableFeatures(bcells_singlet))
+```
 
+``` r
 tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
     rownames_to_column("pc") %>%
     mutate(pc = fct_inorder(pc),
@@ -451,28 +453,30 @@ tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
     labs(x = "Principal component", y = "Proportion of variance")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 ## UMAP
 
 ``` r
-bcells_singlet <- FindNeighbors(bcells_singlet, dims = 1:15)
+bcells_singlet <- FindNeighbors(bcells_singlet, dims = 1:20)
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
 ```
 
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
     # 
     # Number of nodes: 6176
-    # Number of edges: 218977
+    # Number of edges: 231339
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.9158
+    # Maximum modularity in 10 random starts: 0.9161
     # Number of communities: 7
-    # Elapsed time: 0 seconds
+    # Elapsed time: 1 seconds
 
 ``` r
-bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:15)
+bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
+```
 
+``` r
 umap_df <- as.data.frame(bcells_singlet@reductions$umap@cell.embeddings) %>%
     as_tibble() %>%
     mutate(barcode = colnames(bcells_singlet@assays$RNA@data),
@@ -500,7 +504,7 @@ seurat_cluster_p <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = cluster)) +
 plot_grid(cell_class_p, seurat_cluster_p, ncol = 1)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ``` r
 mki_gene_df <- features_df %>%
@@ -539,7 +543,7 @@ mt_umap <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = percent_mt)) +
 plot_grid(mki_umap, mt_umap, ncol = 1)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ## B cell genes (RNA)
 
@@ -582,7 +586,7 @@ bcell_genes_plot_list <- umap_df %>%
 plot_grid(plotlist = bcell_genes_plot_list, ncol = 3)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ## B cell genes (Protein)
 
@@ -618,7 +622,7 @@ bcell_prots_plot_list <- umap_df %>%
 plot_grid(plotlist = bcell_prots_plot_list, ncol = 3)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 ## Lupus genes
 
@@ -672,9 +676,7 @@ sle_genes_plot_list <- umap_df %>%
 plot_grid(plotlist = sle_genes_plot_list, ncol = 4)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
-
-## TLR genes
+![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
 ``` r
 bcells_markers <- 

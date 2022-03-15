@@ -224,7 +224,9 @@ bcells_singlet <-
 
 bcells_singlet <-
     RunPCA(bcells_singlet, features = VariableFeatures(bcells_singlet))
+```
 
+```{r}
 tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
     rownames_to_column("pc") %>%
     mutate(pc = fct_inorder(pc),
@@ -243,11 +245,13 @@ tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
 
 ## UMAP
 
-```{r, fig.height=8}
-bcells_singlet <- FindNeighbors(bcells_singlet, dims = 1:15)
+```{r, }
+bcells_singlet <- FindNeighbors(bcells_singlet, dims = 1:20)
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
-bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:15)
+bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
+```
 
+```{r fig.height=8}
 umap_df <- as.data.frame(bcells_singlet@reductions$umap@cell.embeddings) %>%
     as_tibble() %>%
     mutate(barcode = colnames(bcells_singlet@assays$RNA@data),
@@ -392,7 +396,7 @@ plot_grid(plotlist = bcell_prots_plot_list, ncol = 3)
 ## Lupus genes
 
 
-```{r, fig.height=24, fig.width=9}
+```{r, fig.height=24, fig.width=10}
 library(rvest)
 
 sle_genes <- 
@@ -443,9 +447,9 @@ plot_grid(plotlist = sle_genes_plot_list, ncol = 4)
 
 ```
 
-## TLR genes
 
 ```{r, include=FALSE, eval=FALSE}
+## TLR genes
 tlr_genes_df <- features_df %>%
     filter(phenotype == "Gene Expression", 
            grepl("TLR", gene_name)) %>%
