@@ -10,10 +10,15 @@ log
 .Rhistory
 *vcf
 *vcf.idx
+geuvadis/VCF/
 *dict
 *fa
+*fasta
 *fai
 *gtf
+*bed
+*xls
+*xlsx
 data/pca
 mgb_biobank/allchr*
 mgb_biobank/sle_variants
