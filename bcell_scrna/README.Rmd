@@ -544,7 +544,7 @@ umap_df %>%
 
 Here, I changed the clusters to make RSQ72 a separate cluster from cluster 1, and I'm calling "IgG72-prolif" as a separate cluster from IgG72 to denote the subcluster with high MIK62 gene expression.
 
-```{r, echo = FALSE}
+```{r}
 cluster_renamed <- 
   tibble(cluster = Idents(bcells_singlet),
          hto = bcells_singlet@meta.data$HTO_maxID) %>%
@@ -567,7 +567,9 @@ bcells_markers <-
                    min.pct = 1/3,
                    logfc.threshold = .5) %>%
     as_tibble()
-  
+```  
+
+```{r, echo=FALSE}
 top_markers <- bcells_markers %>%
   as_tibble() %>%
   left_join(select(features_df, 1:2), by = c("gene" = "gene_id")) %>%
@@ -630,7 +632,7 @@ ggplot(top_marker_summary, aes(cluster, gene_name)) +
 
 ## Marker genes IgG vs RSQ
 
-```{r, echo=FALSE}
+```{r}
 bcells_markers_24 <- 
     FindMarkers(bcells_singlet_renamed, 
                    ident.1 = "IgG24",
@@ -652,8 +654,9 @@ bcells_markers_72 <-
     rownames_to_column("gene") %>%
     as_tibble() %>%
     select(gene, avg_log2FC, IgG = pct.1, RSQ = pct.2)
+```
 
-
+```{r, echo=FALSE}
 markers_timep_df <- 
   bind_rows("24hr" = bcells_markers_24, "72hr" = bcells_markers_72, .id = "time") %>%
   left_join(select(features_df, 1:2), by = c("gene" = "gene_id")) %>%

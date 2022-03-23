@@ -260,12 +260,61 @@ Here, I changed the clusters to make RSQ72 a separate cluster from
 cluster 1, and I’m calling “IgG72-prolif” as a separate cluster from
 IgG72 to denote the subcluster with high MIK62 gene expression.
 
+``` r
+cluster_renamed <- 
+  tibble(cluster = Idents(bcells_singlet),
+         hto = bcells_singlet@meta.data$HTO_maxID) %>%
+  mutate(cluster = as.character(cluster),
+         cluster = case_when(cluster == 1 & hto == "RSQ72" ~ "6",
+                             TRUE ~ cluster),
+         cluster = factor(cluster))
+
+bcells_singlet_renamed <- bcells_singlet
+Idents(bcells_singlet_renamed) <- cluster_renamed$cluster
+
+new_cluster_ids <- c("IgG24", "Res24", "IgG72", "RSQ24", "Res00", "IgG72-prolif", "RSQ72")
+names(new_cluster_ids) <- levels(bcells_singlet_renamed)
+
+bcells_singlet_renamed <- RenameIdents(bcells_singlet_renamed, new_cluster_ids)
+
+bcells_markers <- 
+    FindAllMarkers(bcells_singlet_renamed, 
+                   only.pos = TRUE,
+                   min.pct = 1/3,
+                   logfc.threshold = .5) %>%
+    as_tibble()
+```
+
 ## Top 10 marker genes per cluster
 
-![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ## Marker genes IgG vs RSQ
 
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+``` r
+bcells_markers_24 <- 
+    FindMarkers(bcells_singlet_renamed, 
+                   ident.1 = "IgG24",
+                   ident.2 = "RSQ24",
+                   only.pos = TRUE,
+                   min.pct = 1/3,
+                   logfc.threshold = 1) %>%
+    rownames_to_column("gene") %>%
+    as_tibble() %>%
+    select(gene, avg_log2FC, IgG = pct.1, RSQ = pct.2)
 
-![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+bcells_markers_72 <- 
+    FindMarkers(bcells_singlet_renamed, 
+                   ident.1 = c("IgG72", "IgG72-prolif"),
+                   ident.2 = "RSQ72",
+                   only.pos = TRUE,
+                   min.pct = 1/3,
+                   logfc.threshold = 1) %>%
+    rownames_to_column("gene") %>%
+    as_tibble() %>%
+    select(gene, avg_log2FC, IgG = pct.1, RSQ = pct.2)
+```
+
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
