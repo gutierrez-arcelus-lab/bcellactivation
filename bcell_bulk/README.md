@@ -74,7 +74,13 @@ PCA shows a separation of the RSQ and IgG treatments (PC1), and of the
 
 <img src="./plots/pca_bcell_expression.png" width="1500" />
 
-#### 1.3.3. Expression of candidate SLE genes
+#### 1.3.3. Differential expression
+
+<img src="./plots/foldchange.png" width="1500" />
+
+<img src="./plots/foldchange_betweenStims.png" width="900" />
+
+#### 1.3.4. Expression of candidate SLE genes
 
 We looked at the expression of candidate genes suggested by [Bentham et
 al. 2015, Table 2](http://www.nature.com/articles/ng.3434).

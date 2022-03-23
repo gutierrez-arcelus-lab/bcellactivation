@@ -1,17 +1,20 @@
 library(tidyverse)
+library(tidytext)
+library(rvest)
 library(ggsci)
 library(ggthemes)
 library(ggrepel)
 library(RColorBrewer)
 library(cowplot)
 
-# Most expressed biotypes
-gene_df <- read_tsv("./data/gene_quants.tsv")
 
-gene_names <- read_tsv("./data/transc_to_gene.tsv") %>%
+# Most expressed biotypes
+gene_df <- read_tsv("./results/gene_quants.tsv")
+
+gene_names <- read_tsv("../data/transc_to_gene.tsv") %>%
      distinct(gene_id, gene_name)
 
-transc_df <- read_tsv("./data/transcript_quants.tsv")
+transc_df <- read_tsv("./results/transcript_quants.tsv")
 
 transc_types_summary <- transc_df %>%
     group_by(condition_id, transcript_type) %>%
@@ -62,7 +65,6 @@ ggsave("./plots/total_expression.png", width = 6)
 
 
 # Genes in Bentham et al.
-library(rvest)
 
 bentham_genes <- 
     "https://www.nature.com/articles/ng.3434/tables/2" %>%
@@ -119,7 +121,6 @@ bentham_fc <- bentham_tpm %>%
     ungroup() %>%
     mutate(condition_id = factor(condition_id, levels = conditions))
 
-library(tidytext)
 
 bentham_fc_plot <- ggplot(bentham_fc, aes(fc, reorder_within(gene_name, fc, condition_id))) +
     geom_vline(xintercept = -3:3, linetype = 2, color = "grey", alpha = .33) +
@@ -137,6 +138,72 @@ bentham_fc_plot <- ggplot(bentham_fc, aes(fc, reorder_within(gene_name, fc, cond
          caption = "Genes with TPM > 10 in both resting and stim and |FC| > 0.5") 
     
 ggsave("./plots/bentham_fc.png", bentham_fc_plot, height = 6.5)
+
+# Genome-wide fold changes
+foldfc_df <- gene_df %>%
+  group_by(gene_id) %>%
+  filter(!all(tpm == 0)) %>%
+  ungroup() %>%
+  mutate(tpm = tpm + 1L) %>%
+  pivot_wider(names_from = condition_id, values_from = tpm) %>%
+  select(gene_id, resting = `16hr_resting`, everything()) %>%
+  pivot_longer(3:6, names_to = "condition_id", values_to = "tpm") %>%
+  separate(condition_id, c("time", "stim"), sep = "_") %>%
+  pivot_wider(names_from = time, values_from = tpm) %>%
+  mutate(fc24_resting = log2(`24hr`) - log2(resting),
+         fc72_resting = log2(`72hr`) - log2(resting))
+    
+fc_resting_df <- foldfc_df %>%
+  select(gene_id, stim, `24hr` = fc24_resting, `72hr` = fc72_resting) %>%
+  pivot_longer(3:4, names_to = "time")  %>%
+  filter(value >= 1 | value <= -1) %>%
+  mutate(reg = case_when(value < 0 ~ "down",
+                         value > 0 ~ "up")) %>%
+  group_by(stim, time) %>%
+  count(reg) %>%
+  mutate(n = case_when(reg == "down" ~ -n,
+                       reg == "up" ~ n))
+
+ggplot(fc_resting_df, aes(time, n, fill = reg)) +
+  geom_col() +
+  scale_fill_npg() +
+  facet_wrap(~stim) +
+  theme_bw() +
+  theme(panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_blank(),
+        text = element_text(size = 8)) +
+  labs(x = NULL, y = "Number of genes", fill = NULL,
+       title = "DE genes at Fold Change > 2",
+       subtitle = "*in respect to the resting state")
+  
+ggsave("./plots/foldchange.png", width = 5)
+
+fc_stims_times <- foldfc_df %>%
+  select(gene_id, stim, `24hr`, `72hr`) %>%
+  pivot_longer(3:4, names_to = "time") %>%
+  pivot_wider(names_from = stim, values_from = value) %>%
+  mutate(fc = log2(IgG) - log2(RSQ)) %>%
+  filter(fc >= 1 | fc <= -1) %>%
+  mutate(reg = case_when(fc < 0 ~ "down",
+                         fc > 0 ~ "up")) %>%
+  count(time, reg) %>%
+  mutate(n = case_when(reg == "down" ~ -n,
+                       reg == "up" ~ n))
+
+
+ggplot(fc_stims_times, aes(time, n, fill = reg)) +
+  geom_col() +
+  scale_fill_npg() +
+  theme_bw() +
+  theme(panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_blank(),
+        text = element_text(size = 6)) +
+  labs(x = NULL, y = "Number of genes", fill = NULL,
+       title = "DE genes at Fold Change > 2",
+       subtitle = "IgG / RSQ")
+
+ggsave("./plots/foldchange_betweenStims.png", width = 3, height = 1.5)
+
 
 
 
@@ -198,38 +265,6 @@ ggplot(ig_c_genes, aes(gene_name, tpm)) +
   labs(x = NULL, y = "TPM", fill = NULL)
 
 ggsave("./plots/ig_c_genes.png", width = 6, height = 4.2)
-
-
-
-# Comparison between log2 FC
-
-condition_df <- logfc %>%
-    separate(condition_id, c("time", "stim"), sep = "_") %>%
-    select(-cpm) %>%
-    pivot_wider(names_from = time, values_from = log2fc)
-
-stim_diffs <- condition_df %>%
-    filter(`24hr` < -60 | `72hr` < -60) %>%
-    left_join(gene_names)
-
-
-ggplot(anti_join(condition_df, stim_diffs),
-       aes(`24hr`, `72hr`)) +
-    geom_abline(linetype = 2, color = "grey") +
-    geom_hline(yintercept = 0, linetype = 2, color = "grey") +
-    geom_vline(xintercept = 0, linetype = 2, color = "grey") +
-    geom_point(alpha = .25) +
-    geom_point(data = stim_diffs,
-                    aes(`24hr`, `72hr`, color = gene_type),
-               alpha = .5) +
-    scale_color_gdocs() +
-    facet_wrap(~stim) +
-    theme_bw() +
-    theme(panel.grid = element_blank()) +
-    labs(color = "Gene type") +
-    guides(color = guide_legend(override.aes = list(alpha = 1)))
-
-ggsave("./plots/fc_24vs72.png", width = 6, height = 2.5)
 
 
 #PCA on expression data
