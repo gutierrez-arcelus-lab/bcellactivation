@@ -28,7 +28,7 @@ library(cowplot)
 
 ## Cell Ranger data
 
-```{r}
+```{r, cache=TRUE}
 cellranger_dir <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/scRNA/SN0231064/KW9100_Maria",
               "210726_10X_KW9100-2_bcl/cellranger-6.0.1/GRCh38/BRI-1283/outs",
@@ -51,7 +51,7 @@ data10x <- Read10X(cellranger_dir, gene.column = 1)
 
 ## Create the Seurat object
 
-```{r}
+```{r, cache=TRUE}
 gene_exp <- data10x[["Gene Expression"]]
 
 antibody <- data10x[["Antibody Capture"]] %>%
@@ -309,7 +309,17 @@ umap_df %>%
 
 
 ```{r}
-bcells_singlet_downsamp <- subset(bcells_singlet, downsample = 194)
+set.seed(1)
+sampled_cells <- umap_df %>%
+  select(stim, barcode) %>%
+  group_by(stim) %>%
+  sample_n(194) %>%
+  ungroup() %>%
+  pull(barcode)
+
+bcells_singlet_downsamp <- subset(bcells_singlet, cells = sampled_cells)
+
+table(bcells_singlet_downsamp@meta.data$HTO_maxID)[stims]
 
 bcells_singlet_downsamp <- 
     FindVariableFeatures(bcells_singlet_downsamp, 
@@ -637,7 +647,7 @@ bcells_markers_24 <-
     FindMarkers(bcells_singlet_renamed, 
                    ident.1 = "IgG24",
                    ident.2 = "RSQ24",
-                   only.pos = TRUE,
+                   only.pos = FALSE,
                    min.pct = 1/3,
                    logfc.threshold = 1) %>%
     rownames_to_column("gene") %>%
@@ -648,7 +658,7 @@ bcells_markers_72 <-
     FindMarkers(bcells_singlet_renamed, 
                    ident.1 = c("IgG72", "IgG72-prolif"),
                    ident.2 = "RSQ72",
-                   only.pos = TRUE,
+                   only.pos = FALSE,
                    min.pct = 1/3,
                    logfc.threshold = 1) %>%
     rownames_to_column("gene") %>%
@@ -661,17 +671,37 @@ markers_timep_df <-
   bind_rows("24hr" = bcells_markers_24, "72hr" = bcells_markers_72, .id = "time") %>%
   left_join(select(features_df, 1:2), by = c("gene" = "gene_id")) %>%
   pivot_longer(IgG:RSQ, names_to = "cluster", values_to = "pct")
+
+cell_gene_expr_timep <- 
+  bcells_singlet_renamed@assays$RNA@data %>%
+  .[unique(markers_timep_df$gene), ] %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  as_tibble() %>%
+  pivot_longer(-gene_id, names_to = "barcode", values_to = "logexpr")
+
+timep_gene_avg_expr <- cell_gene_expr_timep %>%
+  left_join(cluster_cell) %>%
+  group_by(cluster, gene_id) %>%
+  summarise(scale_expr = mean(logexpr)) %>%
+  ungroup() %>%
+  left_join(features_df)
+  
 ```
 
 
 ```{r, echo=FALSE, fig.height=4}
 markers_timep_df %>%
   filter(time == "24hr") %>%
+  rename("stim" = "cluster") %>%
+  mutate(cluster = paste0(stim, time),
+         cluster = sub("hr$", "", cluster)) %>%
+  left_join(select(timep_gene_avg_expr, cluster, gene_name, scale_expr)) %>%
   arrange(desc(avg_log2FC)) %>%
   mutate(gene_name = fct_inorder(gene_name),
          tier = ntile(1:nrow(.), 2)) %>%
   ggplot(aes(cluster, gene_name)) +
-  geom_point(aes(size = pct, color = avg_log2FC)) +
+  geom_point(aes(size = pct, color = scale_expr)) +
   geom_point(aes(size = pct), shape = 21, stroke = .25) +
   scale_color_viridis_c(option = "magma") +
   scale_size(range = c(0.1, 4), labels = scales::percent) +
@@ -681,20 +711,24 @@ markers_timep_df %>%
         strip.background = element_blank(),
         strip.text = element_blank()) +
   labs(x = NULL, y = NULL, title = "DE genes IgG vs. RSQ at 24hr",
-       color = "Avg log2FC", size = "% of cells") +
+       color = "Avg scaled\nexpression", size = "% of cells") +
   guides(color = guide_colorbar(barwidth = .6))
 
 ```
 
 
-```{r, echo=FALSE, fig.height=6}
+```{r, echo=FALSE, fig.height=8}
 markers_timep_df %>%
   filter(time == "72hr") %>%
+  rename("stim" = "cluster") %>%
+  mutate(cluster = paste0(stim, time),
+         cluster = sub("hr$", "", cluster)) %>%
+  left_join(select(timep_gene_avg_expr, cluster, gene_name, scale_expr)) %>%
   arrange(desc(avg_log2FC)) %>%
   mutate(gene_name = fct_inorder(gene_name),
          tier = ntile(1:nrow(.), 3)) %>%
   ggplot(aes(cluster, gene_name)) +
-  geom_point(aes(size = pct, color = avg_log2FC)) +
+  geom_point(aes(size = pct, color = scale_expr)) +
   geom_point(aes(size = pct), shape = 21, stroke = .25) +
   scale_color_viridis_c(option = "magma") +
   scale_size(range = c(0.1, 4), labels = scales::percent) +
@@ -704,7 +738,7 @@ markers_timep_df %>%
         strip.background = element_blank(),
         strip.text = element_blank()) +
   labs(x = NULL, y = NULL, title = "DE genes IgG vs. RSQ at 72hr",
-       color = "Avg log2FC", size = "% of cells") +
+       color = "Avg scaled\nexpression", size = "% of cells") +
   guides(color = guide_colorbar(barwidth = .6))
 ```
 

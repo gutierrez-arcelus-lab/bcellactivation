@@ -183,7 +183,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.9056
     # Number of communities: 6
-    # Elapsed time: 0 seconds
+    # Elapsed time: 1 seconds
 
 ``` r
 # UMAP
@@ -197,8 +197,24 @@ bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 ## Downsampling
 
 ``` r
-bcells_singlet_downsamp <- subset(bcells_singlet, downsample = 194)
+set.seed(1)
+sampled_cells <- umap_df %>%
+  select(stim, barcode) %>%
+  group_by(stim) %>%
+  sample_n(194) %>%
+  ungroup() %>%
+  pull(barcode)
 
+bcells_singlet_downsamp <- subset(bcells_singlet, cells = sampled_cells)
+
+table(bcells_singlet_downsamp@meta.data$HTO_maxID)[stims]
+```
+
+    # 
+    # Res00 Res24 IgG24 IgG72 RSQ24 RSQ72 
+    #   194   194   194   194   194   194
+
+``` r
 bcells_singlet_downsamp <- 
     FindVariableFeatures(bcells_singlet_downsamp, 
                          nfeatures = 1000,
@@ -224,11 +240,11 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
     # 
     # Number of nodes: 1164
-    # Number of edges: 42810
+    # Number of edges: 44221
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.8972
-    # Number of communities: 5
+    # Maximum modularity in 10 random starts: 0.8973
+    # Number of communities: 4
     # Elapsed time: 0 seconds
 
 ``` r
@@ -296,7 +312,7 @@ bcells_markers_24 <-
     FindMarkers(bcells_singlet_renamed, 
                    ident.1 = "IgG24",
                    ident.2 = "RSQ24",
-                   only.pos = TRUE,
+                   only.pos = FALSE,
                    min.pct = 1/3,
                    logfc.threshold = 1) %>%
     rownames_to_column("gene") %>%
@@ -307,7 +323,7 @@ bcells_markers_72 <-
     FindMarkers(bcells_singlet_renamed, 
                    ident.1 = c("IgG72", "IgG72-prolif"),
                    ident.2 = "RSQ72",
-                   only.pos = TRUE,
+                   only.pos = FALSE,
                    min.pct = 1/3,
                    logfc.threshold = 1) %>%
     rownames_to_column("gene") %>%
