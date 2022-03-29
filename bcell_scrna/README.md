@@ -183,7 +183,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.9056
     # Number of communities: 6
-    # Elapsed time: 1 seconds
+    # Elapsed time: 0 seconds
 
 ``` r
 # UMAP
@@ -258,17 +258,21 @@ bbcells_singlet_downsamp <- RunUMAP(bcells_singlet_downsamp, dims = 1:20)
 
 ![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
-## B cell genes (Protein)
+## DN2 genes (Jenks et al. (2018); Fig 4-C)
 
 ![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
-## Lupus genes
+## B cell genes (Protein)
 
 ![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
-## TLR genes
+## Lupus genes
 
 ![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+
+## TLR genes
+
+![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 ## Find marker genes for each cluster
 
@@ -303,7 +307,7 @@ bcells_markers <-
 
 ## Top 10 marker genes per cluster
 
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 ## Marker genes IgG vs RSQ
 
@@ -331,6 +335,6 @@ bcells_markers_72 <-
     select(gene, avg_log2FC, IgG = pct.1, RSQ = pct.2)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
-
 ![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->

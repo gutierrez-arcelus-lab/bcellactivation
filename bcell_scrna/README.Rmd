@@ -431,6 +431,49 @@ plot_grid(plotlist = bcell_genes_plot_list, ncol = 3)
     
 ```
 
+
+## DN2 genes (Jenks et al. (2018); Fig 4-C)
+
+```{r, echo=FALSE, fig.height=15, fig.width=9}
+dn2_genes <- c("IL10RB", "ITGAX", "TBX21", "ZEB2", "SLAMF7", "TBKBP1",
+               "IFNLR1", "SOX5", "DAPP1", "FCGR2B", "FCRL5", "FCRL3",
+               "CD22", "IRF4", "IL10RA", "CD72", "BCL6", "IL21R", 
+               "DUSP6", "KLF4")
+
+dn2_genes_df <- features_df %>%
+    filter(phenotype == "Gene Expression", 
+           gene_name %in% dn2_genes) %>%
+    select(gene_id, gene_name)
+
+dn2_genes_quant <- bcells_singlet@assays$RNA@data %>% 
+    .[dn2_genes_df$gene_id, , drop = FALSE] %>%
+    as.data.frame() %>%
+    rownames_to_column("gene_id") %>%
+    as_tibble() %>%
+    left_join(dn2_genes_df, by = "gene_id") %>%
+    pivot_longer(-c("gene_id", "gene_name"), 
+                 names_to = "barcode", values_to = "gene_exp") %>%
+  mutate(gene_name = factor(gene_name, levels = dn2_genes))
+
+dn2_genes_plot_list <- umap_df %>%
+    select(barcode, UMAP_1, UMAP_2) %>%
+    left_join(dn2_genes_quant, by = "barcode") %>%
+    group_split(gene_id) %>%
+    map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = gene_exp)) +
+            geom_point(size = .2) +
+            scale_color_viridis_c(labels = function(x) str_pad(x, 3),
+                                  guide = guide_colorbar(barwidth = .5)) +
+            facet_wrap(~gene_name) +
+            theme_minimal() +
+            theme(panel.grid = element_blank(),
+                  axis.title = element_blank(),
+                  axis.text = element_blank()) +
+            labs(color = NULL))
+
+plot_grid(plotlist = dn2_genes_plot_list, ncol = 3)
+```
+
+
 ## B cell genes (Protein)
 
 ```{r, echo=FALSE, fig.height=8, fig.width=9}
