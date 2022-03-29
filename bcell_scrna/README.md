@@ -260,15 +260,15 @@ bbcells_singlet_downsamp <- RunUMAP(bcells_singlet_downsamp, dims = 1:20)
 
 ## B cell genes (Protein)
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 ## Lupus genes
 
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+
+## DN2 genes (Jenks et al. (2018); Fig 4-C)
+
 ![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
-
-## DN2 genes (Jenks et al. (2018); Fig 4-C)
-
-![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 ## TLR genes
 

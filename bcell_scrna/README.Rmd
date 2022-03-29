@@ -541,13 +541,13 @@ dn2_genes_quant <- bcells_singlet@assays$RNA@data %>%
     as_tibble() %>%
     left_join(dn2_genes_df, by = "gene_id") %>%
     pivot_longer(-c("gene_id", "gene_name"), 
-                 names_to = "barcode", values_to = "gene_exp") %>%
-  mutate(gene_name = factor(gene_name, levels = dn2_genes))
+                 names_to = "barcode", values_to = "gene_exp")
 
 dn2_genes_plot_list <- umap_df %>%
     select(barcode, UMAP_1, UMAP_2) %>%
     left_join(dn2_genes_quant, by = "barcode") %>%
-    group_split(gene_id) %>%
+    split(.$gene_name) %>%
+    .[dn2_genes] %>%
     map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = gene_exp)) +
             geom_point(size = .2) +
             scale_color_viridis_c(labels = function(x) str_pad(x, 3),
