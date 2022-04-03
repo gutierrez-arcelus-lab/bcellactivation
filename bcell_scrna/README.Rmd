@@ -625,12 +625,9 @@ magma_plot_df <- magma %>%
 
 ggplot(magma_plot_df, aes(gene_name, abs_z)) +
   geom_point(size = 4, alpha = .5) +
-  ggrepel::geom_text_repel(aes(label = gene_name), angle = 90, nudge_y = .5) +
   theme_minimal() +
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        panel.grid.minor = element_blank()) +
   labs(x = "Absolute z-score", y = NULL)
 ```
 
