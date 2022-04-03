@@ -178,6 +178,11 @@ bcells_singlet <- subset(bcells, idents = "Singlet")
 
 table(bcells_singlet@meta.data$HTO_maxID)[stims]
 ```
+```{r, include=FALSE, eval=FALSE, echo=FALSE}
+write_rds(bcells_singlet, "./scDRS/data/bcells_singlet_seurat.rds")
+```
+
+
 
 ## Feature quantifications
 
@@ -562,6 +567,7 @@ dn2_genes_plot_list <- umap_df %>%
 plot_grid(plotlist = dn2_genes_plot_list, ncol = 3)
 ```
 
+
 ## TLR genes
 
 ```{r, echo=FALSE}
@@ -593,6 +599,74 @@ umap_df %>%
           axis.text = element_blank()) +
     labs(color = NULL)
 ```
+
+
+## MAGMA
+
+```{r, echo=FALSE, fig.height=6}
+magma_genes_annot <-
+  read_tsv("./scDRS/data/gencode_genes/genes.v38.hg19.loc",
+           col_names = FALSE) %>%
+  select(gene_id = X1, gene_name = X6) %>%
+  extract(gene_name, c("ix", "gene_name"), "(\\d+)_(.+)")
+
+magma <- read_delim("./scDRS/results/Bentham.genes.out", delim = " ") %>%
+  setNames(trimws(names(.))) %>%
+  select(gene_id = GENE, z = ZSTAT) %>%
+  left_join(magma_genes_annot, by = "gene_id") %>%
+  mutate(z = as.numeric(z), 
+         abs_z = abs(z)) %>%
+  arrange(desc(abs_z))
+
+magma_plot_df <- magma %>%
+  top_n(50, abs_z) %>%
+  arrange(desc(abs_z)) %>%
+  mutate(gene_name = fct_inorder(gene_name))
+
+ggplot(magma_plot_df, aes(gene_name, abs_z)) +
+  geom_point(size = 4, alpha = .5) +
+  ggrepel::geom_text_repel(aes(label = gene_name), angle = 90, nudge_y = .5) +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank()) +
+  labs(x = "Absolute z-score", y = NULL)
+```
+
+
+
+## scDRS
+
+```{r, echo=FALSE, fig.height=8}
+scdrs_scores <- read_tsv("./scDRS/results/SLE.score.gz") %>%
+  rename("barcode" = "X1")
+
+umap_scdrs_df <- umap_df %>%
+  select(1:3) %>%
+  left_join(scdrs_scores, by = "barcode")
+
+scdrs_1 <- ggplot(umap_scdrs_df, aes(UMAP_1, UMAP_2, color = norm_score)) +
+    geom_point(size = 1) +
+    scale_color_gradient2(low = "blue", mid = "white", high = "red") +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          panel.background = element_rect(fill = "grey")) +
+    guides(color = guide_legend(override.aes = list(size = 2)))
+
+scdrs_2 <- ggplot(umap_scdrs_df, aes(UMAP_1, UMAP_2, color = nlog10_pval)) +
+    geom_point(size = .75) +
+    scale_color_gradient(low = "lightyellow1", high = "red", 
+                         breaks = scales::pretty_breaks(6)) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          panel.background = element_rect(fill = "grey")) +
+    guides(color = guide_legend(override.aes = list(size = 2)))
+
+plot_grid(scdrs_1, scdrs_2, ncol = 1)
+```
+
+
 
 ## Find marker genes for each cluster
 

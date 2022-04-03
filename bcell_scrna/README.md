@@ -144,7 +144,7 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
 
 ## Feature quantifications
 
-![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 ## PCA
 
@@ -163,7 +163,7 @@ bcells_singlet <-
     RunPCA(bcells_singlet, features = VariableFeatures(bcells_singlet))
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ## UMAP
 
@@ -190,9 +190,9 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
 bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
-
 ![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
 ## Downsampling
 
@@ -227,7 +227,7 @@ bcells_singlet_downsamp <-
     RunPCA(bcells_singlet_downsamp, features = VariableFeatures(bcells_singlet_downsamp))
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 ``` r
 # Find neighboring cells
@@ -252,27 +252,35 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
 bbcells_singlet_downsamp <- RunUMAP(bcells_singlet_downsamp, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 ## B cell genes (RNA)
 
-![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 ## B cell genes (Protein)
 
-![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ## Lupus genes
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 ## DN2 genes (Jenks et al. (2018); Fig 4-C)
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 ## TLR genes
 
-![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+
+## MAGMA
+
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+
+## scDRS
+
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 ## Find marker genes for each cluster
 
@@ -307,7 +315,7 @@ bcells_markers <-
 
 ## Top 10 marker genes per cluster
 
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 ## Marker genes IgG vs RSQ
 
@@ -335,6 +343,6 @@ bcells_markers_72 <-
     select(gene, avg_log2FC, IgG = pct.1, RSQ = pct.2)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
 
-![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
