@@ -315,12 +315,14 @@ umap_df %>%
 
 ```{r}
 set.seed(1)
-sampled_cells <- umap_df %>%
-  select(stim, barcode) %>%
-  group_by(stim) %>%
+sampled_cells <- 
+  tibble(cell_barcode = colnames(bcells_singlet@assays$RNA@counts),
+         cell_stim = bcells_singlet@meta.data$HTO_maxID) %>%
+  select(cell_stim, cell_barcode) %>%
+  group_by(cell_stim) %>%
   sample_n(194) %>%
   ungroup() %>%
-  pull(barcode)
+  pull(cell_barcode)
 
 bcells_singlet_downsamp <- subset(bcells_singlet, cells = sampled_cells)
 
@@ -604,30 +606,27 @@ umap_df %>%
 ## MAGMA
 
 ```{r, echo=FALSE, fig.height=6}
-magma_genes_annot <-
-  read_tsv("./scDRS/data/gencode_genes/genes.v38.hg19.loc",
-           col_names = FALSE) %>%
-  select(gene_id = X1, gene_name = X6) %>%
+magma_genes_annot <- "./scDRS/data/gencode_genes/genes.v19.hg19.loc" %>%
+  read_tsv(col_names = FALSE) %>%
+  select(gene_id = X1, gene_name = X6, chr = X2, pos = X3) %>%
   extract(gene_name, c("ix", "gene_name"), "(\\d+)_(.+)")
 
-magma <- read_delim("./scDRS/results/Bentham.genes.out", delim = " ") %>%
-  setNames(trimws(names(.))) %>%
-  select(gene_id = GENE, z = ZSTAT) %>%
+magma <- read_table("./scDRS/results/Bentham.genes.out") %>%
+  select(gene_id = GENE, z = ZSTAT, p = P) %>%
   left_join(magma_genes_annot, by = "gene_id") %>%
-  mutate(z = as.numeric(z), 
-         abs_z = abs(z)) %>%
+  mutate(abs_z = abs(z),
+         logp = -log10(p)) %>%
   arrange(desc(abs_z))
 
 magma_plot_df <- magma %>%
   top_n(50, abs_z) %>%
-  arrange(desc(abs_z)) %>%
+  arrange(abs_z) %>%
   mutate(gene_name = fct_inorder(gene_name))
 
-ggplot(magma_plot_df, aes(gene_name, abs_z)) +
+ggplot(magma_plot_df, aes(abs_z, gene_name)) +
   geom_point(size = 4, alpha = .5) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1),
-        panel.grid.minor = element_blank()) +
+  theme(panel.grid.minor = element_blank()) +
   labs(x = "Absolute z-score", y = NULL)
 ```
 
@@ -651,14 +650,18 @@ scdrs_1 <- ggplot(umap_scdrs_df, aes(UMAP_1, UMAP_2, color = norm_score)) +
           panel.background = element_rect(fill = "grey")) +
     guides(color = guide_legend(override.aes = list(size = 2)))
 
-scdrs_2 <- ggplot(umap_scdrs_df, aes(UMAP_1, UMAP_2, color = nlog10_pval)) +
-    geom_point(size = .75) +
-    scale_color_gradient(low = "lightyellow1", high = "red", 
-                         breaks = scales::pretty_breaks(6)) +
+scdrs_2 <- ggplot(filter(umap_scdrs_df, pval >= 0.05),
+                  aes(UMAP_1, UMAP_2)) +
+    geom_point(size = 1, color = "white") +
+    geom_point(data = filter(umap_scdrs_df, pval < 0.05),
+               aes(color = norm_score), size = 1) +
+    scale_color_gradient2(low = "blue", mid = "white", high = "red") +
     theme_minimal() +
     theme(panel.grid = element_blank(),
           panel.background = element_rect(fill = "grey")) +
-    guides(color = guide_legend(override.aes = list(size = 2)))
+    guides(color = guide_legend(override.aes = list(size = 2))) +
+    annotate("text", x = 5, y = 5, label = "*only coloring cells with p < 0.05")
+
 
 plot_grid(scdrs_1, scdrs_2, ncol = 1)
 ```

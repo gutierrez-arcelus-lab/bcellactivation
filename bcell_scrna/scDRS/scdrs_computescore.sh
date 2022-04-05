@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-H5=./data/bcells_singlet_seurat.h5ad
+H5=./data/expression/bcells_singlet_seurat.h5ad
 GS=./results/Bentham_zscore.gs
 OUT=./results
 

@@ -198,12 +198,14 @@ bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 
 ``` r
 set.seed(1)
-sampled_cells <- umap_df %>%
-  select(stim, barcode) %>%
-  group_by(stim) %>%
+sampled_cells <- 
+  tibble(cell_barcode = colnames(bcells_singlet@assays$RNA@counts),
+         cell_stim = bcells_singlet@meta.data$HTO_maxID) %>%
+  select(cell_stim, cell_barcode) %>%
+  group_by(cell_stim) %>%
   sample_n(194) %>%
   ungroup() %>%
-  pull(barcode)
+  pull(cell_barcode)
 
 bcells_singlet_downsamp <- subset(bcells_singlet, cells = sampled_cells)
 
@@ -240,11 +242,11 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
     # 
     # Number of nodes: 1164
-    # Number of edges: 44221
+    # Number of edges: 44041
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.8973
-    # Number of communities: 4
+    # Maximum modularity in 10 random starts: 0.8913
+    # Number of communities: 5
     # Elapsed time: 0 seconds
 
 ``` r
