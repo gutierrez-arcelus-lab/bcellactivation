@@ -1,8 +1,10 @@
 #!/usr/bin/bash
 
 H5=./data/expression/bcells_singlet_seurat.h5ad
-GS=./results/Bentham_zscore.gs
-OUT=./results
+#GS=./results/Bentham_zscore.gs
+#OUT=./results
+GS=./results/Bentham_zscore_scDRSpaper.gs
+OUT=./results/Bentham_data_scDRSpaper
 
 mkdir -p $OUT
 

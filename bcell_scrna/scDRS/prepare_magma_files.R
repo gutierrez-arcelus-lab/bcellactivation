@@ -19,9 +19,11 @@ sc_genes <- h5read("./data/expression/bcells_singlet_seurat.h5ad", "/var/_index"
 gencode <- read_tsv("../../data/gencode.v19.genes.tsv") %>%
     mutate(chr = sub("^chr", "", chr),
 	   chr = recode(chr, X = "23")) %>%
-    select(gene_name, chr, start, end, strand, gene_id) %>%
+    select(gene_name, chr, start, end, strand, gene_id, gene_name) %>%
     mutate(gene_id = sub("\\.\\d+$", "", gene_id)) %>%
-    filter(gene_id %in% sc_genes) %>%
+    #filter(gene_name %in% sle_genes) %>%
+    #filter(gene_id %in% sc_genes) %>%
+    filter(gene_name %in% scdrs_genes$gene_name)
     rownames_to_column("i") %>%
     unite(gene_name, c("i", "gene_name"), sep = "_") %>%
     select(gene_id, chr, start, end, strand, gene_name)
