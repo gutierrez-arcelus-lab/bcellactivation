@@ -146,6 +146,9 @@ Idents(bcells) <- "HTO_maxID"
 ```
 
 ```{r, echo=FALSE}
+stim_colors <- 
+    c("grey75", "grey60", "gold1", "gold3", "mediumpurple1", "mediumpurple4")
+
 hto_data <- bcells@assays$HTO@data
 hto_class_df <- tibble(barcode = colnames(hto_data),
                        maxid = bcells@meta.data$HTO_maxID)
@@ -162,7 +165,7 @@ hto_df <- hto_data %>%
 ggplot(hto_df, aes(value, maxid, fill = maxid)) +
     geom_density_ridges(show.legend = FALSE, size = .25) +
     facet_wrap(~hto, nrow = 2) +
-    scale_fill_brewer(palette = "Paired") +
+    scale_fill_manual(values = stim_colors) +
     theme_bw() +
     theme(panel.grid = element_blank()) +
     labs(x = "Expression level", y = NULL)
@@ -198,7 +201,7 @@ bcells_singlet_meta <- bcells_singlet@meta.data %>%
 ggplot(bcells_singlet_meta, aes(cell_class, value, fill = cell_class)) +
     geom_violin(size = .25) +
     scale_y_continuous(breaks = scales::pretty_breaks(7)) +
-    scale_fill_brewer(palette = "Paired") +
+    scale_fill_manual(values = stim_colors) +
     facet_wrap(~feature, nrow = 1, scales = "free") +
     theme_bw() +
     theme(axis.text.x = element_blank(),
@@ -267,7 +270,7 @@ umap_df <- as.data.frame(bcells_singlet@reductions$umap@cell.embeddings) %>%
 
 cell_class_p <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
     geom_point(size = 1) +
-    scale_color_brewer(palette = "Paired") +
+    scale_color_manual(values = stim_colors) +
     theme_minimal() +
     theme(panel.grid = element_blank()) +
     guides(color = guide_legend(override.aes = list(size = 2))) +
@@ -377,7 +380,7 @@ umap_ds_df <- as.data.frame(bcells_singlet_downsamp@reductions$umap@cell.embeddi
 
 cell_class_ds_p <- ggplot(umap_ds_df, aes(UMAP_1, UMAP_2, color = stim)) +
     geom_point(size = 1) +
-    scale_color_brewer(palette = "Paired") +
+    scale_color_manual(values = stim_colors) +
     theme_minimal() +
     theme(panel.grid = element_blank()) +
     guides(color = guide_legend(override.aes = list(size = 2))) +
@@ -490,6 +493,8 @@ sle_genes <-
     mutate(gene = trimws(gene)) %>%
     filter(gene != "") %>%
     pull(gene)
+
+#sle_genes %>% write_lines("./scDRS/data/bentham_genes.txt")
 
 sle_genes_df <- features_df %>%
     filter(phenotype == "Gene Expression", 
@@ -606,12 +611,14 @@ umap_df %>%
 ## MAGMA
 
 ```{r, echo=FALSE, fig.height=6}
-magma_genes_annot <- "./scDRS/data/gencode_genes/genes.v19.hg19.loc" %>%
+#magma_genes_annot <- "./scDRS/data/gencode_genes/genes.v19.hg19.loc" %>%
+magma_genes_annot <- "./scDRS/data/gencode_genes/genes.sle.loc" %>%
   read_tsv(col_names = FALSE) %>%
   select(gene_id = X1, gene_name = X6, chr = X2, pos = X3) %>%
   extract(gene_name, c("ix", "gene_name"), "(\\d+)_(.+)")
 
-magma <- read_table("./scDRS/results/Bentham.genes.out") %>%
+#magma <- read_table("./scDRS/results/Bentham.genes.out") %>%
+magma <- read_table("./scDRS/results/SleRiskGenes.genes.out") %>%
   select(gene_id = GENE, z = ZSTAT, p = P) %>%
   left_join(magma_genes_annot, by = "gene_id") %>%
   mutate(abs_z = abs(z),
@@ -619,7 +626,7 @@ magma <- read_table("./scDRS/results/Bentham.genes.out") %>%
   arrange(desc(abs_z))
 
 magma_plot_df <- magma %>%
-  top_n(50, abs_z) %>%
+  #top_n(50, abs_z) %>%
   arrange(abs_z) %>%
   mutate(gene_name = fct_inorder(gene_name))
 
@@ -635,7 +642,8 @@ ggplot(magma_plot_df, aes(abs_z, gene_name)) +
 ## scDRS
 
 ```{r, echo=FALSE, fig.height=8}
-scdrs_scores <- read_tsv("./scDRS/results/SLE.score.gz") %>%
+#scdrs_scores <- read_tsv("./scDRS/results/SLE.score.gz") %>%
+scdrs_scores <- read_tsv("./scDRS/results/SleRiskGenes/SLE.score.gz") %>%
   rename("barcode" = "X1")
 
 umap_scdrs_df <- umap_df %>%
