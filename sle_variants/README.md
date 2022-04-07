@@ -64,7 +64,7 @@ tier3_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 3)
 langefeld_df <- bind_rows("1" = tier1_ea, "2" = tier2_ea, "3" = tier3_ea, .id = "tier") %>%
     arrange(tier, region_rank, p) %>%
     mutate(chr = sub("^(\\d+)[qp].*$", "\\1", chr),
-       chr = factor(chr, levels = c(1:22, "X")))
+           chr = factor(chr, levels = c(1:22, "X")))
 
 langefeld_df
 ```
@@ -106,4 +106,36 @@ bentham_df
      8 rs2111485  2     163110536 IFIH1      1.27e- 11  1.15
      9 rs11889341 2     191943742 STAT4      5.59e-122  1.73
     10 rs3768792  2     213871709 IKZF2      1.21e- 13  1.24
+    # … with 33 more rows
+
+### Getting GRCh38 positions and p-values from the summary statistics
+
+``` r
+bentham_stats <- read_tsv("./summ_stats/bentham_GRCh38.tsv.gz")
+```
+
+``` r
+bentham_38 <- bentham_stats %>%
+    select(chr = chromosome, pos = base_pair_location, snp_id = variant_id, p_value) %>%
+    mutate(chr = ifelse(chr == 23, "X", chr),
+           chr = factor(chr, levels = c(1:22, "X"))) %>%
+    left_join(bentham_df, ., by = c("chr", "snp_id")) %>%
+    select(snp_id, chr, locus, pos = pos.y, p_value)
+    
+bentham_38
+```
+
+    # A tibble: 43 x 5
+       snp_id     chr   locus            pos  p_value
+       <chr>      <fct> <chr>          <dbl>    <dbl>
+     1 rs2476601  1     PTPN22     113834946 8.38e-13
+     2 rs1801274  1     FCGR2A     161509955 5.56e-11
+     3 rs704840   1     TNFSF4     173257056 1.41e-13
+     4 rs17849501 1     SMG7, NCF2 183573188 1.81e-59
+     5 rs3024505  1     IL10       206766559 2.21e- 3
+     6 rs9782955  1     LYST       235876577 7.92e- 4
+     7 rs6740462  2     SPRED2      65440138 1.76e- 8
+     8 rs2111485  2     IFIH1      162254026 3.69e- 6
+     9 rs11889341 2     STAT4      191079016 1.12e-65
+    10 rs3768792  2     IKZF2      213006985 3.78e- 8
     # … with 33 more rows

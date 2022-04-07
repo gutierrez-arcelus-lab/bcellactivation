@@ -71,7 +71,7 @@ tier3_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 3)
 langefeld_df <- bind_rows("1" = tier1_ea, "2" = tier2_ea, "3" = tier3_ea, .id = "tier") %>%
     arrange(tier, region_rank, p) %>%
     mutate(chr = sub("^(\\d+)[qp].*$", "\\1", chr),
-	   chr = factor(chr, levels = c(1:22, "X")))
+           chr = factor(chr, levels = c(1:22, "X")))
 
 langefeld_df
 ```
@@ -84,4 +84,22 @@ bentham_df <- read_bentham("https://www.nature.com/articles/ng.3434/tables/1") %
 
 bentham_df
 ```
+
+### Getting GRCh38 positions and p-values from the summary statistics
+
+```{r}
+bentham_stats <- read_tsv("./summ_stats/bentham_GRCh38.tsv.gz")
+```
+
+```{r}
+bentham_38 <- bentham_stats %>%
+    select(chr = chromosome, pos = base_pair_location, snp_id = variant_id, p_value) %>%
+    mutate(chr = ifelse(chr == 23, "X", chr),
+           chr = factor(chr, levels = c(1:22, "X"))) %>%
+    left_join(bentham_df, ., by = c("chr", "snp_id")) %>%
+    select(snp_id, chr, locus, pos = pos.y, p_value)
+    
+bentham_38
+```
+
 
