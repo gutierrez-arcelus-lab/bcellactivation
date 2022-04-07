@@ -69,7 +69,7 @@ langefeld_df <- bind_rows("1" = tier1_ea, "2" = tier2_ea, "3" = tier3_ea, .id = 
 langefeld_df
 ```
 
-    # A tibble: 798 x 10
+    # A tibble: 798 × 10
        tier  snp_id     chr         pos gene_region region_rank ref_allele        p p_stepwise    or
        <chr> <chr>      <fct>     <dbl> <chr>             <dbl> <chr>         <dbl>      <dbl> <dbl>
      1 1     rs12706861 7     128616582 IRF5-TNPO3            1 T          3.85e-71  NA         1.76
@@ -93,7 +93,7 @@ bentham_df <- read_bentham("https://www.nature.com/articles/ng.3434/tables/1") %
 bentham_df
 ```
 
-    # A tibble: 43 x 6
+    # A tibble: 43 × 6
        snp_id     chr         pos locus              p    or
        <chr>      <fct>     <dbl> <chr>          <dbl> <dbl>
      1 rs2476601  1     114377568 PTPN22     1.1 e- 28  1.43
@@ -108,10 +108,14 @@ bentham_df
     10 rs3768792  2     213871709 IKZF2      1.21e- 13  1.24
     # … with 33 more rows
 
-### Getting GRCh38 positions and p-values from the summary statistics
+### Getting GRCh38 positions and p-values from the summary statistics (Bentham et al.)
 
 ``` r
-bentham_stats <- read_tsv("./summ_stats/bentham_GRCh38.tsv.gz")
+summ_stats_cols <- c("chromosome", "base_pair_location", "variant_id", "p_value")
+
+bentham_stats <- read_tsv("./summ_stats/bentham_GRCh38.tsv.gz", 
+              col_select = all_of(summ_stats_cols),
+                          col_types = c("cdcd"))
 ```
 
 ``` r
@@ -125,7 +129,7 @@ bentham_38 <- bentham_stats %>%
 bentham_38
 ```
 
-    # A tibble: 43 x 5
+    # A tibble: 43 × 5
        snp_id     chr   locus            pos  p_value
        <chr>      <fct> <chr>          <dbl>    <dbl>
      1 rs2476601  1     PTPN22     113834946 8.38e-13
@@ -139,3 +143,51 @@ bentham_38
      9 rs11889341 2     STAT4      191079016 1.12e-65
     10 rs3768792  2     IKZF2      213006985 3.78e- 8
     # … with 33 more rows
+
+### Converting positions in Langefeld et al with liftOver
+
+``` r
+langefeld_bed <- langefeld_df %>%
+    select(chr, start = pos, snp_id) %>%
+    mutate(chr = paste0("chr", chr), 
+           end = start,
+           start = start - 1L) %>%
+    arrange(chr, start) %>%
+    select(chr, start, end, snp_id)
+
+write_tsv(langefeld_bed, "./paper_data/langefeld.hg19.bed", col_names = FALSE)
+
+chain <- "/reference_databases/ReferenceGenome/liftover_chain/hg19/hg19ToHg38.over.chain.gz"
+bed19 <- "./paper_data/langefeld.hg19.bed"
+bed38 <- "./paper_data/langefeld.hg38.bed"
+fail <- "./paper_data/langefeld.failTolift"
+
+command <- sprintf("liftOver %s %s %s %s", bed19, chain, bed38, fail)
+system(command)
+```
+
+``` r
+langefeld_38 <- read_tsv(bed38, col_names = c("chr", "start", "pos", "snp_id")) %>%
+    select(chr, pos, snp_id) %>%
+    mutate(chr = sub("chr", "", chr),
+           chr = factor(chr, levels = c(1:22, "X"))) %>%
+    left_join(langefeld_df, by = c("chr", "snp_id")) %>%
+    select(chr, pos = pos.x, snp_id, tier, gene_region, region_rank, p, p_stepwise)
+
+langefeld_38
+```
+
+    # A tibble: 798 × 8
+       chr        pos snp_id      tier  gene_region     region_rank           p   p_stepwise
+       <fct>    <dbl> <chr>       <chr> <chr>                 <dbl>       <dbl>        <dbl>
+     1 1      1309988 rs11590283  2     CPSF3L                   42 0.000000136 NA          
+     2 1      1313807 rs12142199  2     CPSF3L                   42 0.000000189  0.000000189
+     3 1      2271335 rs6673129   3     SKI                     452 0.00377      0.00377    
+     4 1      2861494 rs114800103 3     TTC34-ACTRT2            443 0.00358      0.00358    
+     5 1     11802157 rs9651118   3     MTHFR                    98 0.0000307    0.0000307  
+     6 1     14027816 rs4579751   3     PRDM2                   340 0.00177      0.00177    
+     7 1     19906593 rs10916668  3     OTUD3                   298 0.00217      0.00217    
+     8 1     19958381 rs12408855  3     PLA2G2E-PLA2G2A         298 0.00125     NA          
+     9 1     23393692 rs4648892   3     TCEA3                   451 0.00522      0.00522    
+    10 1     23397690 rs2275355   3     TCEA3                   451 0.00376     NA          
+    # … with 788 more rows
