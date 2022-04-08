@@ -76,9 +76,6 @@ sample_annotation <- read_tsv(index_1000G, comment = "##") %>%
 
 
 ### Colors
-mgb_cols <- c("black", "grey") %>%
-    setNames(c("MGB_biobank", "MGB_eur"))
-
 afr_cols <- brewer.pal("Oranges", n = 9)[3:9] %>%
     setNames(c("ACB", "ESN", "GWD", "LWK", "MSL", "YRI", "ASW"))
 
@@ -94,24 +91,27 @@ eas_cols <- brewer.pal("Purples", n = 9)[5:9] %>%
 amr_cols <- c("lightpink1", "hotpink", "hotpink3", "deeppink") %>%
     setNames(c("MXL", "CLM", "PEL", "PUR"))
 
+mgb_cols <- c("grey", "turquoise", "pink", "brown") %>%
+    setNames(c("MGB_biobank", "MGB_eur", "MGB_amr", "MGB_aa"))
+
 all_cols <- c(mgb_cols, afr_cols, eur_cols, sas_cols, eas_cols, amr_cols)
 
 
 ### read PCA results into R
 pca_genos <- "./results/VCF/allchr.isec.merged.pruned.pca.eigenvec" %>%
-    read_table2(col_names = FALSE) %>%
+    read_table(col_names = FALSE) %>%
     select(X1:X6) %>%
     setNames(c("id1", "id2", paste0("PC", 1:4)))
 
 pca_kgp <- pca_genos %>%
     inner_join(sample_annotation, by = c("id2" = "sample_id")) %>%
-    select(sample_id = id2, population, PC1:PC4)
+    select(sample_id = id2, population, starts_with("PC"))
 
 pca_mgb <- pca_genos %>%
     anti_join(sample_annotation, by = c("id2" = "sample_id")) %>%
     mutate(population = "MGB_biobank") %>%
     unite("sample_id", c("id1", "id2"), sep = "_") %>%
-    select(sample_id, population, PC1:PC4)
+    select(sample_id, population, starts_with("PC"))
 
 
 pca_df <- bind_rows(pca_mgb, pca_kgp) %>%
@@ -253,22 +253,224 @@ pca_eur_plot <- plot_grid(pca_eur_grid, get_legend(pca_eur_plot_1),
 
 ggsave("./plots/pca_eur.png", pca_eur_plot, width = 8, height = 5)
 
+
+### Select admixed individuals
+get_pop_pca <- function(pca_data, pop = c("eur", "aa", "amr")) {
+    
+    pop <- match.arg(pop)
+    
+    if (pop == "eur") pops <- c("CEU", "GBR", "TSI", "FIN")
+    if (pop == "aa") pops <- c("ACB", "ESN", "GWD", "LWK", "MSL", "YRI", "ASW")
+    if (pop == "amr") pops <- c("MXL", "CLM", "PEL", "PUR")
+
+     pca_thresholds <- pca_data %>%
+         filter(population %in% all_of(pops)) %>%
+         pivot_longer(starts_with("PC"), names_to = "pc") %>%
+         group_by(pc) %>%
+         mutate(q = percent_rank(value)) %>%
+         filter(q >= .01, q <= .99) %>%
+         summarise(tibble(min = min(value), max = max(value))) %>%
+         ungroup()
+     
+     mgb_inds <- pca_data %>%
+         filter(dataset == "MGB") %>%
+         pivot_longer(starts_with("PC"), names_to = "pc") %>%
+         inner_join(pca_thresholds) %>%
+         group_by(sample_id) %>%
+         filter(all(value >= min & value <= max)) %>%
+         ungroup() %>%
+         distinct(sample_id)
+    
+    pca_data %>%
+        inner_join(mgb_inds) %>% 
+        mutate(population = paste0("MGB_", pop))
+}
+
+plot_pca <- function(pca_data) {
+    
+    pca_plot_1 <- pca_data %>%
+        ggplot(aes(PC1, PC2, color = population, alpha = dataset)) +
+        geom_point(size = .5) +
+        scale_color_manual(values = all_cols) +
+        scale_alpha_manual(values = c("MGB" = .5, "1000 Genomes" = 1)) +
+        facet_wrap(~dataset) +
+        theme_bw() +
+        theme(panel.grid = element_blank(),
+              strip.text = element_text(face = "bold", size = 11),
+              panel.spacing = unit(2, "lines")) +
+        guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
+               alpha = "none")
+    
+    pca_plot_2 <- pca_data %>%
+        ggplot(aes(PC3, PC4, color = population, alpha = dataset)) +
+        geom_point(size = .5) +
+        scale_color_manual(values = all_cols) +
+        scale_alpha_manual(values = c("MGB" = .5, "1000 Genomes" = 1)) +
+        facet_wrap(~dataset) +
+        theme_bw() +
+        theme(panel.grid = element_blank(),
+              strip.text = element_text(face = "bold", size = 11),
+              panel.spacing = unit(2, "lines")) +
+        guides(color = guide_legend(override.aes = list(size = 2), ncol = 2),
+               alpha = "none")
+    
+    
+    pca_grid <- plot_grid(pca_plot_1 + theme(legend.position = "none"),
+                          NULL,
+                          pca_plot_2 + theme(legend.position = "none"),
+                          ncol = 1, rel_heights = c(1, .05, 1))
+    
+    plot_grid(pca_grid, get_legend(pca_plot_1),
+              nrow = 1, rel_widths = c(1, .3))
+}
+
+pca_aa <- get_pop_pca(pca_df, pop = "aa")
+pca_amr <- get_pop_pca(pca_df, pop = "amr")
+
+pca_df %>%
+    anti_join(pca_aa, by = "sample_id") %>%
+    anti_join(pca_amr, by = "sample_id") %>%
+    bind_rows(pca_aa) %>%
+    bind_rows(pca_amr) %>%
+    plot_pca()
+
+## Kmeans
+
+pca_matrix <- typed_pca_df %>%
+    select(starts_with("PC")) %>%
+    as.matrix()
+
+add_cluster <- function(k, pca_data) {
+    
+    clusters <- kmeans(pca_matrix, k)$cluster
+    
+    pca_data %>%
+        add_column(cluster = clusters)
+}
+
+clusters_df <- map_df(1:10, ~add_cluster(k = ., pca_data = typed_pca_df), .id = "k") %>%
+    mutate(k = as.integer(k)) %>%
+    arrange(k)
+
+clusters_continent <- clusters_df %>%
+    filter(dataset != "MGB") %>%
+    mutate(continent = case_when(population %in% names(afr_cols) ~ "AFR",
+                                 population %in% names(eur_cols) ~ "EUR",
+                                 population %in% names(sas_cols) ~ "SAS",
+                                 population %in% names(eas_cols) ~ "EAS",
+                                 population %in% names(amr_cols) ~ "AMR"),
+           continent = factor(continent,
+                              levels = c("AFR", "EUR", "SAS", "EAS", "AMR"))) %>%
+    group_by(k, cluster) %>%
+    count(continent) %>%
+    mutate(p = n/sum(n)) %>%
+    slice(which.max(n)) %>%
+    select(k, cluster, continent, p) %>%
+    ungroup()
+
+clusters_continent %>%
+    group_by(k) %>%
+    summarise(p = mean(p)) %>%
+    ggplot(aes(factor(k), p)) +
+    geom_point() +
+    geom_line(aes(group = 1)) +
+    theme_bw() +
+    labs(x = "K", y = "Homogeneity")
+
+continent_colors <- all_cols[c("YRI", "TSI", "PJL", "CDX", "PEL")] %>%
+    setNames(levels(clusters_continent$continent)) %>%
+    c("NA" = "grey")
+
+clusters_plot_df <- clusters_df %>%
+    left_join(select(clusters_continent, -p), by = c("k", "cluster")) %>%
+    filter(dataset == "MGB") %>%
+    mutate(continent = as.character(continent),
+           continent = factor(continent, levels = names(continent_colors)))
+
+kmeans_df <- typed_pca_df %>% 
+    filter(dataset == "1000 Genomes") %>%
+    mutate(continent = case_when(population %in% names(afr_cols) ~ "AFR",
+                                 population %in% names(eur_cols) ~ "EUR",
+                                 population %in% names(sas_cols) ~ "SAS",
+                                 population %in% names(eas_cols) ~ "EAS",
+                                 population %in% names(amr_cols) ~ "AMR"),
+           continent = factor(continent,
+                              levels = c("AFR", "EUR", "SAS", "EAS", "AMR"))) %>% 
+    bind_rows(clusters_plot_df %>% filter(dataset == "MGB", k == 9) %>% select(-k, -cluster))
+
+pca_kmeans_plot_1 <- kmeans_df %>%
+    ggplot(aes(PC1, PC2, color = continent, alpha = dataset)) +
+    geom_point(size = .5) +
+    scale_color_manual(values = continent_colors) +
+    scale_alpha_manual(values = c("MGB" = .5, "1000 Genomes" = 1)) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 1),
+           alpha = "none")
+
+pca_kmeans_plot_2 <- kmeans_df %>%
+    ggplot(aes(PC3, PC4, color = continent, alpha = dataset)) +
+    geom_point(size = .5) +
+    scale_color_manual(values = continent_colors) +
+    scale_alpha_manual(values = c("MGB" = .5, "1000 Genomes" = 1)) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 1),
+           alpha = "none")
+
+
+pca_kmeans_grid <- plot_grid(pca_kmeans_plot_1 + theme(legend.position = "none"),
+                             NULL,
+                             pca_kmeans_plot_2 + theme(legend.position = "none"),
+                             ncol = 1, rel_heights = c(1, .05, 1))
+
+plot_grid(pca_kmeans_grid, get_legend(pca_kmeans_plot_1),
+          nrow = 1, rel_widths = c(1, .3))
+
+ggsave("./plots/pca_kmeans.png", width = 8, height = 5)
+
+kmeans_df %>%
+    filter(dataset == "MGB") %>%
+    count(continent)
+
+kmeans_df %>%
+    ggplot(aes(PC5, PC6, color = continent, alpha = dataset)) +
+    geom_point(size = .5) +
+    scale_color_manual(values = continent_colors) +
+    scale_alpha_manual(values = c("MGB" = .5, "1000 Genomes" = 1)) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.text = element_text(face = "bold", size = 11),
+          panel.spacing = unit(2, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2), ncol = 1),
+           alpha = "none")
+
+ggsave("./plots/pca_kmeans_pc5and6.png", width = 8, height = 2.5)
+
+
 ##### Pca for genotyped SNPs only
 typed_pca_genos <- 
-    "/temp_work/ch229163/VCF/genotyped/allchr.isec.merged.pruned.pca.eigenvec" %>%
-    read_table2(col_names = FALSE) %>%
-    select(X1:X6) %>%
-    setNames(c("id1", "id2", paste0("PC", 1:4)))
+    "./results/VCF/genotyped/allchr.isec.merged.pruned.pca.eigenvec" %>%
+    read_table(col_names = FALSE) %>%
+    select(X1:X8) %>%
+    setNames(c("id1", "id2", paste0("PC", 1:6)))
 
 typed_pca_kgp <- typed_pca_genos %>%
     inner_join(sample_annotation, by = c("id2" = "sample_id")) %>%
-    select(sample_id = id2, population, PC1:PC4)
+    select(sample_id = id2, population, starts_with("PC"))
 
 typed_pca_mgb <- typed_pca_genos %>%
     anti_join(sample_annotation, by = c("id2" = "sample_id")) %>%
     mutate(population = "MGB_biobank") %>%
     unite("sample_id", c("id1", "id2"), sep = "_") %>%
-    select(sample_id, population, PC1:PC4)
+    select(sample_id, population, starts_with("PC"))
 
 
 typed_pca_df <- bind_rows(typed_pca_mgb, typed_pca_kgp) %>%
