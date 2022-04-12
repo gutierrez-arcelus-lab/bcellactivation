@@ -5,7 +5,8 @@ output: github_document
 
 ```{r setup, include=FALSE}
 library(knitr)
-opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, comment = "#")
+opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, comment = "#",
+               dpi = 300)
 options(width = 999)
 ```
 
@@ -20,6 +21,7 @@ library(rvest)
 library(Seurat)
 
 # Plotting
+library(tidytext)
 library(ggridges)
 library(RColorBrewer)
 library(cowplot)
@@ -131,8 +133,7 @@ bcells_meta %>%
 ## Filter out cells with high % of mitochondrial RNA
 
 ```{r}
-bcells <- bcells %>%
-    subset(subset = nFeature_RNA > 500 & percent_mt < 10)
+bcells <- subset(bcells, subset = nFeature_RNA > 500 & percent_mt < 10)
 ```
 
 ## Demultiplex cells based on HTO
@@ -182,7 +183,7 @@ bcells_singlet <- subset(bcells, idents = "Singlet")
 table(bcells_singlet@meta.data$HTO_maxID)[stims]
 ```
 ```{r, include=FALSE, eval=FALSE, echo=FALSE}
-write_rds(bcells_singlet, "./scDRS/data/bcells_singlet_seurat.rds")
+saveRDS(bcells_singlet, "./scDRS/data/expression/bcells_singlet_seurat.rds")
 ```
 
 
@@ -230,20 +231,45 @@ bcells_singlet <-
     RunPCA(bcells_singlet, features = VariableFeatures(bcells_singlet))
 ```
 
+### Gene loadings
+
+```{r, echo=FALSE}
+pca_df <- bcells_singlet@reductions$pca@feature.loadings %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  as_tibble() 
+
+pca_df %>%
+  select(gene_id, PC_1, PC_2) %>%
+  pivot_longer(-gene_id, names_to = "pc") %>%
+  mutate(direction = case_when(sign(value) == 1 ~ "+",
+                               sign(value) == -1 ~ "-",
+                               sign(value) == 0 ~ "0")) %>%
+  group_by(pc, direction) %>%
+  top_n(15, abs(value)) %>%
+  ungroup() %>%
+  left_join(select(features_df, gene_id, gene_name)) %>%
+  ggplot(aes(value, reorder_within(gene_name, value, pc))) +
+  geom_col(aes(fill = direction), show.legend = FALSE) +
+  scale_y_discrete(labels = function(x) sub("^([^_]+).*$", "\\1", x)) +
+  scale_fill_manual(values = c("+" = "cornflowerblue", "-" = "tomato3")) +
+  facet_wrap(~pc, scales = "free") +
+  labs(x = "Loading", y = NULL) +
+  theme_bw()
+```
+
+### Standard deviation for each PC
+
 ```{r, echo=FALSE, fig.height=4}
 tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
     rownames_to_column("pc") %>%
-    mutate(pc = fct_inorder(pc),
-           var = sdev^2,
-           prop_var = var/sum(var)) %>%
+    mutate(pc = fct_inorder(pc)) %>%
     filter(pc %in% 1:25) %>%
-    ggplot(aes(pc, prop_var)) +
+    ggplot(aes(pc, sdev)) +
     geom_line(aes(group = 1)) +
-    scale_y_continuous(labels = function(x) scales::percent(x, accuracy = 1L),
-                       breaks = scales::pretty_breaks(8)) +
     theme_bw() +
     theme(panel.grid.minor = element_blank()) +
-    labs(x = "Principal component", y = "Proportion of variance")
+    labs(x = "Principal component", y = "Standard deviation")
 ```
 
 ## UMAP
@@ -346,17 +372,13 @@ bcells_singlet_downsamp <-
 ```{r, echo=FALSE, fig.height=4}
 tibble(sdev = bcells_singlet_downsamp@reductions$pca@stdev) %>%
     rownames_to_column("pc") %>%
-    mutate(pc = fct_inorder(pc),
-           var = sdev^2,
-           prop_var = var/sum(var)) %>%
+    mutate(pc = fct_inorder(pc)) %>%
     filter(pc %in% 1:25) %>%
-    ggplot(aes(pc, prop_var)) +
+    ggplot(aes(pc, sdev)) +
     geom_line(aes(group = 1)) +
-    scale_y_continuous(labels = function(x) scales::percent(x, accuracy = 1L),
-                       breaks = scales::pretty_breaks(8)) +
     theme_bw() +
     theme(panel.grid.minor = element_blank()) +
-    labs(x = "Principal component", y = "Proportion of variance")
+    labs(x = "Principal component", y = "Standard deviation")
 ```
 
 ```{r}
@@ -401,11 +423,11 @@ plot_grid(cell_class_ds_p, seurat_cluster_ds_p, ncol = 1)
 
 ## B cell genes (RNA)
 
-```{r, echo=FALSE, fig.height=8, fig.width=9}
+```{r, echo=FALSE, fig.width=9, fig.height=14}
 bcell_genes <- 
-    c("IGHD", "IGHM", "CD19", 
-      "CR2", "CD27", "CD38", 
-      "CD69", "CD86", "ITGAX",
+    c("IGHD", "IGHM", "IGHE", "IGHG1", "IGHG2", "IGHG3", "IGHG4", 
+      "CD19", "MS4A1", "CR2", "CD27", "CD38", 
+      "CD40", "CD69", "CD86", "ITGAX",
       "CXCR5", "HLA-DRA", "TBX21")
 
 bcell_genes_df <- features_df %>%
@@ -420,12 +442,13 @@ bcell_genes_quant <- bcells_singlet@assays$RNA@data %>%
     as_tibble() %>%
     left_join(bcell_genes_df, by = "gene_id") %>%
     pivot_longer(-c("gene_id", "gene_name"), 
-                 names_to = "barcode", values_to = "gene_exp")
+                 names_to = "barcode", values_to = "gene_exp") %>%
+    mutate(gene_name = factor(gene_name, levels = bcell_genes))
 
 bcell_genes_plot_list <- umap_df %>%
     select(barcode, UMAP_1, UMAP_2) %>%
     left_join(bcell_genes_quant, by = "barcode") %>%
-    group_split(gene_id) %>%
+    split(.$gene_name) %>%
     map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = gene_exp)) +
             geom_point(size = .2) +
             scale_color_viridis_c(labels = function(x) str_pad(x, 3),
@@ -438,30 +461,32 @@ bcell_genes_plot_list <- umap_df %>%
             labs(color = NULL))
 
 plot_grid(plotlist = bcell_genes_plot_list, ncol = 3)
-    
 ```
-
 
 
 ## B cell genes (Protein)
 
-```{r, echo=FALSE, fig.height=8, fig.width=9}
+```{r, echo=FALSE, fig.height=10, fig.width=9}
 bcell_prots <- 
-    c("IgD", "IgM", "CD19", 
-      "CD21", "CD27", "CD38", 
-      "CD69", "CD86", "CD11c",
-      "CD185.or.CXCR5", "HLA-DR")
+    c("IGHD" = "IgD", "IGHM" = "IgM",
+      "CD19" = "CD19", "MS4A1" = "CD20", 
+      "CR2" = "CD21", "CD27" = "CD27", 
+      "CD38" = "CD38", "CD40" = "CD40", 
+      "CD69" = "CD69", "CD86" = "CD86",
+      "ITGAX" = "CD11c", "CXCR5" = "CD185.or.CXCR5",
+      "HLA-DRA" = "HLA-DR")
 
 adt_quants <- bcells_singlet@assays$ADT@data[bcell_prots, ] %>%
     as.data.frame() %>%
     rownames_to_column("ab") %>%
     as_tibble() %>%
-    pivot_longer(-ab, names_to = "barcode", values_to = "ab_level")
+    pivot_longer(-ab, names_to = "barcode", values_to = "ab_level") %>%
+    mutate(ab = factor(ab, levels = bcell_prots))
 
 bcell_prots_plot_list <- umap_df %>%
     select(barcode, UMAP_1, UMAP_2) %>%
     left_join(adt_quants, by = "barcode") %>%
-    group_split(ab) %>%
+    split(.$ab) %>%
     map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = ab_level)) +
             geom_point(size = .2) +
             scale_color_viridis_c(labels = function(x) str_pad(x, 3),
@@ -478,58 +503,60 @@ plot_grid(plotlist = bcell_prots_plot_list, ncol = 3)
 
 ```
 
-## Lupus genes
+### Proteins and mRNAs in the same scale
+
+```{r, echo=FALSE}
+bcell_markers_df <- 
+  tibble(gene_name = names(bcell_prots),
+         ab = bcell_prots) %>%
+  left_join(tibble(gene_name = bcell_genes), .) %>%
+  inner_join(bcell_genes_quant) %>%
+  left_join(adt_quants) %>%
+  left_join(select(umap_df, barcode, stim)) %>%
+  select(mRNA = gene_exp, Protein = ab_level, everything()) %>%
+  pivot_longer(mRNA:Protein, names_to = "molecule", values_to = "scale_exp") %>%
+  group_by(stim, molecule, gene_id, gene_name) %>%
+  summarise(avg_exp = mean(scale_exp),
+            pct = mean(scale_exp > 0)) %>%
+  ungroup() %>%
+  mutate(gene_name = factor(gene_name))
+
+ggplot(bcell_markers_df, aes(stim, gene_name)) +
+  geom_point(aes(size = pct, fill = avg_exp), shape = 21, color = "black") +
+  scale_fill_viridis_c(option = "magma") +
+  scale_size(range = c(0.1, 4), labels = scales::percent) +
+  facet_wrap(~molecule) +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(),
+        legend.position = "bottom") +
+  labs(x = NULL, y = NULL,
+       fill = "Avg scaled\nexpression", size = "% of cells") +
+  guides(fill = guide_colorbar(barheight = .6))
+```
+
+### IgD vs CD27
 
 
-```{r, echo=FALSE, fig.height=24, fig.width=10}
-sle_genes <- 
-    "https://www.nature.com/articles/ng.3434/tables/2" %>%
-    read_html() %>%
-    html_node("table") %>%
-    html_table(header = TRUE, fill = TRUE) %>%
-    select(gene = `Likely causal genec`) %>%
-    slice(-1) %>%
-    separate_rows(gene, sep = ",") %>%
-    mutate(gene = trimws(gene)) %>%
-    filter(gene != "") %>%
-    pull(gene)
+```{r}
+igd_cd27_rna <- bcell_genes_quant %>%
+  filter(gene_name %in% c("IGHD", "CD27")) %>%
+  mutate(gene_name = recode(gene_name, "IGHD" = "IgD")) %>%
+  select(barcode, gene_name, scale_exp = gene_exp) %>%
+  left_join(select(umap_df, barcode, stim))
 
-#sle_genes %>% write_lines("./scDRS/data/bentham_genes.txt")
+igd_cd27_prot <- adt_quants %>%
+  filter(ab %in% c("IgD", "CD27")) %>%
+  select(barcode, gene_name = ab, scale_exp = ab_level) %>%
+  left_join(select(umap_df, barcode, stim))
 
-sle_genes_df <- features_df %>%
-    filter(phenotype == "Gene Expression", 
-           gene_name %in% sle_genes) %>%
-    select(gene_id, gene_name)
-
-sle_genes_quant <- bcells_singlet@assays$RNA@data %>% 
-    .[sle_genes_df$gene_id, ] %>%
-    as.data.frame() %>%
-    rownames_to_column("gene_id") %>%
-    as_tibble() %>%
-    left_join(sle_genes_df, by = "gene_id") %>%
-    pivot_longer(-c("gene_id", "gene_name"), 
-                 names_to = "barcode", values_to = "gene_exp") %>%
-    group_by(gene_id) %>%
-    filter(mean(gene_exp > 0) > .01) %>%
-    ungroup()
-
-sle_genes_plot_list <- umap_df %>%
-    select(barcode, UMAP_1, UMAP_2) %>%
-    left_join(sle_genes_quant, by = "barcode") %>%
-    split(.$gene_name) %>%
-    map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = gene_exp)) +
-            geom_point(size = .2) +
-            scale_color_viridis_c(labels = function(x) str_pad(x, 3),
-                                  guide = guide_colorbar(barwidth = .5)) +
-            facet_wrap(~gene_name) +
-            theme_minimal() +
-            theme(panel.grid = element_blank(),
-                  axis.title = element_blank(),
-                  axis.text = element_blank()) +
-            labs(color = NULL))
-
-plot_grid(plotlist = sle_genes_plot_list, ncol = 4)
-
+bind_rows(mRNA = igd_cd27_rna, Protein = igd_cd27_prot, .id = "molecule") %>%
+  pivot_wider(names_from = gene_name, values_from = scale_exp) %>%
+  ggplot(aes(IgD, CD27)) +
+  geom_point(size = .75, alpha = .5) +
+  scale_color_manual(values = stim_colors) +
+  facet_grid(molecule~stim) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
 ```
 
 
@@ -575,6 +602,63 @@ plot_grid(plotlist = dn2_genes_plot_list, ncol = 3)
 ```
 
 
+## Lupus genes
+
+```{r, echo=FALSE, fig.height=24, fig.width=10}
+sle_genes <- 
+    "https://www.nature.com/articles/ng.3434/tables/2" %>%
+    read_html() %>%
+    html_node("table") %>%
+    html_table(header = TRUE, fill = TRUE) %>%
+    select(gene = `Likely causal genec`) %>%
+    slice(-1) %>%
+    separate_rows(gene, sep = ",") %>%
+    mutate(gene = trimws(gene)) %>%
+    filter(gene != "") %>%
+    pull(gene)
+
+#sle_genes %>% write_lines("./scDRS/data/bentham_genes.txt")
+
+sle_genes <- c(sle_genes, "ORMDL3")
+
+sle_genes_df <- features_df %>%
+    filter(phenotype == "Gene Expression", 
+           gene_name %in% sle_genes) %>%
+    select(gene_id, gene_name)
+
+sle_genes_quant <- bcells_singlet@assays$RNA@data %>% 
+    .[sle_genes_df$gene_id, ] %>%
+    as.data.frame() %>%
+    rownames_to_column("gene_id") %>%
+    as_tibble() %>%
+    left_join(sle_genes_df, by = "gene_id") %>%
+    pivot_longer(-c("gene_id", "gene_name"), 
+                 names_to = "barcode", values_to = "gene_exp") %>%
+    group_by(gene_id) %>%
+    filter(mean(gene_exp > 0) > .01) %>%
+    ungroup()
+
+sle_genes_plot_list <- umap_df %>%
+    select(barcode, UMAP_1, UMAP_2) %>%
+    left_join(sle_genes_quant, by = "barcode") %>%
+    split(.$gene_name) %>%
+    map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = gene_exp)) +
+            geom_point(size = .1) +
+            scale_color_viridis_c(labels = function(x) str_pad(x, 3),
+                                  guide = guide_colorbar(barwidth = .5)) +
+            facet_wrap(~gene_name) +
+            theme_minimal() +
+            theme(panel.grid = element_blank(),
+                  axis.title = element_blank(),
+                  axis.text = element_blank()) +
+            labs(color = NULL))
+
+plot_grid(plotlist = sle_genes_plot_list, ncol = 4)
+
+```
+
+
+
 ## TLR genes
 
 ```{r, echo=FALSE}
@@ -610,23 +694,18 @@ umap_df %>%
 
 ## MAGMA
 
-```{r, echo=FALSE, fig.height=6}
-#magma_genes_annot <- "./scDRS/data/gencode_genes/genes.v19.hg19.loc" %>%
-magma_genes_annot <- "./scDRS/data/gencode_genes/genes.sle.loc" %>%
-  read_tsv(col_names = FALSE) %>%
-  select(gene_id = X1, gene_name = X6, chr = X2, pos = X3) %>%
-  extract(gene_name, c("ix", "gene_name"), "(\\d+)_(.+)")
+Scores taken from the scDRS figshare.
 
-#magma <- read_table("./scDRS/results/Bentham.genes.out") %>%
-magma <- read_table("./scDRS/results/SleRiskGenes.genes.out") %>%
-  select(gene_id = GENE, z = ZSTAT, p = P) %>%
-  left_join(magma_genes_annot, by = "gene_id") %>%
-  mutate(abs_z = abs(z),
-         logp = -log10(p)) %>%
-  arrange(desc(abs_z))
+```{r, echo=FALSE, fig.height=6}
+magma <- "./scDRS/data/MAGMA_v108_GENE_10_ZSTAT_for_scDRS.txt" %>%
+  read.table() %>%
+  rownames_to_column("gene_name") %>%
+  select(gene_name, z = PASS_Lupus) %>%
+  drop_na() %>%
+  mutate(abs_z = abs(z))
 
 magma_plot_df <- magma %>%
-  #top_n(50, abs_z) %>%
+  top_n(50, abs_z) %>%
   arrange(abs_z) %>%
   mutate(gene_name = fct_inorder(gene_name))
 
@@ -641,37 +720,21 @@ ggplot(magma_plot_df, aes(abs_z, gene_name)) +
 
 ## scDRS
 
-```{r, echo=FALSE, fig.height=8}
-#scdrs_scores <- read_tsv("./scDRS/results/SLE.score.gz") %>%
-scdrs_scores <- read_tsv("./scDRS/results/SleRiskGenes/SLE.score.gz") %>%
-  rename("barcode" = "X1")
+```{r, echo=FALSE}
+scdrs_scores <- read_tsv("./scDRS/results/Bentham_data_scDRSpaper/SLE.score.gz") %>%
+  rename("barcode" = 1)
 
 umap_scdrs_df <- umap_df %>%
   select(1:3) %>%
   left_join(scdrs_scores, by = "barcode")
 
-scdrs_1 <- ggplot(umap_scdrs_df, aes(UMAP_1, UMAP_2, color = norm_score)) +
-    geom_point(size = 1) +
-    scale_color_gradient2(low = "blue", mid = "white", high = "red") +
+ggplot(umap_scdrs_df, aes(UMAP_1, UMAP_2, color = norm_score)) +
+    geom_point(size = .5) +
+    scale_color_gradient2(low = "blue", mid = "grey90", high = "red") +
     theme_minimal() +
-    theme(panel.grid = element_blank(),
-          panel.background = element_rect(fill = "grey")) +
+    theme(panel.grid = element_blank()) +
     guides(color = guide_legend(override.aes = list(size = 2)))
 
-scdrs_2 <- ggplot(filter(umap_scdrs_df, pval >= 0.05),
-                  aes(UMAP_1, UMAP_2)) +
-    geom_point(size = 1, color = "white") +
-    geom_point(data = filter(umap_scdrs_df, pval < 0.05),
-               aes(color = norm_score), size = 1) +
-    scale_color_gradient2(low = "blue", mid = "white", high = "red") +
-    theme_minimal() +
-    theme(panel.grid = element_blank(),
-          panel.background = element_rect(fill = "grey")) +
-    guides(color = guide_legend(override.aes = list(size = 2))) +
-    annotate("text", x = 5, y = 5, label = "*only coloring cells with p < 0.05")
-
-
-plot_grid(scdrs_1, scdrs_2, ncol = 1)
 ```
 
 

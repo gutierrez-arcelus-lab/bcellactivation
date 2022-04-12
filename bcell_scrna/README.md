@@ -12,6 +12,7 @@ library(rvest)
 library(Seurat)
 
 # Plotting
+library(tidytext)
 library(ggridges)
 library(RColorBrewer)
 library(cowplot)
@@ -106,8 +107,7 @@ bcells[["percent_mt"]] <-
 ## Filter out cells with high % of mitochondrial RNA
 
 ``` r
-bcells <- bcells %>%
-    subset(subset = nFeature_RNA > 500 & percent_mt < 10)
+bcells <- subset(bcells, subset = nFeature_RNA > 500 & percent_mt < 10)
 ```
 
 ## Demultiplex cells based on HTO
@@ -163,7 +163,13 @@ bcells_singlet <-
     RunPCA(bcells_singlet, features = VariableFeatures(bcells_singlet))
 ```
 
+### Gene loadings
+
 ![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+### Standard deviation for each PC
+
+![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ## UMAP
 
@@ -190,9 +196,9 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
 bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
-
 ![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ## Downsampling
 
@@ -229,7 +235,7 @@ bcells_singlet_downsamp <-
     RunPCA(bcells_singlet_downsamp, features = VariableFeatures(bcells_singlet_downsamp))
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
 ``` r
 # Find neighboring cells
@@ -254,35 +260,67 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
 bbcells_singlet_downsamp <- RunUMAP(bcells_singlet_downsamp, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 ## B cell genes (RNA)
 
-![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ## B cell genes (Protein)
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
-
-## Lupus genes
-
 ![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
-## DN2 genes (Jenks et al. (2018); Fig 4-C)
+### Proteins and mRNAs in the same scale
 
 ![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
-## TLR genes
+### IgD vs CD27
+
+``` r
+igd_cd27_rna <- bcell_genes_quant %>%
+  filter(gene_name %in% c("IGHD", "CD27")) %>%
+  mutate(gene_name = recode(gene_name, "IGHD" = "IgD")) %>%
+  select(barcode, gene_name, scale_exp = gene_exp) %>%
+  left_join(select(umap_df, barcode, stim))
+
+igd_cd27_prot <- adt_quants %>%
+  filter(ab %in% c("IgD", "CD27")) %>%
+  select(barcode, gene_name = ab, scale_exp = ab_level) %>%
+  left_join(select(umap_df, barcode, stim))
+
+bind_rows(mRNA = igd_cd27_rna, Protein = igd_cd27_prot, .id = "molecule") %>%
+  pivot_wider(names_from = gene_name, values_from = scale_exp) %>%
+  ggplot(aes(IgD, CD27)) +
+  geom_point(size = .75, alpha = .5) +
+  scale_color_manual(values = stim_colors) +
+  facet_grid(molecule~stim) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
 
 ![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
-## MAGMA
+## DN2 genes (Jenks et al. (2018); Fig 4-C)
 
 ![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
-## scDRS
+## Lupus genes
 
 ![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+
+## TLR genes
+
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+
+## MAGMA
+
+Scores taken from the scDRS figshare.
+
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+## scDRS
+
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 ## Find marker genes for each cluster
 
@@ -317,7 +355,7 @@ bcells_markers <-
 
 ## Top 10 marker genes per cluster
 
-![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
 
 ## Marker genes IgG vs RSQ
 
@@ -345,6 +383,6 @@ bcells_markers_72 <-
     select(gene, avg_log2FC, IgG = pct.1, RSQ = pct.2)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-38-1.png)<!-- -->
 
-![](README_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-39-1.png)<!-- -->
