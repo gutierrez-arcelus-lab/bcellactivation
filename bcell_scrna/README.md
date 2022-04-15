@@ -96,8 +96,6 @@ str(bcells)
 ## QC
 
 ``` r
-stims <- c("Res00", "Res24", "IgG24", "IgG72", "RSQ24", "RSQ72")
-
 bcells[["percent_mt"]] <- 
     PercentageFeatureSet(bcells, features = mt_genes)
 ```
@@ -128,6 +126,8 @@ Idents(bcells) <- "HTO_maxID"
 
 ![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
+![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
 ## Extract Singlets
 
 ``` r
@@ -144,7 +144,7 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
 
 ## Feature quantifications
 
-![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ## PCA
 
@@ -156,20 +156,18 @@ bcells_singlet <-
 
 all_genes <- rownames(bcells_singlet)
 
-bcells_singlet <- 
-    ScaleData(bcells_singlet, features = all_genes)
+bcells_singlet <- ScaleData(bcells_singlet, features = all_genes)
 
-bcells_singlet <-
-    RunPCA(bcells_singlet, features = VariableFeatures(bcells_singlet))
+bcells_singlet <- RunPCA(bcells_singlet, features = VariableFeatures(bcells_singlet))
 ```
 
 ### Gene loadings
 
-![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ### Standard deviation for each PC
 
-![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 ## UMAP
 
@@ -196,9 +194,9 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
 bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
-
 ![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 ## Downsampling
 
@@ -235,7 +233,7 @@ bcells_singlet_downsamp <-
     RunPCA(bcells_singlet_downsamp, features = VariableFeatures(bcells_singlet_downsamp))
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 ``` r
 # Find neighboring cells
@@ -260,19 +258,19 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
 bbcells_singlet_downsamp <- RunUMAP(bcells_singlet_downsamp, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ## B cell genes (RNA)
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 ## B cell genes (Protein)
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 ### Proteins and mRNAs in the same scale
 
-![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
 ### IgD vs CD27
 
@@ -298,58 +296,44 @@ bind_rows(mRNA = igd_cd27_rna, Protein = igd_cd27_prot, .id = "molecule") %>%
   theme(panel.grid = element_blank())
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ## DN2 genes (Jenks et al. (2018); Fig 4-C)
 
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 ## Lupus genes
 
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
 
 ## TLR genes
 
-![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
 
 ## MAGMA
 
 Scores taken from the scDRS figshare.
 
-![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 ## scDRS
 
-![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
 
 ## Find marker genes for each cluster
 
-Here, I changed the clusters to make RSQ72 a separate cluster from
-cluster 1, and I’m calling “IgG72-prolif” as a separate cluster from
-IgG72 to denote the subcluster with high MIK62 gene expression.
+Here I name the clusters according to the most frequent cell origin
+(stim).
+
+The TLR7 72hr is not represented because it’s not picked as a separate
+cluster by Seurat.
 
 ``` r
-cluster_renamed <- 
-  tibble(cluster = Idents(bcells_singlet),
-         hto = bcells_singlet@meta.data$HTO_maxID) %>%
-  mutate(cluster = as.character(cluster),
-         cluster = case_when(cluster == 1 & hto == "RSQ72" ~ "6",
-                             TRUE ~ cluster),
-         cluster = factor(cluster))
-
-bcells_singlet_renamed <- bcells_singlet
-Idents(bcells_singlet_renamed) <- cluster_renamed$cluster
-
-new_cluster_ids <- c("IgG24", "Res24", "IgG72", "RSQ24", "Res00", "IgG72-prolif", "RSQ72")
-names(new_cluster_ids) <- levels(bcells_singlet_renamed)
-
-bcells_singlet_renamed <- RenameIdents(bcells_singlet_renamed, new_cluster_ids)
-
 bcells_markers <- 
-    FindAllMarkers(bcells_singlet_renamed, 
+    FindAllMarkers(bcells_singlet, 
                    only.pos = TRUE,
                    min.pct = 1/3,
-                   logfc.threshold = .5) %>%
+                   logfc.threshold = 1) %>%
     as_tibble()
 ```
 
@@ -361,20 +345,9 @@ bcells_markers <-
 
 ``` r
 bcells_markers_24 <- 
-    FindMarkers(bcells_singlet_renamed, 
-                   ident.1 = "IgG24",
-                   ident.2 = "RSQ24",
-                   only.pos = FALSE,
-                   min.pct = 1/3,
-                   logfc.threshold = 1) %>%
-    rownames_to_column("gene") %>%
-    as_tibble() %>%
-    select(gene, avg_log2FC, IgG = pct.1, RSQ = pct.2)
-
-bcells_markers_72 <- 
-    FindMarkers(bcells_singlet_renamed, 
-                   ident.1 = c("IgG72", "IgG72-prolif"),
-                   ident.2 = "RSQ72",
+    FindMarkers(bcells_singlet, 
+                   ident.1 = 0,
+                   ident.2 = 3,
                    only.pos = FALSE,
                    min.pct = 1/3,
                    logfc.threshold = 1) %>%
@@ -383,6 +356,7 @@ bcells_markers_72 <-
     select(gene, avg_log2FC, IgG = pct.1, RSQ = pct.2)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-38-1.png)<!-- -->
+Genes marked with an asterisk were either reported as a SLE risk gene,
+or it is within +- 200kb from a SLE risk variant in GWAS catalog.
 
-![](README_files/figure-gfm/unnamed-chunk-39-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-38-1.png)<!-- -->

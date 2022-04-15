@@ -100,8 +100,6 @@ str(bcells)
 ## QC
 
 ```{r}
-stims <- c("Res00", "Res24", "IgG24", "IgG72", "RSQ24", "RSQ72")
-
 bcells[["percent_mt"]] <- 
     PercentageFeatureSet(bcells, features = mt_genes)
 ```
@@ -118,15 +116,18 @@ bcells_meta %>%
     pivot_wider(names_from = feature, values_from = value) %>%
     ggplot(aes(percent_mt, n_genes)) +
     geom_jitter(size = .25, alpha = .25) +
-    geom_density2d_filled(alpha = .5) +
-    geom_density_2d(size = .25, color = "black") +
-    geom_vline(xintercept = 10, linetype = 2) +
-    geom_hline(yintercept = 500, linetype = 2) +
+    stat_density_2d(aes(fill = after_stat(level)), 
+                    color = "slateblue4", alpha = .5,
+                    geom = "polygon", contour = TRUE, 
+                    bins = 10, n = 100) +
+    geom_vline(xintercept = 10, linetype = 2, size = 1.25, color = "cornflowerblue") +
+    geom_hline(yintercept = 500, linetype = 2, size = 1.25, color = "cornflowerblue") +
     scale_x_continuous(breaks = c(0, 5, 10, 20, 40, 60, 80)) +
     scale_y_continuous(breaks = seq(0, 1e4, by = 1e3)) +
-    theme_minimal() +
+    theme_classic() +
     theme(panel.grid.minor = element_blank(),
-          legend.position = "none") +
+          legend.position = "none",
+          panel.grid = element_blank()) +
     labs(x = "% Mitochondrial reads", y = "# of genes")
 ```
 
@@ -147,8 +148,9 @@ Idents(bcells) <- "HTO_maxID"
 ```
 
 ```{r, echo=FALSE}
-stim_colors <- 
-    c("grey75", "grey60", "gold1", "gold3", "mediumpurple1", "mediumpurple4")
+stims <- c("Res00", "Res24", "IgG24", "IgG72", "RSQ24", "RSQ72")
+
+stim_colors <- c("grey75", "grey60", "gold1", "gold3", "mediumpurple1", "mediumpurple4")
 
 hto_data <- bcells@assays$HTO@data
 hto_class_df <- tibble(barcode = colnames(hto_data),
@@ -171,6 +173,30 @@ ggplot(hto_df, aes(value, maxid, fill = maxid)) +
     theme(panel.grid = element_blank()) +
     labs(x = "Expression level", y = NULL)
 ```
+
+```{r, echo=FALSE}
+tibble(barcode = colnames(hto_data),
+       maxid = bcells@meta.data$HTO_maxID,
+       classif = bcells@meta.data$HTO_classification.global) %>%
+  count(maxid, classif) %>%
+  group_by(maxid) %>%
+  mutate(p = n/sum(n),
+         classif = factor(classif, levels = c("Negative", "Doublet", "Singlet")),
+         maxid = factor(maxid, levels = stims)) %>%
+  ggplot(aes(classif, p, fill = maxid)) +
+  geom_col(show.legend = FALSE) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = stim_colors) +
+  facet_wrap(~maxid, nrow = 1, strip.position = "bottom") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.x = element_blank(),
+        panel.spacing = unit(0, "lines"),
+        panel.border = element_blank()) +
+  labs(x = NULL, y = "% of droplets")
+            
+```
+
 
 
 ## Extract Singlets
@@ -224,11 +250,9 @@ bcells_singlet <-
 
 all_genes <- rownames(bcells_singlet)
 
-bcells_singlet <- 
-    ScaleData(bcells_singlet, features = all_genes)
+bcells_singlet <- ScaleData(bcells_singlet, features = all_genes)
 
-bcells_singlet <-
-    RunPCA(bcells_singlet, features = VariableFeatures(bcells_singlet))
+bcells_singlet <- RunPCA(bcells_singlet, features = VariableFeatures(bcells_singlet))
 ```
 
 ### Gene loadings
@@ -297,8 +321,11 @@ umap_df <- as.data.frame(bcells_singlet@reductions$umap@cell.embeddings) %>%
 cell_class_p <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
     geom_point(size = 1) +
     scale_color_manual(values = stim_colors) +
-    theme_minimal() +
-    theme(panel.grid = element_blank()) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank()) +
     guides(color = guide_legend(override.aes = list(size = 2))) +
     labs(title = "Hashtag classification")
 
@@ -454,8 +481,12 @@ bcell_genes_plot_list <- umap_df %>%
             scale_color_viridis_c(labels = function(x) str_pad(x, 3),
                                   guide = guide_colorbar(barwidth = .5)) +
             facet_wrap(~gene_name) +
-            theme_minimal() +
+            theme_bw() +
             theme(panel.grid = element_blank(),
+                  panel.border = element_blank(),
+                  strip.background = element_blank(),
+                  axis.line = element_blank(),
+                  axis.ticks = element_blank(),
                   axis.title = element_blank(),
                   axis.text = element_blank()) +
             labs(color = NULL))
@@ -493,15 +524,87 @@ bcell_prots_plot_list <- umap_df %>%
                                   guide = guide_colorbar(barwidth = .5,
                                                          barheight = 3)) +
             facet_wrap(~ab) +
-            theme_minimal() +
+            theme_bw() +
             theme(panel.grid = element_blank(),
+                  panel.border = element_blank(),
                   axis.title = element_blank(),
-                  axis.text = element_blank()) +
+                  axis.text = element_blank(),
+                  strip.background = element_blank(),
+                  axis.line = element_blank(),
+                  axis.ticks = element_blank()) +
             labs(color = NULL))
 
 plot_grid(plotlist = bcell_prots_plot_list, ncol = 3)
 
 ```
+
+
+```{r microgrant, include=FALSE, echo=FALSE, eval=FALSE}
+mc_plot <- umap_df %>%
+  mutate(stim = recode(stim, "Res00" = "Resting 0hr", "Res24" = "Resting 24hr",
+                       "IgG24" = "BCR 24hr", "IgG72" = "BCR 72hr",
+                       "RSQ24" = "TLR7 24hr", "RSQ72" = "TLR7 72hr")) %>%
+  ggplot(aes(UMAP_1, UMAP_2, color = stim)) +
+    geom_point(size = 1) +
+    scale_color_manual(values = stim_colors) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          strip.background = element_blank(),
+          legend.position = c(.8, .7),
+          legend.background = element_blank(),
+          legend.text = element_text(size = 9)) +
+    guides(color = guide_legend(override.aes = list(size = 2, alpha = 1))) +
+  labs(color = NULL)
+
+mc_genes <- c("BLK", "SOCS1", "NCF2", "IRAK1")
+
+mc_genes_df <- features_df %>%
+    filter(phenotype == "Gene Expression", 
+           gene_name %in% mc_genes) %>%
+    select(gene_id, gene_name)
+
+mc_genes_quant <- bcells_singlet@assays$RNA@data %>% 
+    .[mc_genes_df$gene_id, ] %>%
+    as.data.frame() %>%
+    rownames_to_column("gene_id") %>%
+    as_tibble() %>%
+    left_join(mc_genes_df, by = "gene_id") %>%
+    pivot_longer(-c("gene_id", "gene_name"), 
+                 names_to = "barcode", values_to = "gene_exp") %>%
+    mutate(gene_name = factor(gene_name, levels = mc_genes))
+
+mc_genes_plot_list <- umap_df %>%
+    select(barcode, UMAP_1, UMAP_2) %>%
+    left_join(mc_genes_quant, by = "barcode") %>%
+    split(.$gene_name) %>%
+    map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = gene_exp)) +
+            geom_point(size = .2) +
+            scale_color_viridis_c(labels = function(x) str_pad(x, 3),
+                                  guide = guide_colorbar(barwidth = .5,
+                                                         barheight = 4)) +
+            facet_wrap(~gene_name) +
+            theme_bw() +
+            theme(panel.grid = element_blank(),
+                  panel.border = element_blank(),
+                  strip.background = element_blank(),
+                  axis.line = element_blank(),
+                  axis.ticks = element_blank(),
+                  axis.title = element_blank(),
+                  axis.text = element_blank(),
+                  legend.text = element_text(size = 8)) +
+            labs(color = NULL))
+
+mc_grid <- plot_grid(plotlist = mc_genes_plot_list, ncol = 2)
+
+mc_out <- plot_grid(mc_plot, mc_grid, nrow = 1)
+
+ggsave("./microgrant.png", mc_out, width = 8, height = 3)
+```
+
+
 
 ### Proteins and mRNAs in the same scale
 
@@ -537,7 +640,7 @@ ggplot(bcell_markers_df, aes(stim, gene_name)) +
 ### IgD vs CD27
 
 
-```{r}
+```{r, fig.height=2.5, fig.width=6}
 igd_cd27_rna <- bcell_genes_quant %>%
   filter(gene_name %in% c("IGHD", "CD27")) %>%
   mutate(gene_name = recode(gene_name, "IGHD" = "IgD")) %>%
@@ -738,115 +841,103 @@ ggplot(umap_scdrs_df, aes(UMAP_1, UMAP_2, color = norm_score)) +
 ```
 
 
-
 ## Find marker genes for each cluster
 
-Here, I changed the clusters to make RSQ72 a separate cluster from cluster 1, and I'm calling "IgG72-prolif" as a separate cluster from IgG72 to denote the subcluster with high MIK62 gene expression.
+Here I name the clusters according to the most frequent cell origin (stim). 
+
+The TLR7 72hr is not represented because it's not picked as a separate cluster by Seurat. 
 
 ```{r}
-cluster_renamed <- 
-  tibble(cluster = Idents(bcells_singlet),
-         hto = bcells_singlet@meta.data$HTO_maxID) %>%
-  mutate(cluster = as.character(cluster),
-         cluster = case_when(cluster == 1 & hto == "RSQ72" ~ "6",
-                             TRUE ~ cluster),
-         cluster = factor(cluster))
-
-bcells_singlet_renamed <- bcells_singlet
-Idents(bcells_singlet_renamed) <- cluster_renamed$cluster
-
-new_cluster_ids <- c("IgG24", "Res24", "IgG72", "RSQ24", "Res00", "IgG72-prolif", "RSQ72")
-names(new_cluster_ids) <- levels(bcells_singlet_renamed)
-
-bcells_singlet_renamed <- RenameIdents(bcells_singlet_renamed, new_cluster_ids)
-
 bcells_markers <- 
-    FindAllMarkers(bcells_singlet_renamed, 
+    FindAllMarkers(bcells_singlet, 
                    only.pos = TRUE,
                    min.pct = 1/3,
-                   logfc.threshold = .5) %>%
+                   logfc.threshold = 1) %>%
     as_tibble()
 ```  
 
-```{r, echo=FALSE}
+
+
+## Top 10 marker genes per cluster
+
+```{r, echo=FALSE, fig.height=7, fig.width=7}
 top_markers <- bcells_markers %>%
   as_tibble() %>%
   left_join(select(features_df, 1:2), by = c("gene" = "gene_id")) %>%
   group_by(cluster) %>%
   top_n(10, avg_log2FC) %>%
   ungroup() %>%
-  select(cluster_top = cluster, gene_name, gene_id = gene, avg_log2FC)
+  select(cluster, gene_name, gene_id = gene, avg_log2FC)
 
-cluster_cell <- tibble(cluster = Idents(bcells_singlet_renamed),
-                       barcode = names(Idents(bcells_singlet_renamed)))
+cluster_cell <- tibble(cluster_cell = Idents(bcells_singlet),
+                       barcode = names(Idents(bcells_singlet)))
   
-cell_gene_expr <- 
-  bcells_singlet_renamed@assays$RNA@data %>%
+cell_gene_expr <- bcells_singlet@assays$RNA@data %>%
   .[unique(top_markers$gene_id), ] %>%
   as.data.frame() %>%
   rownames_to_column("gene_id") %>%
   as_tibble() %>%
   pivot_longer(-gene_id, names_to = "barcode", values_to = "logexpr")
   
-sorted_cluster_ids <- c("Res00", "Res24", "IgG24", "IgG72", "IgG72-prolif", "RSQ24", "RSQ72")
+
+cl_names <- 
+  tibble(cluster = Idents(bcells_singlet),
+         stim = bcells_singlet@meta.data$HTO_maxID) %>%
+  count(cluster, stim) %>%
+  group_by(cluster) %>%
+  slice(which.max(n)) %>%
+  ungroup() %>%
+  mutate(cluster_name = ifelse(cluster == 5, "IgG72-prolif", stim)) %>%
+  select(cluster, cluster_name) %>%
+  mutate(cluster_name = factor(cluster_name, 
+                               levels = c("Res00", "Res24", "IgG24", 
+                                          "IgG72", "IgG72-prolif", "RSQ24")))
 
 top_marker_expr <- cell_gene_expr %>%
   left_join(cluster_cell, by = "barcode") %>%
-  inner_join(top_markers, by = "gene_id") %>%
-  mutate(cluster = factor(cluster, levels = sorted_cluster_ids)) %>%
-  arrange(cluster, desc(avg_log2FC)) %>%
-  mutate(gene_name = fct_inorder(gene_name))
-```
+  inner_join(top_markers, by = "gene_id")
 
-## Top 10 marker genes per cluster
-
-```{r, echo=FALSE, fig.height=7, fig.width=8}
 top_marker_summary <- top_marker_expr %>%
-  group_by(cluster_top, cluster, gene_name) %>%
+  group_by(cluster = cluster_cell, gene_name) %>%
   summarise(prop_expr = mean(logexpr > 0),
             scale_expr = mean(logexpr)) %>%
   ungroup() %>%
-  mutate(cluster_top = factor(cluster_top, levels = sorted_cluster_ids)) %>%
-  arrange(cluster_top, cluster, desc(prop_expr))
+  left_join(select(top_markers, cluster_top = cluster, gene_name, avg_log2FC)) %>%
+  left_join(cl_names, by = "cluster") %>%
+  left_join(cl_names, by = c("cluster_top" = "cluster"),
+            suffix = c("_cell", "_top")) %>%
+  arrange(cluster_name_cell, desc(cluster_name_top), desc(avg_log2FC)) %>%
+  mutate(gene_name = fct_inorder(gene_name))
 
-ggplot(top_marker_summary, aes(cluster, gene_name)) +
-  geom_point(aes(size = prop_expr, color = scale_expr)) +
-  geom_point(aes(size = prop_expr), color = "black", shape = 21) +
+ggplot(top_marker_summary, aes(cluster_name_cell, gene_name)) +
+  geom_point(aes(size = prop_expr, fill = scale_expr), 
+             color = "black", shape = 21) +
   scale_size(range = c(0.1, 4), labels = scales::percent) +
-  scale_color_viridis_c(option = "magma") +
-  facet_wrap(~cluster_top, scales = "free") +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_discrete(position = "top") +
+  geom_text(data = left_join(top_markers, cl_names) %>% 
+              select(cluster_name_cell = cluster_name, gene_name),
+            aes(label = gene_name), hjust = 0, nudge_x = .1, size = 3) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
-        panel.grid = element_blank(), 
-        legend.position = c(.7, .1)) +
+  theme(axis.line = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(size = 11),
+        panel.grid = element_line(color = "grey96"),
+        panel.border = element_blank()) +
   labs(x = NULL, y = NULL, 
-       color = "Scaled\nExpression", 
+       fill = "Scaled\nExpression", 
        size = "% of cells") +
-  guides(color = guide_colorbar(direction = "horizontal",
-                                               barheight = .5,
-                                               barwidth = 10),
-         size = guide_legend(direction = "horizontal",
-                             keywidth = 1))
+   guides(fill = guide_colorbar(barwidth = .5))
 ```
 
 ## Marker genes IgG vs RSQ
 
 ```{r}
 bcells_markers_24 <- 
-    FindMarkers(bcells_singlet_renamed, 
-                   ident.1 = "IgG24",
-                   ident.2 = "RSQ24",
-                   only.pos = FALSE,
-                   min.pct = 1/3,
-                   logfc.threshold = 1) %>%
-    rownames_to_column("gene") %>%
-    as_tibble() %>%
-    select(gene, avg_log2FC, IgG = pct.1, RSQ = pct.2)
-
-bcells_markers_72 <- 
-    FindMarkers(bcells_singlet_renamed, 
-                   ident.1 = c("IgG72", "IgG72-prolif"),
-                   ident.2 = "RSQ72",
+    FindMarkers(bcells_singlet, 
+                   ident.1 = 0,
+                   ident.2 = 3,
                    only.pos = FALSE,
                    min.pct = 1/3,
                    logfc.threshold = 1) %>%
@@ -856,13 +947,12 @@ bcells_markers_72 <-
 ```
 
 ```{r, echo=FALSE}
-markers_timep_df <- 
-  bind_rows("24hr" = bcells_markers_24, "72hr" = bcells_markers_72, .id = "time") %>%
+markers_timep_df <- bcells_markers_24 %>%
+  mutate(cluster_top = ifelse(avg_log2FC > 0, "IgG", "RSQ")) %>%
   left_join(select(features_df, 1:2), by = c("gene" = "gene_id")) %>%
   pivot_longer(IgG:RSQ, names_to = "cluster", values_to = "pct")
 
-cell_gene_expr_timep <- 
-  bcells_singlet_renamed@assays$RNA@data %>%
+cell_gene_expr_timep <- bcells_singlet@assays$RNA@data %>%
   .[unique(markers_timep_df$gene), ] %>%
   as.data.frame() %>%
   rownames_to_column("gene_id") %>%
@@ -871,65 +961,60 @@ cell_gene_expr_timep <-
 
 timep_gene_avg_expr <- cell_gene_expr_timep %>%
   left_join(cluster_cell) %>%
+  filter(cluster_cell %in% c(0, 3)) %>%
+  mutate(cluster = case_when(cluster_cell == 0 ~ "IgG",
+                             cluster_cell == 3 ~ "RSQ")) %>%
   group_by(cluster, gene_id) %>%
   summarise(scale_expr = mean(logexpr)) %>%
   ungroup() %>%
-  left_join(features_df)
+  left_join(select(features_df, gene_id, gene_name)) %>%
+  left_join(markers_timep_df, by = c("gene_id" = "gene", "gene_name", "cluster")) %>%
+  arrange(avg_log2FC) %>%
+  mutate(gene_name = fct_inorder(gene_name))
+
+sle_candidates <- read_tsv("../de_gwas_candidates/sle_candidate_genes.tsv") %>%
+  mutate(gene_id= sub("\\.\\d+$", "", gene_id))
+
+sle_candidates_label <- timep_gene_avg_expr %>%
+  inner_join(sle_candidates)  %>%
+  distinct(cluster = cluster_top, gene_name) %>%
+  mutate(i = "*")
   
 ```
 
 
-```{r, echo=FALSE, fig.height=4}
-markers_timep_df %>%
-  filter(time == "24hr") %>%
-  rename("stim" = "cluster") %>%
-  mutate(cluster = paste0(stim, time),
-         cluster = sub("hr$", "", cluster)) %>%
-  left_join(select(timep_gene_avg_expr, cluster, gene_name, scale_expr)) %>%
-  arrange(desc(avg_log2FC)) %>%
-  mutate(gene_name = fct_inorder(gene_name),
-         tier = ntile(1:nrow(.), 2)) %>%
-  ggplot(aes(cluster, gene_name)) +
-  geom_point(aes(size = pct, color = scale_expr)) +
-  geom_point(aes(size = pct), shape = 21, stroke = .25) +
-  scale_color_viridis_c(option = "magma") +
-  scale_size(range = c(0.1, 4), labels = scales::percent) +
-  facet_wrap(~tier, scales = "free") +
-  theme_bw() +
-  theme(panel.grid.major.x = element_blank(),
-        strip.background = element_blank(),
-        strip.text = element_blank()) +
-  labs(x = NULL, y = NULL, title = "DE genes IgG vs. RSQ at 24hr",
-       color = "Avg scaled\nexpression", size = "% of cells") +
-  guides(color = guide_colorbar(barwidth = .6))
+Genes marked with an asterisk were either reported as a SLE risk gene, or it is within +- 200kb from a SLE risk variant in GWAS catalog.
 
+
+```{r, echo=FALSE, fig.height=4, fig.width=4}
+ggplot(timep_gene_avg_expr, aes(cluster, gene_name)) +
+  geom_point(aes(size = pct, fill = scale_expr), 
+             color = "black", shape = 21) +
+  scale_size(range = c(0.05, 2.5), labels = scales::percent) +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_discrete(position = "top") +
+  geom_text(data = distinct(timep_gene_avg_expr, gene_name, cluster = cluster_top),
+            aes(label = gene_name), hjust = 0, nudge_x = .1, size = 2) +
+  geom_text(data = sle_candidates_label, aes(label = i), 
+            size = 3, nudge_x = -.1, nudge_y = -.25) +
+  theme_bw() +
+  theme(axis.line = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(size = 8),
+        panel.grid = element_line(color = "grey96"),
+        panel.border = element_blank()) +
+  labs(x = NULL, y = NULL, 
+       fill = "Scaled\nExpression", 
+       size = "% of cells") +
+   guides(fill = guide_colorbar(barwidth = .5))
 ```
 
 
-```{r, echo=FALSE, fig.height=8}
-markers_timep_df %>%
-  filter(time == "72hr") %>%
-  rename("stim" = "cluster") %>%
-  mutate(cluster = paste0(stim, time),
-         cluster = sub("hr$", "", cluster)) %>%
-  left_join(select(timep_gene_avg_expr, cluster, gene_name, scale_expr)) %>%
-  arrange(desc(avg_log2FC)) %>%
-  mutate(gene_name = fct_inorder(gene_name),
-         tier = ntile(1:nrow(.), 3)) %>%
-  ggplot(aes(cluster, gene_name)) +
-  geom_point(aes(size = pct, color = scale_expr)) +
-  geom_point(aes(size = pct), shape = 21, stroke = .25) +
-  scale_color_viridis_c(option = "magma") +
-  scale_size(range = c(0.1, 4), labels = scales::percent) +
-  facet_wrap(~tier, scales = "free") +
-  theme_bw() +
-  theme(panel.grid.major.x = element_blank(),
-        strip.background = element_blank(),
-        strip.text = element_blank()) +
-  labs(x = NULL, y = NULL, title = "DE genes IgG vs. RSQ at 72hr",
-       color = "Avg scaled\nexpression", size = "% of cells") +
-  guides(color = guide_colorbar(barwidth = .6))
-```
+
+
+
+
 
 
 
