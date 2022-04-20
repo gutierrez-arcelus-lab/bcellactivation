@@ -142,9 +142,13 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
     # Res00 Res24 IgG24 IgG72 RSQ24 RSQ72 
     #   489   842  1601  1566  1094   194
 
-## Feature quantifications
+### HTO quantifications in singlets
 
 ![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+
+## Feature quantifications
+
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ## PCA
 
@@ -163,11 +167,11 @@ bcells_singlet <- RunPCA(bcells_singlet, features = VariableFeatures(bcells_sing
 
 ### Gene loadings
 
-![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 ### Standard deviation for each PC
 
-![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
 ## UMAP
 
@@ -176,7 +180,7 @@ bcells_singlet <- RunPCA(bcells_singlet, features = VariableFeatures(bcells_sing
 bcells_singlet <- FindNeighbors(bcells_singlet, dims = 1:20)
 
 # Cluster
-bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
+bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.3)
 ```
 
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
@@ -185,20 +189,25 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
     # Number of edges: 211870
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.9056
+    # Maximum modularity in 10 random starts: 0.8963
     # Number of communities: 6
-    # Elapsed time: 0 seconds
+    # Elapsed time: 1 seconds
 
 ``` r
 # UMAP
 bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
-
 ![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
+![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+
 ## Downsampling
+
+We see that RSQ 72hr is picked as a separate cluster with resolution =
+0.6. In the full dataset, that does not happen even if we increase the
+resolution. Therefore, RSQ 72hr is not a separate cluster in the full
+dataset potentially due to low number of cells.
 
 ``` r
 set.seed(1)
@@ -233,14 +242,12 @@ bcells_singlet_downsamp <-
     RunPCA(bcells_singlet_downsamp, features = VariableFeatures(bcells_singlet_downsamp))
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
-
 ``` r
 # Find neighboring cells
 bcells_singlet_downsamp <- FindNeighbors(bcells_singlet_downsamp, dims = 1:20)
 
 # Cluster
-bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.25)
+bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.6)
 ```
 
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
@@ -249,8 +256,8 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
     # Number of edges: 44041
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.8913
-    # Number of communities: 5
+    # Maximum modularity in 10 random starts: 0.8201
+    # Number of communities: 7
     # Elapsed time: 0 seconds
 
 ``` r
@@ -320,15 +327,11 @@ Scores taken from the scDRS figshare.
 
 ![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
 
-## Find marker genes for each cluster
-
-Here I name the clusters according to the most frequent cell origin
-(stim).
-
-The TLR7 72hr is not represented because it’s not picked as a separate
-cluster by Seurat.
+## Find marker genes for each stim condition
 
 ``` r
+Idents(bcells_singlet) <- "HTO_maxID"
+
 bcells_markers <- 
     FindAllMarkers(bcells_singlet, 
                    only.pos = TRUE,
@@ -343,20 +346,39 @@ bcells_markers <-
 
 ## Marker genes IgG vs RSQ
 
+### 24 hours
+
 ``` r
 bcells_markers_24 <- 
     FindMarkers(bcells_singlet, 
-                   ident.1 = 0,
-                   ident.2 = 3,
+                   ident.1 = "IgG24",
+                   ident.2 = "RSQ24",
                    only.pos = FALSE,
                    min.pct = 1/3,
                    logfc.threshold = 1) %>%
     rownames_to_column("gene") %>%
     as_tibble() %>%
-    select(gene, avg_log2FC, IgG = pct.1, RSQ = pct.2)
+    select(gene, avg_log2FC, IgG24 = pct.1, RSQ24 = pct.2, p = p_val_adj)
 ```
 
 Genes marked with an asterisk were either reported as a SLE risk gene,
 or it is within +- 200kb from a SLE risk variant in GWAS catalog.
 
 ![](README_files/figure-gfm/unnamed-chunk-38-1.png)<!-- -->
+
+### 72 hours
+
+``` r
+bcells_markers_72 <- 
+    FindMarkers(bcells_singlet, 
+                   ident.1 = "IgG72",
+                   ident.2 = "RSQ72",
+                   only.pos = FALSE,
+                   min.pct = 1/3,
+                   logfc.threshold = 1) %>%
+    rownames_to_column("gene") %>%
+    as_tibble() %>%
+    select(gene, avg_log2FC, IgG72 = pct.1, RSQ72 = pct.2, p = p_val_adj)
+```
+
+![](README_files/figure-gfm/unnamed-chunk-41-1.png)<!-- -->
