@@ -86,16 +86,6 @@ bcells <- NormalizeData(bcells, assay = "ADT",
                         normalization.method = "CLR",
                         margin = 2)
 ```
-## Exploring the object
-
-```{r}
-bcells
-```
-
-```{r, eval=FALSE}
-#check out the output of str()
-str(bcells)
-```
 
 ## QC
 
@@ -104,7 +94,7 @@ bcells[["percent_mt"]] <-
     PercentageFeatureSet(bcells, features = mt_genes)
 ```
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.height=3, fig.width=5}
 bcells_meta <- bcells@meta.data %>%
     rownames_to_column("barcode") %>%
     select(barcode, n_reads = nCount_RNA, 
@@ -161,7 +151,7 @@ hto_data <- bcells@assays$HTO@data
 hto_class_df <- tibble(barcode = colnames(hto_data),
                        maxid = bcells@meta.data$HTO_maxID)
 
-hto_df <- hto_data %>%
+hto_plot_df <- hto_data %>%
     as.data.frame() %>%
     rownames_to_column("hto") %>%
     pivot_longer(-hto, names_to = "barcode") %>%
@@ -170,27 +160,30 @@ hto_df <- hto_data %>%
     mutate(maxid = factor(maxid, levels = stims),
            hto = factor(hto, levels = stims))
 
-ggplot(hto_df, aes(value, maxid, fill = maxid)) +
+ggplot(hto_plot_df, aes(value, maxid, fill = maxid)) +
     geom_density_ridges(show.legend = FALSE, size = .25) +
     facet_wrap(~hto, nrow = 2) +
     scale_fill_manual(values = stim_colors) +
     theme_bw() +
     theme(panel.grid = element_blank()) +
-    labs(x = "Expression level", y = NULL)
+    labs(x = "HTO normalized levels", y = NULL)
 ```
 
-```{r, echo=FALSE}
-tibble(barcode = colnames(hto_data),
+```{r, echo=FALSE, fig.width=6.5, fig.height=4}
+hto_global_df <- tibble(barcode = colnames(hto_data),
        maxid = bcells@meta.data$HTO_maxID,
        classif = bcells@meta.data$HTO_classification.global) %>%
   count(maxid, classif) %>%
   group_by(maxid) %>%
-  mutate(p = n/sum(n),
+  mutate(p = round(n/sum(n) * 100, 1),
+         p = paste0(p, "%"),
          classif = factor(classif, levels = c("Negative", "Doublet", "Singlet")),
          maxid = factor(maxid, levels = stims)) %>%
-  ggplot(aes(classif, p, fill = maxid)) +
+  ungroup()
+
+ggplot(hto_global_df, aes(classif, n, fill = maxid)) +
   geom_col(show.legend = FALSE, color = "black", size = .5) +
-  scale_y_continuous(labels = scales::percent) +
+  geom_text(aes(label = p), size = 3, vjust = 0, nudge_y = 10) +
   scale_fill_manual(values = stim_colors) +
   facet_wrap(~maxid, nrow = 1, strip.position = "bottom") +
   theme_bw() +
@@ -198,9 +191,94 @@ tibble(barcode = colnames(hto_data),
         panel.grid.major.x = element_blank(),
         panel.spacing = unit(0, "lines"),
         panel.border = element_blank()) +
-  labs(x = NULL, y = "% of droplets")
+  labs(x = NULL, y = "Number of droplets")
 ```
 
+### HTO levels in Negative droplets
+
+```{r, echo=FALSE}
+stim_class_df <- tibble(barcode = colnames(bcells@assays$HTO@data),
+                        stim = bcells@meta.data$HTO_maxID,
+                        classif = bcells@meta.data$HTO_classification.global)
+
+hto_df <- bcells@assays$HTO@data %>%
+  as.data.frame() %>%
+  rownames_to_column("hto") %>%
+  as_tibble() %>%
+  pivot_longer(-hto, names_to = "barcode") %>%
+  left_join(stim_class_df)
+
+hto_top <- hto_df %>%
+  group_by(barcode, classif) %>%
+  slice_max(n = 1, order_by = value) %>%
+  select(barcode, classif, top_hto = hto)
+
+hto_plot_df <- hto_df %>%
+  left_join(hto_top, by = c("barcode", "classif")) %>%
+  mutate(top_hto = factor(top_hto, levels = stims),
+         stim = factor(stim, stims))
+
+hto_plot_df %>%
+  filter(classif == "Negative") %>%
+  ggplot(aes(value)) +
+  geom_density(aes(fill = stim), size = .25) +
+  scale_fill_manual(values = stim_colors) +
+  facet_wrap(~stim) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  labs(x = "HTO normalized levels")
+```
+
+### HTO relative levels in Singlet, Doublet, and Negative droplets
+
+```{r, echo=FALSE, fig.width=10, fig.height=8}
+admix_singlet <- hto_plot_df %>%
+  filter(classif == "Singlet") %>%
+  ggplot(aes(reorder_within(barcode, by = value, within = stim), value)) +
+  geom_col(aes(fill = hto), position = "fill", width = 1.01, show.legend = FALSE) +
+  scale_fill_manual(values = stim_colors) +
+  facet_grid(~stim, scales = "free_x", space = "free") +
+  theme_bw() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        strip.text = element_blank()) +
+  labs(x = NULL, y = "HTO proportion", fill = "Stim", title = "Singlets")
+
+admix_doublet <- hto_plot_df %>%
+  filter(classif == "Doublet") %>%
+  ggplot(aes(reorder_within(barcode, by = value, within = stim), value)) +
+  geom_col(aes(fill = hto), position = "fill", width = 1.01, show.legend = FALSE) +
+  scale_fill_manual(values = stim_colors) +
+  facet_grid(~stim, scales = "free_x", space = "free") +
+  theme_bw() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        strip.text = element_blank()) +
+  labs(x = NULL, y = "HTO proportion", fill = "Stim", title = "Doublets")
+
+admix_negative <- hto_plot_df %>%
+  filter(classif == "Negative") %>%
+  ggplot(aes(reorder_within(barcode, by = value, within = stim), value)) +
+  geom_col(aes(fill = hto), position = "fill", width = 1.01, show.legend = FALSE) +
+  scale_fill_manual(values = stim_colors) +
+  facet_grid(~stim, scales = "free_x", space = "free") +
+  theme_bw() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        strip.text = element_blank()) +
+  labs(x = NULL, y = "HTO proportion", fill = "Stim", title = "Negatives")
+
+plot_grid(admix_singlet, admix_doublet, admix_negative, ncol = 1)
+```
 
 
 ## Extract Singlets
@@ -215,40 +293,6 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
 ```{r, include=FALSE, eval=FALSE, echo=FALSE}
 saveRDS(bcells_singlet, "./scDRS/data/expression/bcells_singlet_seurat.rds")
 bcells_singlet <- readRDS("./scDRS/data/expression/bcells_singlet_seurat.rds")
-```
-
-### HTO quantifications in singlets
-
-```{r, echo=FALSE, fig.width=10, fig.height=4}
-stim_class_df <- tibble(barcode = colnames(bcells_singlet@assays$HTO@data),
-                        stim = bcells_singlet@meta.data$HTO_maxID)
-
-hto_df <- bcells_singlet@assays$HTO@data %>%
-  as.data.frame() %>%
-  rownames_to_column("hto") %>%
-  as_tibble() %>%
-  pivot_longer(-hto, names_to = "barcode") %>%
-  left_join(stim_class_df)
-
-hto_top <- hto_df %>%
-  group_by(barcode) %>%
-  slice_max(n = 1, order_by = value) %>%
-  select(barcode, top_hto = hto)
-
-hto_df %>%
-  left_join(hto_top) %>%
-  mutate(top_hto = factor(top_hto, levels = names(stim_colors)),
-         stim = factor(stim, levels = names(stim_colors))) %>%
-  ggplot(aes(reorder_within(barcode, by = value, within = stim), value)) +
-  geom_col(aes(fill = hto), position = "fill", width = 1.05) +
-  scale_fill_manual(values = stim_colors) +
-  facet_grid(~stim, scales = "free_x", space = "free") +
-  theme_classic() +
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        panel.grid = element_blank(),
-        strip.text = element_blank()) +
-  labs(x = NULL, y = "HTO proportion", fill = "Stim")
 ```
 
 
@@ -285,7 +329,7 @@ ggplot(bcells_singlet_meta, aes(cell_class, value, fill = cell_class)) +
 ```{r}
 bcells_singlet <- 
     FindVariableFeatures(bcells_singlet, 
-                         nfeatures = 1000,
+                         nfeatures = 2000,
                          selection.method = "vst")
 
 all_genes <- rownames(bcells_singlet)
@@ -295,7 +339,25 @@ bcells_singlet <- ScaleData(bcells_singlet, features = all_genes)
 bcells_singlet <- RunPCA(bcells_singlet, features = VariableFeatures(bcells_singlet))
 ```
 
+
+```{r, echo=FALSE}
+pca_cell_emb <- bcells_singlet@reductions$pca@cell.embeddings %>%
+  as.data.frame() %>%
+  rownames_to_column("barcode") %>%
+  as_tibble() %>%
+  left_join(stim_class_df) %>%
+  select(barcode, stim, PC_1:PC_4)
+
+ggplot(pca_cell_emb, aes(PC_1, PC_2)) +
+  geom_point(aes(color = stim), size = .5) +
+  scale_color_manual(values = stim_colors) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  guides(color = guide_legend(override.aes = list(size = 2)))
+```
+
 ### Gene loadings
+
 
 ```{r, echo=FALSE}
 pca_df <- bcells_singlet@reductions$pca@feature.loadings %>%
@@ -381,8 +443,7 @@ ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
 ### Clustering at different resolutions
 
 ```{r, echo=FALSE, fig.height=10, fig.width=6}
-clustering_plot_list <- 
-  umap_df %>%
+clustering_plot_list <- umap_df %>%
   pivot_longer(starts_with("cluster"), 
                names_to = "res", values_to = "cluster") %>%
   select(barcode, UMAP_1, UMAP_2, res, cluster) %>%
@@ -396,7 +457,8 @@ clustering_plot_list <-
     theme(panel.grid = element_blank(),
           axis.title = element_blank(),
           axis.text = element_blank(),
-          strip.text = element_text(size = 14)) +
+          strip.text = element_text(size = 14),
+          legend.key.size = unit(.1, "cm")) +
     guides(color = guide_legend(override.aes = list(size = 2))))
 
 plot_grid(plotlist = clustering_plot_list, ncol = 1)
@@ -492,7 +554,7 @@ cell_class_ds_p <- ggplot(umap_ds_df, aes(UMAP_1, UMAP_2, color = stim)) +
 
 seurat_cluster_ds_p <- ggplot(umap_ds_df, aes(UMAP_1, UMAP_2, color = cluster)) +
     geom_point(size = 1) +
-    scale_color_brewer(palette = "Set1", labels = function(x) str_pad(x, 5)) +
+    scale_color_viridis_d() +
     theme_minimal() +
     theme(panel.grid = element_blank()) +
     guides(color = guide_legend(override.aes = list(size = 2))) +
@@ -594,37 +656,6 @@ plot_grid(plotlist = bcell_prots_plot_list, ncol = 3)
 ```
 
 
-
-### Proteins and mRNAs in the same scale
-
-```{r, echo=FALSE}
-bcell_markers_df <- 
-  tibble(gene_name = names(bcell_prots),
-         ab = bcell_prots) %>%
-  left_join(tibble(gene_name = bcell_genes), .) %>%
-  inner_join(bcell_genes_quant) %>%
-  left_join(adt_quants) %>%
-  left_join(select(umap_df, barcode, stim)) %>%
-  select(mRNA = gene_exp, Protein = ab_level, everything()) %>%
-  pivot_longer(mRNA:Protein, names_to = "molecule", values_to = "scale_exp") %>%
-  group_by(stim, molecule, gene_id, gene_name) %>%
-  summarise(avg_exp = mean(scale_exp),
-            pct = mean(scale_exp > 0)) %>%
-  ungroup() %>%
-  mutate(gene_name = factor(gene_name))
-
-ggplot(bcell_markers_df, aes(stim, gene_name)) +
-  geom_point(aes(size = pct, fill = avg_exp), shape = 21, color = "black") +
-  scale_fill_viridis_c(option = "magma") +
-  scale_size(range = c(0.1, 4), labels = scales::percent) +
-  facet_wrap(~molecule) +
-  theme_bw() +
-  theme(panel.grid.major.x = element_blank(),
-        legend.position = "bottom") +
-  labs(x = NULL, y = NULL,
-       fill = "Avg scaled\nexpression", size = "% of cells") +
-  guides(fill = guide_colorbar(barheight = .6))
-```
 
 ### IgD vs CD27
 
@@ -914,10 +945,11 @@ bcells_markers_24 <-
                    ident.2 = "RSQ24",
                    only.pos = FALSE,
                    min.pct = 1/3,
-                   logfc.threshold = 1) %>%
+                   logfc.threshold = 0.5) %>%
     rownames_to_column("gene") %>%
     as_tibble() %>%
-    select(gene, avg_log2FC, IgG24 = pct.1, RSQ24 = pct.2, p = p_val_adj)
+    select(gene, avg_log2FC, IgG24 = pct.1, RSQ24 = pct.2, p = p_val_adj) %>%
+    filter(p < 0.01)
 ```
 
 ```{r, echo=FALSE}
@@ -944,42 +976,77 @@ timep_gene_avg_expr <- cell_gene_expr_timep %>%
   arrange(avg_log2FC) %>%
   mutate(gene_name = fct_inorder(gene_name))
 
-sle_candidates <- read_tsv("../de_gwas_candidates/sle_candidate_genes.tsv") %>%
-  mutate(gene_id= sub("\\.\\d+$", "", gene_id))
+sle_coloc <- read_tsv("./summary_coloc_SLE-eQTLs.txt") %>%
+  inner_join(features_df, by = c("molecular_trait_id" = "gene_id")) %>%
+  select(gene_id = molecular_trait_id, gene_name)
 
-sle_candidates_label <- timep_gene_avg_expr %>%
-  inner_join(sle_candidates)  %>%
+#sle_candidates <- read_tsv("../de_gwas_candidates/sle_candidate_genes.tsv") %>%
+#  mutate(gene_id= sub("\\.\\d+$", "", gene_id))
+
+sle_candidates_24 <- timep_gene_avg_expr %>%
+  inner_join(sle_coloc) %>%
   distinct(cluster = cluster_top, gene_name) %>%
   mutate(i = "*")
-  
+
 ```
 
 
 Genes marked with an asterisk were either reported as a SLE risk gene, or it is within +- 200kb from a SLE risk variant in GWAS catalog.
 
 
-```{r, echo=FALSE, fig.height=4, fig.width=4}
-ggplot(timep_gene_avg_expr, aes(cluster, gene_name)) +
+```{r, echo=FALSE, fig.height=10, fig.width=8, eval=FALSE}
+de_24_1 <- ggplot(timep_gene_avg_expr %>% filter(cluster_top == "IgG24"), 
+       aes(cluster, gene_name)) +
   geom_point(aes(size = pct, fill = scale_expr), 
              color = "black", shape = 21) +
   scale_size(range = c(0.05, 2.5), labels = scales::percent) +
   scale_fill_viridis_c(option = "magma") +
   scale_x_discrete(position = "top") +
-  geom_text(data = distinct(timep_gene_avg_expr, gene_name, cluster = cluster_top),
-            aes(label = gene_name), hjust = 0, nudge_x = .1, size = 2) +
-  geom_text(data = sle_candidates_label, aes(label = i), 
+  geom_text(data = sle_candidates_24 %>% filter(cluster == "IgG24"), 
+            aes(label = i), 
             size = 3, nudge_x = -.1, nudge_y = -.25) +
   theme_bw() +
   theme(axis.line = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.y = element_blank(),
         axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 6),
         panel.grid = element_line(color = "grey96"),
         panel.border = element_blank()) +
   labs(x = NULL, y = NULL, 
        fill = "Scaled\nExpression", 
        size = "% of cells") +
    guides(fill = guide_colorbar(barwidth = .5))
+
+de_24_2 <- ggplot(timep_gene_avg_expr %>% filter(cluster_top == "RSQ24"), 
+       aes(cluster, gene_name)) +
+  geom_point(aes(size = pct, fill = scale_expr), 
+             color = "black", shape = 21) +
+  scale_size(range = c(0.05, 2.5), labels = scales::percent) +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_discrete(position = "top") +
+  geom_text(data = sle_candidates_24 %>% filter(cluster == "RSQ24"), 
+            aes(label = i), 
+            size = 3, nudge_x = -.1, nudge_y = -.25) +
+  theme_bw() +
+  theme(axis.line = element_blank(),
+        axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 6),
+        panel.grid = element_line(color = "grey96"),
+        panel.border = element_blank(),
+        legend.position = "bottom",
+        legend.box = "vertical") +
+  labs(x = NULL, y = NULL, 
+       fill = "Scaled\nExpression", 
+       size = "% of cells") +
+  guides(fill = guide_colorbar(barheight = .5),
+         size = guide_legend(keywidth = .6))
+
+de_24_grid <- 
+  plot_grid(de_24_2 + theme(legend.position = "none"),
+            get_legend(de_24_2), 
+            ncol = 1, rel_heights = c(.66, .34))
+
+plot_grid(de_24_1 + theme(legend.position = "none"), 
+          de_24_grid, nrow = 1)
 ```
 
 ### 72 hours
@@ -991,12 +1058,13 @@ bcells_markers_72 <-
                    ident.2 = "RSQ72",
                    only.pos = FALSE,
                    min.pct = 1/3,
-                   logfc.threshold = 1) %>%
+                   logfc.threshold = 0.5) %>%
     rownames_to_column("gene") %>%
     as_tibble() %>%
-    select(gene, avg_log2FC, IgG72 = pct.1, RSQ72 = pct.2, p = p_val_adj)
+    select(gene, avg_log2FC, IgG72 = pct.1, RSQ72 = pct.2, p = p_val_adj) %>%
+    filter(p < 0.01)
 ```
-```{r, echo=FALSE}
+```{r, echo=FALSE, eval=FALSE}
 markers_time72_df <- bcells_markers_72 %>%
   mutate(cluster_top = ifelse(avg_log2FC > 0, "IgG72", "RSQ72")) %>%
   left_join(select(features_df, 1:2), by = c("gene" = "gene_id")) %>%
@@ -1021,12 +1089,12 @@ time72_gene_avg_expr <- cell_gene_expr_time72 %>%
   mutate(gene_name = fct_inorder(gene_name))
 
 sle_candidates_label_72 <- time72_gene_avg_expr %>%
-  inner_join(sle_candidates)  %>%
+  inner_join(sle_coloc)  %>%
   distinct(cluster = cluster_top, gene_name) %>%
   mutate(i = "*")
 ```
 
-```{r, echo=FALSE, fig.height=6, fig.width=6}
+```{r, echo=FALSE, fig.height=18, fig.width=8, eval=FALSE}
 de_72_1 <- ggplot(time72_gene_avg_expr %>% filter(cluster_top == "IgG72"), 
        aes(cluster, gene_name)) +
   geom_point(aes(size = pct, fill = scale_expr), 
@@ -1044,8 +1112,7 @@ de_72_1 <- ggplot(time72_gene_avg_expr %>% filter(cluster_top == "IgG72"),
         panel.border = element_blank()) +
   labs(x = NULL, y = NULL, 
        fill = "Scaled\nExpression", 
-       size = "% of cells",
-       title = "Markers IgG 72hr") +
+       size = "% of cells") +
   guides(fill = guide_colorbar(barwidth = .5))
 
 de_72_2 <- ggplot(time72_gene_avg_expr %>% filter(cluster_top == "RSQ72"), 
@@ -1067,8 +1134,7 @@ de_72_2 <- ggplot(time72_gene_avg_expr %>% filter(cluster_top == "RSQ72"),
         legend.box = "vertical") +
   labs(x = NULL, y = NULL, 
        fill = "Scaled\nExpression", 
-       size = "% of cells",
-       title = "Markers RSQ 72hr") +
+       size = "% of cells") +
    guides(fill = guide_colorbar(barheight = .5),
           size = guide_legend(keywidth = .6))
 
@@ -1085,6 +1151,8 @@ plot_grid(de_72_1 + theme(legend.position = "none"),
 
 
 ```{r microgrant, include=FALSE, echo=FALSE, eval=FALSE, fig.height=6, fig.width=9}
+reported_genes <- read_lines("../de_gwas_candidates/reported_genes.tsv")
+
 mc_plot <- umap_df %>%
   mutate(stim = recode(stim, "Res00" = "Resting 0hr", "Res24" = "Resting 24hr",
                        "IgG24" = "BCR 24hr", "IgG72" = "BCR 72hr",
@@ -1103,9 +1171,9 @@ mc_plot <- umap_df %>%
           legend.key.size = unit(.15, "cm"),
           plot.margin = margin(0, .5, .5, 0, unit = "cm")) +
     guides(color = guide_legend(override.aes = list(size = 2, alpha = 1))) +
-  labs(color = NULL)
+    labs(color = NULL)
 
-mc_genes <- c("BLK", "SOCS1", "NCF2", "IRAK1")
+mc_genes <- c("BLK", "SOCS1", "NCF2", "CD44")
 
 mc_prots <- c("IgD", "CD27", "CD11c")
 
@@ -1176,39 +1244,29 @@ mc_adt_plots <- plot_grid(plotlist = mc_prots_plot_list, ncol = 2)
 mc_rna_plots <- plot_grid(plotlist = mc_genes_plot_list, ncol = 2)
 
 #DE
-de_df <- timep_gene_avg_expr %>%
-  filter(gene_name %in% sle_candidates_label$gene_name) %>%
+de_24_df <- timep_gene_avg_expr %>%
+  filter(gene_name %in% reported_genes) %>%
+  filter(! grepl("HLA", gene_name)) %>% 
   mutate_at(vars(cluster, cluster_top),
             ~recode(., "IgG24" = "BCR", "RSQ24" = "TRL7"))
 
-de_plot <- ggplot(de_df, aes(cluster, gene_name)) +
-  geom_point(aes(size = pct, fill = scale_expr), 
+
+de_plot <- ggplot(de_24_df, aes(cluster, gene_name)) +
+   geom_point(aes(size = pct, fill = scale_expr), 
              color = "black", shape = 21) +
   scale_size(range = c(0.25, 5), labels = scales::percent) +
   scale_fill_viridis_c(option = "magma") +
-  scale_x_discrete(position = "top") +
-  geom_text(data = distinct(de_df, gene_name, cluster = cluster_top),
-            aes(label = gene_name), 
-            hjust = 0, nudge_x = .1, size = 3) +
   theme_bw() +
-  theme(axis.line = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.text.x = element_text(size = 10),
-        panel.grid = element_line(color = "grey96"),
-        panel.border = element_blank(),
-        legend.text = element_text(size = 9),
-        legend.title = element_text(size = 9),
-        panel.background = element_rect(fill = "white"),
-        plot.margin = margin(b = 1, unit = "cm")) +
-  labs(x = NULL, y = NULL, 
-       fill = "Scaled\nExpression", 
-       size = "% of cells") +
-   guides(fill = guide_colorbar(barwidth = .4, barheight = 3))
+  theme(panel.background = element_blank(),
+        plot.margin = margin(t = .5, b = 1, unit = "cm")) +
+  labs(x = NULL, y = NULL, fill = "Scale\nexpression", size = "% of\ncells") +
+  guides(fill = guide_colorbar(barwidth = .5, barheight = 3),
+         size = guide_legend(keyheight = .5))
+
 
 
 mc_out <- 
-  plot_grid(mc_plot, testplot, mc_rna_plots, mc_adt_plots, 
+  plot_grid(mc_plot, de_plot, mc_rna_plots, mc_adt_plots, 
             labels = c("A)", "B)", "C)", "D)"), nrow = 2) +
   theme(plot.background = element_rect(fill = "white", color = "white"),
         panel.border = element_blank())
