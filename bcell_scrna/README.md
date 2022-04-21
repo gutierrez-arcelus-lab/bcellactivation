@@ -173,14 +173,14 @@ bcells_singlet <- RunPCA(bcells_singlet, features = VariableFeatures(bcells_sing
 
 ![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
-## UMAP
+## Clustering
 
 ``` r
 # Find neighboring cells
 bcells_singlet <- FindNeighbors(bcells_singlet, dims = 1:20)
 
 # Cluster
-bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.3)
+bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
 ```
 
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
@@ -189,18 +189,55 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.3)
     # Number of edges: 211870
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.8963
+    # Maximum modularity in 10 random starts: 0.9056
     # Number of communities: 6
     # Elapsed time: 1 seconds
 
 ``` r
-# UMAP
+bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
+```
+
+    # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
+    # 
+    # Number of nodes: 5786
+    # Number of edges: 211870
+    # 
+    # Running Louvain algorithm...
+    # Maximum modularity in 10 random starts: 0.8678
+    # Number of communities: 8
+    # Elapsed time: 0 seconds
+
+``` r
+bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
+```
+
+    # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
+    # 
+    # Number of nodes: 5786
+    # Number of edges: 211870
+    # 
+    # Running Louvain algorithm...
+    # Maximum modularity in 10 random starts: 0.7899
+    # Number of communities: 16
+    # Elapsed time: 0 seconds
+
+## UMAP
+
+``` r
 bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+### HTO classification
 
 ![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+
+### Clustering at different resolutions
+
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+
+### Proliferation marker
+
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 ## Downsampling
 
@@ -265,67 +302,45 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
 bbcells_singlet_downsamp <- RunUMAP(bcells_singlet_downsamp, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 ## B cell genes (RNA)
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
 ## B cell genes (Protein)
 
-![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ### Proteins and mRNAs in the same scale
 
-![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 ### IgD vs CD27
 
-``` r
-igd_cd27_rna <- bcell_genes_quant %>%
-  filter(gene_name %in% c("IGHD", "CD27")) %>%
-  mutate(gene_name = recode(gene_name, "IGHD" = "IgD")) %>%
-  select(barcode, gene_name, scale_exp = gene_exp) %>%
-  left_join(select(umap_df, barcode, stim))
-
-igd_cd27_prot <- adt_quants %>%
-  filter(ab %in% c("IgD", "CD27")) %>%
-  select(barcode, gene_name = ab, scale_exp = ab_level) %>%
-  left_join(select(umap_df, barcode, stim))
-
-bind_rows(mRNA = igd_cd27_rna, Protein = igd_cd27_prot, .id = "molecule") %>%
-  pivot_wider(names_from = gene_name, values_from = scale_exp) %>%
-  ggplot(aes(IgD, CD27)) +
-  geom_point(size = .75, alpha = .5) +
-  scale_color_manual(values = stim_colors) +
-  facet_grid(molecule~stim) +
-  theme_bw() +
-  theme(panel.grid = element_blank())
-```
-
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
 
 ## DN2 genes (Jenks et al. (2018); Fig 4-C)
 
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
 
 ## Lupus genes
 
-![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 ## TLR genes
 
-![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
 
 ## MAGMA
 
 Scores taken from the scDRS figshare.
 
-![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
 
 ## scDRS
 
-![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
 
 ## Find marker genes for each stim condition
 
@@ -342,7 +357,7 @@ bcells_markers <-
 
 ## Top 10 marker genes per cluster
 
-![](README_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-37-1.png)<!-- -->
 
 ## Marker genes IgG vs RSQ
 
@@ -364,7 +379,7 @@ bcells_markers_24 <-
 Genes marked with an asterisk were either reported as a SLE risk gene,
 or it is within +- 200kb from a SLE risk variant in GWAS catalog.
 
-![](README_files/figure-gfm/unnamed-chunk-38-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-40-1.png)<!-- -->
 
 ### 72 hours
 
@@ -381,4 +396,4 @@ bcells_markers_72 <-
     select(gene, avg_log2FC, IgG72 = pct.1, RSQ72 = pct.2, p = p_val_adj)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-41-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-43-1.png)<!-- -->

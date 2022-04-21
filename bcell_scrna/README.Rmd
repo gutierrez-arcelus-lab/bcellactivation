@@ -153,7 +153,7 @@ stims <- c("Res00", "Res24", "IgG24", "IgG72", "RSQ24", "RSQ72")
 stim_colors <- c("Res00" = "grey75", 
                  "Res24" = "grey60", 
                  "IgG24" = "gold1", 
-                "IgG72" = "gold3", 
+                 "IgG72" = "gold3", 
                  "RSQ24" = "mediumpurple1", 
                  "RSQ72" = "mediumpurple4")
 
@@ -189,7 +189,7 @@ tibble(barcode = colnames(hto_data),
          classif = factor(classif, levels = c("Negative", "Doublet", "Singlet")),
          maxid = factor(maxid, levels = stims)) %>%
   ggplot(aes(classif, p, fill = maxid)) +
-  geom_col(show.legend = FALSE) +
+  geom_col(show.legend = FALSE, color = "black", size = .5) +
   scale_y_continuous(labels = scales::percent) +
   scale_fill_manual(values = stim_colors) +
   facet_wrap(~maxid, nrow = 1, strip.position = "bottom") +
@@ -214,7 +214,7 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
 ```
 ```{r, include=FALSE, eval=FALSE, echo=FALSE}
 saveRDS(bcells_singlet, "./scDRS/data/expression/bcells_singlet_seurat.rds")
-#bcells_singlet <- readRDS("./scDRS/data/expression/bcells_singlet_seurat.rds")
+bcells_singlet <- readRDS("./scDRS/data/expression/bcells_singlet_seurat.rds")
 ```
 
 ### HTO quantifications in singlets
@@ -336,29 +336,38 @@ tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
     labs(x = "Principal component", y = "Standard deviation")
 ```
 
-## UMAP
+## Clustering
 
-```{r, }
+```{r}
 # Find neighboring cells
 bcells_singlet <- FindNeighbors(bcells_singlet, dims = 1:20)
 
 # Cluster
-bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.3)
+bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
+bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
+bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
+```
 
-# UMAP
+## UMAP
+
+```{r}
 bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 ```
 
-```{r, echo = FALSE, fig.height=8}
+### HTO classification
+
+```{r, echo = FALSE, fig.height=4}
 umap_df <- as.data.frame(bcells_singlet@reductions$umap@cell.embeddings) %>%
     as_tibble() %>%
     mutate(barcode = colnames(bcells_singlet@assays$RNA@data),
-           cluster = bcells_singlet@meta.data$seurat_clusters,
+           cluster_0.25 = bcells_singlet@meta.data$RNA_snn_res.0.25,
+           cluster_0.5 = bcells_singlet@meta.data$RNA_snn_res.0.5,
+           cluster_1.25 = bcells_singlet@meta.data$RNA_snn_res.1.25,
            stim = bcells_singlet@meta.data$HTO_maxID,
            stim = factor(stim, levels = stims),
            percent_mt = bcells_singlet@meta.data$percent_mt)
 
-cell_class_p <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
+ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
     geom_point(size = 1) +
     scale_color_manual(values = stim_colors) +
     theme_bw() +
@@ -366,19 +375,35 @@ cell_class_p <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
           panel.border = element_blank(),
           axis.line = element_blank(),
           axis.ticks = element_blank()) +
-    guides(color = guide_legend(override.aes = list(size = 2))) +
-    labs(title = "Hashtag classification")
-
-seurat_cluster_p <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = cluster)) +
-    geom_point(size = 1) +
-    scale_color_brewer(palette = "Set1", labels = function(x) str_pad(x, 5)) +
-    theme_minimal() +
-    theme(panel.grid = element_blank()) +
-    guides(color = guide_legend(override.aes = list(size = 2))) +
-    labs(title = "Seurat cluster res = 0.3")
-
-plot_grid(cell_class_p, seurat_cluster_p, ncol = 1)
+    guides(color = guide_legend(override.aes = list(size = 2)))
 ```
+
+### Clustering at different resolutions
+
+```{r, echo=FALSE, fig.height=10, fig.width=6}
+clustering_plot_list <- 
+  umap_df %>%
+  pivot_longer(starts_with("cluster"), 
+               names_to = "res", values_to = "cluster") %>%
+  select(barcode, UMAP_1, UMAP_2, res, cluster) %>%
+  mutate(res = sub("cluster_", "", res)) %>%
+  split(.$res) %>%
+    map(~ggplot(., aes(UMAP_1, UMAP_2, color = cluster)) +
+    geom_point(size = 1) +
+    scale_color_viridis_d() +
+    facet_wrap(~res, nrow = 2) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          axis.title = element_blank(),
+          axis.text = element_blank(),
+          strip.text = element_text(size = 14)) +
+    guides(color = guide_legend(override.aes = list(size = 2))))
+
+plot_grid(plotlist = clustering_plot_list, ncol = 1)
+```
+
+### Proliferation marker
+
 
 ```{r, echo=FALSE, fig.height=4}
 mki_gene_df <- features_df %>%
@@ -604,7 +629,7 @@ ggplot(bcell_markers_df, aes(stim, gene_name)) +
 ### IgD vs CD27
 
 
-```{r, fig.height=2.5, fig.width=6}
+```{r, echo=FALSE, fig.height=2.5, fig.width=6}
 igd_cd27_rna <- bcell_genes_quant %>%
   filter(gene_name %in% c("IGHD", "CD27")) %>%
   mutate(gene_name = recode(gene_name, "IGHD" = "IgD")) %>%
