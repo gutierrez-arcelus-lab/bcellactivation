@@ -21,17 +21,6 @@ magma <- read.table("./data/MAGMA_v108_GENE_10_ZSTAT_for_scDRS.txt") %>%
     drop_na() %>%
     arrange(desc(SLE))
 
-features_df <- 
-    file.path("/lab-share/IM-Gutierrez-e2/Public/scRNA/SN0231064/KW9100_Maria",
-	      "210726_10X_KW9100-2_bcl/cellranger-6.0.1/GRCh38/BRI-1283", 
-	      "outs/filtered_feature_bc_matrix", "features.tsv.gz") %>%
-    read_tsv(col_names = c("gene_id", "gene_name", "phenotype")) %>%
-    filter(phenotype == "Gene Expression") %>%
-    select(1:2) %>%
-    add_count(gene_name) %>%
-    filter(n == 1) %>%
-    select(-n)
-
 gencode <- read_tsv("../../data/gencode.v19.genes.tsv") %>%
     mutate(gene_id = sub("\\.\\d+$", "", gene_id)) %>%
     select(gene_id, gene_name)
@@ -42,7 +31,7 @@ gencode38 <- read_tsv("./data/gencode_genes/gencode.v38.GRCh38.bed", col_names =
     select(gene_id, gene_name)
     
 gene_ids <- 
-    bind_rows(gencode, gencode38, features_df) %>%
+    bind_rows(gencode, gencode38) %>%
     distinct() %>%
     add_count(gene_name) %>%
     filter(n == 1) %>%
@@ -53,3 +42,4 @@ out <- left_join(magma, gene_ids) %>%
     select(GENE = gene_id, SLE)
     
 write_tsv(out, "./data/Bentham_zscore_from_scDRS.tsv")
+write_tsv(gene_ids, "./data/gencode_genes/gene_ids.tsv")
