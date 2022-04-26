@@ -2,6 +2,7 @@ library(tidyverse)
 library(readxl)
 library(hlaseqlib)
 library(ggbeeswarm)
+library(pheatmap)
 
 quant <- read_tsv("./geuvadis_salmon_quants_ebv.bed")
 
@@ -120,5 +121,53 @@ ggplot(qtl_df, aes(factor(dosage), tpm)) +
 ggsave("./plots/trans_qtl.png", height = 4, width = 6)
 
 
+# Correlations
+human_gene_types <- read_tsv("../data/gencode_v38_genetypes.tsv")
+
+human_ebv_cor <- read_tsv("./human_ebv_correlations_tpm10.tsv") %>% 
+    mutate(bonferr = p < 0.01/nrow(.))
+
+top_30 <- human_ebv_cor %>%
+    filter(abs(estimate) > .5, bonferr == TRUE) %>%
+    arrange(p, desc(abs(estimate))) %>%
+    select(estimate, p, gene_id_human, gene_name_human, gene_name_ebv, protein_name_ebv) %>%
+    left_join(human_gene_types, 
+              by = c("gene_id_human" = "gene_id", "gene_name_human" = "gene_name")) %>%
+    mutate(gene_type = ifelse(gene_type == "protein_coding", gene_type, "non_protein_coding"),
+           direction = ifelse(estimate > 0, "Positive", "Negative")) %>%
+    slice_max(n = 30, order_by = abs(estimate)) %>%
+    mutate(lab = paste(gene_name_human, gene_name_ebv, sep = " x "),
+           lab = fct_inorder(lab))
 
 
+ebv_volcano <- ggplot(human_ebv_cor, aes(estimate, -log10(p))) +
+    geom_point(aes(color = bonferr), size = .5, alpha = .5, show.legend = FALSE) +
+    scale_color_manual(values = c("FALSE" = "grey", "TRUE" = "black")) +
+    theme_bw() +
+    labs(x = "Spearman correlation coefficient")
+
+ggsave("./plots/ebv_volcano.png", ebv_volcano, width = 4, height = 3)
+
+ggplot(top_30, aes(abs(estimate), lab)) +
+    geom_point(aes(color = direction), size = 4, show.legend = FALSE) +
+    scale_x_continuous(labels = function(x) round(x, 2)) +
+    scale_color_manual(values = c("Negative" = "tomato3", "Positive" = "cornflowerblue")) +
+    theme_bw() +
+    theme(panel.grid.major.x = element_blank(),
+          axis.text.y = element_text(size = 8)) +
+    labs(x = "Spearman correlation coefficient", y = NULL)
+
+ggsave("./plots/ebv_pairs_corr.png", width = 6, height = 4)
+
+cor_bonferr_mat <- human_ebv_cor %>%
+    unite(ebv, c("gene_name_ebv", "protein_name_ebv"), sep = ": ") %>%
+    unite(human, c("gene_id_human", "gene_name_human"), sep = ": ") %>%
+    select(human, ebv, estimate) %>%
+    pivot_wider(names_from = ebv, values_from = estimate) %>%
+    as.data.frame() %>%
+    column_to_rownames("human") %>%
+    as.matrix()
+
+png("./plots/ebv_heatmap.png", width = 12, height = 16, res = 300, units = "in")
+pheatmap(cor_bonferr_mat, show_rownames = FALSE)
+dev.off()

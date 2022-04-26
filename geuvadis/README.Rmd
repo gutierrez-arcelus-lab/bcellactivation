@@ -76,5 +76,20 @@ include_graphics("./plots/trans_manhattan.png")
 include_graphics("./plots/trans_qtl.png")
 ```
 
+### Correlation of expression human vs EBV
+
+Black points = Significant after Bonferroni correction at alpha = 0.01
+
+```{r}
+include_graphics("./plots/ebv_volcano.png")
+```
+
+```{r}
+include_graphics("./plots/ebv_heatmap.png")
+```
+
+```{r}
+include_graphics("./plots/ebv_pairs_corr.png")
+```
 
 

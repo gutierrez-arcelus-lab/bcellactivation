@@ -65,3 +65,13 @@ p-values.
 ### LMP-2B expression \~ chr18:71,147,350 SNP genotypes
 
 <img src="./plots/trans_qtl.png" width="1800" />
+
+### Correlation of expression human vs EBV
+
+Black points = Significant after Bonferroni correction at alpha = 0.01
+
+<img src="./plots/ebv_volcano.png" width="1200" />
+
+<img src="./plots/ebv_heatmap.png" width="3600" />
+
+<img src="./plots/ebv_pairs_corr.png" width="1800" />
