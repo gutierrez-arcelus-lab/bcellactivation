@@ -183,7 +183,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.9161
     # Number of communities: 7
-    # Elapsed time: 0 seconds
+    # Elapsed time: 1 seconds
 
 ``` r
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
@@ -197,7 +197,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.8815
     # Number of communities: 10
-    # Elapsed time: 0 seconds
+    # Elapsed time: 1 seconds
 
 ``` r
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
@@ -211,7 +211,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.8152
     # Number of communities: 18
-    # Elapsed time: 0 seconds
+    # Elapsed time: 1 seconds
 
 ## UMAP
 

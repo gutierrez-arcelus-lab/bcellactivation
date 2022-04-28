@@ -560,7 +560,7 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
 bbcells_singlet_downsamp <- RunUMAP(bcells_singlet_downsamp, dims = 1:20)
 ```
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.width=10, fig.height=3}
 umap_ds_df <- as.data.frame(bcells_singlet_downsamp@reductions$umap@cell.embeddings) %>%
     as_tibble() %>%
     mutate(barcode = colnames(bcells_singlet_downsamp@assays$RNA@data),
@@ -584,7 +584,7 @@ seurat_cluster_ds_p <- ggplot(umap_ds_df, aes(UMAP_1, UMAP_2, color = cluster)) 
     guides(color = guide_legend(override.aes = list(size = 2))) +
     labs(title = "Seurat cluster res = 0.6")
 
-plot_grid(cell_class_ds_p, seurat_cluster_ds_p, ncol = 1)
+plot_grid(cell_class_ds_p, seurat_cluster_ds_p, nrow = 1)
 ```
 
 
@@ -862,12 +862,12 @@ bcells_markers <-
 
 ## Top 10 marker genes per cluster
 
-```{r, echo=FALSE, fig.height=7, fig.width=7}
+```{r, echo=FALSE, fig.height=8, fig.width=8}
 top_markers <- bcells_markers %>%
   as_tibble() %>%
   left_join(select(features_df, 1:2), by = c("gene" = "gene_id")) %>%
   group_by(cluster) %>%
-  top_n(10, avg_log2FC) %>%
+  top_n(15, avg_log2FC) %>%
   ungroup() %>%
   select(cluster, gene_name, gene_id = gene, avg_log2FC)
 
@@ -892,8 +892,8 @@ top_marker_summary <- top_marker_expr %>%
   ungroup() %>%
   left_join(select(top_markers, cluster_top = cluster, gene_name, avg_log2FC)) %>%
   mutate_at(vars(cluster, cluster_top), ~factor(., levels = stims)) %>%
-  arrange(cluster_top, desc(avg_log2FC)) %>%
-  mutate(gene_name = fct_inorder(gene_name))
+  arrange(cluster_top, avg_log2FC) %>%
+  mutate(gene_name = fct_inorder(gene_name)) 
 
 
 ggplot(top_marker_summary, aes(cluster, gene_name)) +
@@ -901,14 +901,10 @@ ggplot(top_marker_summary, aes(cluster, gene_name)) +
              color = "black", shape = 21) +
   scale_size(range = c(0.1, 4), labels = scales::percent) +
   scale_fill_viridis_c(option = "magma") +
-  scale_x_discrete(position = "top") +
-  geom_text(data = distinct(top_marker_summary, cluster = cluster_top, gene_name),
-            aes(label = gene_name), hjust = 0, nudge_x = .1, size = 3) +
+  facet_wrap(~cluster_top, scales = "free", ncol = 2) +
   theme_bw() +
   theme(axis.line = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.text.x = element_text(size = 11),
+        axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
         panel.grid = element_line(color = "grey96"),
         panel.border = element_blank()) +
   labs(x = NULL, y = NULL, 
