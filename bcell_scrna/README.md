@@ -183,7 +183,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.9161
     # Number of communities: 7
-    # Elapsed time: 1 seconds
+    # Elapsed time: 0 seconds
 
 ``` r
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
@@ -197,7 +197,21 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.8815
     # Number of communities: 10
-    # Elapsed time: 1 seconds
+    # Elapsed time: 0 seconds
+
+``` r
+bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.8)
+```
+
+    # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
+    # 
+    # Number of nodes: 5786
+    # Number of edges: 208879
+    # 
+    # Running Louvain algorithm...
+    # Maximum modularity in 10 random starts: 0.8504
+    # Number of communities: 14
+    # Elapsed time: 0 seconds
 
 ``` r
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
@@ -211,7 +225,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.8152
     # Number of communities: 18
-    # Elapsed time: 1 seconds
+    # Elapsed time: 0 seconds
 
 ## UMAP
 
@@ -227,33 +241,26 @@ bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 
 ![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
-### Proliferation marker
-
-![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
-
-### Mitochondria and Ribosoes percentage
+## Marker genes for Seurat clusters (whole data, res = 1.25)
 
 ``` r
-mt <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = percent_mt)) +
-    geom_point(size = 1) +
-    scale_color_viridis_c(breaks = scales::pretty_breaks(10)) +
-    theme_minimal() +
-    theme(panel.grid = element_blank()) +
-    guides(color = guide_legend(override.aes = list(size = 2)))
-
-ribo <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = percent_ribo)) +
-    geom_point(size = 1) +
-    scale_color_viridis_c() +
-    theme_minimal() +
-    theme(panel.grid = element_blank()) +
-    guides(color = guide_legend(override.aes = list(size = 2)))
-
-plot_grid(mt, ribo, nrow = 1)
+cluster_markers <- 
+    FindAllMarkers(bcells_singlet, 
+                   only.pos = TRUE,
+                   min.pct = 1/3,
+                   logfc.threshold = 1) %>%
+    as_tibble()
 ```
+
+## Top 10 marker genes per cluster
 
 ![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
-## Downsampling
+### Cell cycling
+
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+
+### Downsampling
 
 We see that RSQ 72hr is picked as a separate cluster with resolution =
 0.6. In the full dataset, that does not happen even if we increase the
@@ -316,31 +323,31 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
 bbcells_singlet_downsamp <- RunUMAP(bcells_singlet_downsamp, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ## B cell genes (RNA)
 
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 ## B cell genes (Protein)
 
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
 
 ### IgD vs CD27
 
-![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
 
 ## DN2 genes (Jenks et al. (2018); Fig 4-C)
 
-![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 ## Lupus genes
 
-![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
 
 ## TLR genes
 
-![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
 
 ## Find marker genes for each stim condition
 
@@ -357,7 +364,7 @@ bcells_markers <-
 
 ## Top 10 marker genes per cluster
 
-![](README_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
 
 ## Marker genes IgG vs RSQ
 
@@ -379,14 +386,14 @@ bcells_markers_24 <-
 
 #### GWAS genes
 
-![](README_files/figure-gfm/unnamed-chunk-38-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-39-1.png)<!-- -->
 
 ## MAGMA
 
 Scores taken from the scDRS figshare.
 
-![](README_files/figure-gfm/unnamed-chunk-39-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-40-1.png)<!-- -->
 
 ## scDRS
 
-![](README_files/figure-gfm/unnamed-chunk-40-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-41-1.png)<!-- -->
