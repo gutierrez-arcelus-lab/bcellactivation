@@ -1,48 +1,22 @@
 library(tidyverse)
-library(rhdf5)
+library(reticulate)
+library(Seurat)
+library(SingleCellExperiment)
 
-# Examine scDRS example h5 data
-h5ls("./data/expr.h5ad")
+seurat <- read_rds("./data/bcells_singlet_seurat.rds")
 
-xdata <- h5read("./data/expr.h5ad", "/X")
-class(xdata)                            
-dim(xdata)
+str(seurat)
 
-xdata[1:5, 1:10]
+sc <- import("scanpy")
 
-cellid <- h5read("./data/expr.h5ad", "/obs/cell_id")
-class(cellid)
-dim(cellid)
-head(cellid)
+anndata <- sc$AnnData(
+    X = as.matrix(t(GetAssayData(seurat, slot = "data"))),
+    obs = seurat[[]],
+    var = GetAssay(seurat)[[]]
+)
 
-genes <- h5read("./data/expr.h5ad", "/var/gene") 
-head(genes)
+anndata
 
-# B cells
-bcells_singlet <- read_rds("./data/bcells_singlet_seurat.rds")
+sc$AnnData$write_h5ad(anndata, "./data/bcells_singlet_seurat.h5ad")
 
-counts <- as.matrix(bcells_singlet@assays$RNA@counts)
-bcell_ids <- array(colnames(counts))
-bcell_genes <- as.array(rownames(counts))
-dimnames(counts) <- NULL
 
-h5out <- "./data/bcells_singlet_seurat.h5ad"
-unlink(h5out)
-h5createFile(h5out)
-
-h5createDataset(h5out, "X", 
-		dims = dim(counts), 
-		storage.mode = "double")
-		
-h5write(counts, h5out, "X")
-
-h5createGroup(h5out, "obs")
-h5write(bcell_ids, h5out, name = "/obs/cell_id")
-
-h5createGroup(h5out, "var")
-h5write(bcell_genes, h5out, name = "/var/gene")
-
-h5closeAll()
-
-h5ls(h5out)
-#h5read(h5out, "/var/gene")

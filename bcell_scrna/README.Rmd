@@ -13,12 +13,14 @@ options(width = 999)
 ## Packages
 
 ```{r}
+# single-cell data analysis
+library(Seurat)
+library(miQC)
+library(scater)
+
 # Data wrangling
 library(tidyverse)
 library(rvest)
-
-# single-cell data analysis
-library(Seurat)
 
 # Plotting
 library(tidytext)
@@ -86,17 +88,15 @@ bcells <- NormalizeData(bcells, assay = "HTO",
 bcells <- NormalizeData(bcells, assay = "ADT", 
                         normalization.method = "CLR",
                         margin = 2)
+
+bcells[["percent_mt"]] <- PercentageFeatureSet(bcells, features = mt_genes)
+bcells[["percent_ribo"]] <- PercentageFeatureSet(bcells, features = ribo_genes)
 ```
 
 ## QC
 
-```{r}
-bcells[["percent_mt"]] <- PercentageFeatureSet(bcells, features = mt_genes)
 
-bcells[["percent_ribo"]] <- PercentageFeatureSet(bcells, features = ribo_genes)
-```
-
-```{r, echo=FALSE, fig.height=3, fig.width=5}
+```{r, echo=FALSE, fig.height=3, fig.width=5, include=FALSE, eval=FALSE}
 bcells_meta <- bcells@meta.data %>%
     rownames_to_column("barcode") %>%
     select(barcode, n_reads = nCount_RNA, 
@@ -121,12 +121,28 @@ bcells_meta %>%
           legend.position = "none",
           panel.grid = element_blank()) +
     labs(x = "% Mitochondrial reads", y = "# of genes")
+
+#bcells <- subset(bcells, subset = nFeature_RNA > 500 & percent_mt < 10)
 ```
 
-## Filter out cells with high % of mitochondrial RNA
+
+Here we use the miQC package to model the percentage of mitochondrial reads and number of genes, in order to identify and remove compromised cells.
+
 
 ```{r}
-bcells <- subset(bcells, subset = nFeature_RNA > 500 & percent_mt < 10)
+bcells_sce <- as.SingleCellExperiment(bcells)
+bcells_sce <- addPerCellQC(bcells_sce, subsets = list(mito = mt_genes))
+model <- mixtureModel(bcells_sce)
+
+plotFiltering(bcells_sce, model)
+```
+
+## Remove compromised cells
+
+```{r}
+bcells_sce <- filterCells(bcells_sce, model)
+cells_keep <- rownames(colData(bcells_sce))
+bcells <- subset(bcells, cells = cells_keep)
 ```
 
 ## Demultiplex cells based on HTO
@@ -172,9 +188,10 @@ ggplot(hto_plot_df, aes(value, maxid, fill = maxid)) +
 ```
 
 ```{r, echo=FALSE, fig.width=6.5, fig.height=4}
-hto_global_df <- tibble(barcode = colnames(hto_data),
-       maxid = bcells@meta.data$HTO_maxID,
-       classif = bcells@meta.data$HTO_classification.global) %>%
+hto_global_df <- 
+  tibble(barcode = colnames(hto_data),
+         maxid = bcells@meta.data$HTO_maxID,
+         classif = bcells@meta.data$HTO_classification.global) %>%
   count(maxid, classif) %>%
   group_by(maxid) %>%
   mutate(p = round(n/sum(n) * 100, 1),
@@ -294,7 +311,7 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
 ```
 ```{r, include=FALSE, eval=FALSE, echo=FALSE}
 saveRDS(bcells_singlet, "./scDRS/data/expression/bcells_singlet_seurat.rds")
-bcells_singlet <- readRDS("./scDRS/data/expression/bcells_singlet_seurat.rds")
+#bcells_singlet <- readRDS("./scDRS/data/expression/bcells_singlet_seurat.rds")
 ```
 
 
@@ -387,7 +404,7 @@ pca_df %>%
 
 ### Standard deviation for each PC
 
-```{r, echo=FALSE, fig.height=4}
+```{r, echo=FALSE, fig.width=5, fig.height=3}
 tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
     rownames_to_column("pc") %>%
     mutate(pc = fct_inorder(pc)) %>%
@@ -499,7 +516,7 @@ cluster_markers <-
     as_tibble()
 ```  
 
-## Top 10 marker genes per cluster
+## Top 5 marker genes per cluster
 
 ```{r, echo=FALSE, fig.height=12, fig.width=8}
 top_cluster_markers <- cluster_markers %>%
@@ -575,7 +592,7 @@ ki67 <- umap_df %>%
     select(barcode, UMAP_1, UMAP_2) %>%
     left_join(mki_gene_quant, by = "barcode") %>%
     ggplot(aes(UMAP_1, UMAP_2, color = gene_exp)) +
-    geom_point(size = 1) +
+    geom_point(size = .75) +
     scale_color_viridis_c() +
     theme_minimal() +
     theme(panel.grid = element_blank()) +
@@ -583,7 +600,7 @@ ki67 <- umap_df %>%
     labs(title = "MKI67 RNA expression", color = NULL)
 
 ngenes <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = n_genes)) +
-    geom_point(size = 1) +
+    geom_point(size = .75) +
     scale_color_viridis_c(breaks = scales::pretty_breaks(10)) +
     theme_minimal() +
     theme(panel.grid = element_blank()) +
@@ -591,15 +608,15 @@ ngenes <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = n_genes)) +
     labs(title = "Number of genes", color = NULL)
 
 mt <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = percent_mt)) +
-    geom_point(size = 1) +
-    scale_color_viridis_c(breaks = scales::pretty_breaks(10)) +
+    geom_point(size = .75) +
+    scale_color_viridis_c() +
     theme_minimal() +
     theme(panel.grid = element_blank()) +
     guides(color = guide_legend(override.aes = list(size = 2))) +
     labs(title = "% Mitochondrial genes", color = NULL)
 
 ribo <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = percent_ribo)) +
-    geom_point(size = 1) +
+    geom_point(size = .75) +
     scale_color_viridis_c() +
     theme_minimal() +
     theme(panel.grid = element_blank()) +
@@ -623,7 +640,7 @@ sampled_cells <-
          cell_stim = bcells_singlet@meta.data$HTO_maxID) %>%
   select(cell_stim, cell_barcode) %>%
   group_by(cell_stim) %>%
-  sample_n(194) %>%
+  sample_n(178) %>%
   ungroup() %>%
   pull(cell_barcode)
 
@@ -959,7 +976,7 @@ bcells_markers <-
 
 
 
-## Top 10 marker genes per cluster
+## Top 15 marker genes per cluster
 
 ```{r, echo=FALSE, fig.height=8, fig.width=8}
 top_markers <- bcells_markers %>%
@@ -1110,7 +1127,7 @@ ggplot(magma_plot_df, aes(abs_z, gene_name)) +
 
 ## scDRS
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.width=5, fig.height=3}
 scdrs_scores <- read_tsv("./scDRS/results/Bentham_data_scDRSpaper/SLE.score.gz") %>%
   rename("barcode" = 1)
 
@@ -1120,9 +1137,9 @@ umap_scdrs_df <- umap_df %>%
 
 ggplot(umap_scdrs_df, aes(UMAP_1, UMAP_2, color = norm_score)) +
     geom_point(size = .5) +
-    scale_color_gradient2(low = "blue", mid = "grey90", high = "red") +
-    theme_minimal() +
-    theme(panel.grid = element_blank()) +
+    scale_color_gradient2() +
+    theme(panel.grid = element_blank(),
+          panel.background = element_rect(fill = "grey")) +
     guides(color = guide_legend(override.aes = list(size = 2)))
 
 ```

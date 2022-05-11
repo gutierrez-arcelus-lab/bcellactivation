@@ -4,12 +4,14 @@ CITE-seq Pilot
 ## Packages
 
 ``` r
+# single-cell data analysis
+library(Seurat)
+library(miQC)
+library(scater)
+
 # Data wrangling
 library(tidyverse)
 library(rvest)
-
-# single-cell data analysis
-library(Seurat)
 
 # Plotting
 library(tidytext)
@@ -76,22 +78,38 @@ bcells <- NormalizeData(bcells, assay = "HTO",
 bcells <- NormalizeData(bcells, assay = "ADT", 
                         normalization.method = "CLR",
                         margin = 2)
+
+bcells[["percent_mt"]] <- PercentageFeatureSet(bcells, features = mt_genes)
+bcells[["percent_ribo"]] <- PercentageFeatureSet(bcells, features = ribo_genes)
 ```
 
 ## QC
 
-``` r
-bcells[["percent_mt"]] <- PercentageFeatureSet(bcells, features = mt_genes)
+Here we use the miQC package to model the percentage of mitochondrial
+reads and number of genes, in order to identify and remove compromised
+cells.
 
-bcells[["percent_ribo"]] <- PercentageFeatureSet(bcells, features = ribo_genes)
+``` r
+bcells_sce <- as.SingleCellExperiment(bcells)
+bcells_sce <- addPerCellQC(bcells_sce, subsets = list(mito = mt_genes))
+model <- mixtureModel(bcells_sce)
+
+plotFiltering(bcells_sce, model)
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
-## Filter out cells with high % of mitochondrial RNA
+## Remove compromised cells
 
 ``` r
-bcells <- subset(bcells, subset = nFeature_RNA > 500 & percent_mt < 10)
+bcells_sce <- filterCells(bcells_sce, model)
+```
+
+    # Removing 4104 out of 13946 cells.
+
+``` r
+cells_keep <- rownames(colData(bcells_sce))
+bcells <- subset(bcells, cells = cells_keep)
 ```
 
 ## Demultiplex cells based on HTO
@@ -104,7 +122,7 @@ table(bcells$HTO_classification.global)
 
     # 
     #  Doublet Negative  Singlet 
-    #     3005     1721     5786
+    #     3079     1116     5647
 
 ``` r
 Idents(bcells) <- "HTO_maxID"
@@ -134,7 +152,7 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
 
     # 
     # Res00 Res24 IgG24 IgG72 RSQ24 RSQ72 
-    #   489   842  1601  1566  1094   194
+    #   675   767  1525  1465  1037   178
 
 ## Feature quantifications
 
@@ -177,11 +195,11 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
 
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
     # 
-    # Number of nodes: 5786
-    # Number of edges: 208879
+    # Number of nodes: 5647
+    # Number of edges: 203918
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.9161
+    # Maximum modularity in 10 random starts: 0.9192
     # Number of communities: 7
     # Elapsed time: 0 seconds
 
@@ -191,11 +209,11 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
 
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
     # 
-    # Number of nodes: 5786
-    # Number of edges: 208879
+    # Number of nodes: 5647
+    # Number of edges: 203918
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.8815
+    # Maximum modularity in 10 random starts: 0.8844
     # Number of communities: 10
     # Elapsed time: 0 seconds
 
@@ -205,12 +223,12 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.8)
 
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
     # 
-    # Number of nodes: 5786
-    # Number of edges: 208879
+    # Number of nodes: 5647
+    # Number of edges: 203918
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.8504
-    # Number of communities: 14
+    # Maximum modularity in 10 random starts: 0.8517
+    # Number of communities: 13
     # Elapsed time: 0 seconds
 
 ``` r
@@ -219,12 +237,12 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
 
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
     # 
-    # Number of nodes: 5786
-    # Number of edges: 208879
+    # Number of nodes: 5647
+    # Number of edges: 203918
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.8152
-    # Number of communities: 18
+    # Maximum modularity in 10 random starts: 0.8162
+    # Number of communities: 17
     # Elapsed time: 0 seconds
 
 ## UMAP
@@ -252,7 +270,7 @@ cluster_markers <-
     as_tibble()
 ```
 
-## Top 10 marker genes per cluster
+## Top 5 marker genes per cluster
 
 ![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
@@ -274,7 +292,7 @@ sampled_cells <-
          cell_stim = bcells_singlet@meta.data$HTO_maxID) %>%
   select(cell_stim, cell_barcode) %>%
   group_by(cell_stim) %>%
-  sample_n(194) %>%
+  sample_n(178) %>%
   ungroup() %>%
   pull(cell_barcode)
 
@@ -285,7 +303,7 @@ table(bcells_singlet_downsamp@meta.data$HTO_maxID)[stims]
 
     # 
     # Res00 Res24 IgG24 IgG72 RSQ24 RSQ72 
-    #   194   194   194   194   194   194
+    #   178   178   178   178   178   178
 
 ``` r
 bcells_singlet_downsamp <- 
@@ -310,11 +328,11 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
 
     # Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
     # 
-    # Number of nodes: 1164
-    # Number of edges: 44041
+    # Number of nodes: 1068
+    # Number of edges: 40995
     # 
     # Running Louvain algorithm...
-    # Maximum modularity in 10 random starts: 0.8201
+    # Maximum modularity in 10 random starts: 0.8214
     # Number of communities: 7
     # Elapsed time: 0 seconds
 
@@ -362,7 +380,7 @@ bcells_markers <-
     as_tibble()
 ```
 
-## Top 10 marker genes per cluster
+## Top 15 marker genes per cluster
 
 ![](README_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
 
