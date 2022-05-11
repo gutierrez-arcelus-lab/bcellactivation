@@ -129,7 +129,7 @@ bcells_meta %>%
 Here we use the miQC package to model the percentage of mitochondrial reads and number of genes, in order to identify and remove compromised cells.
 
 
-```{r}
+```{r, fig.height=3, fig.width=5}
 bcells_sce <- as.SingleCellExperiment(bcells)
 bcells_sce <- addPerCellQC(bcells_sce, subsets = list(mito = mt_genes))
 model <- mixtureModel(bcells_sce)
@@ -359,7 +359,7 @@ bcells_singlet <- RunPCA(bcells_singlet, features = VariableFeatures(bcells_sing
 ```
 
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.height=7}
 pca_cell_emb <- bcells_singlet@reductions$pca@cell.embeddings %>%
   as.data.frame() %>%
   rownames_to_column("barcode") %>%
@@ -367,23 +367,29 @@ pca_cell_emb <- bcells_singlet@reductions$pca@cell.embeddings %>%
   left_join(stim_class_df) %>%
   select(barcode, stim, PC_1:PC_4)
 
-ggplot(pca_cell_emb, aes(PC_1, PC_2)) +
+pca_plot <- ggplot(pca_cell_emb, aes(PC_1, PC_2)) +
   geom_point(aes(color = stim), size = .5) +
   scale_color_manual(values = stim_colors) +
   theme_bw() +
   theme(panel.grid = element_blank()) +
   guides(color = guide_legend(override.aes = list(size = 2)))
-```
 
-### Gene loadings
+sdev_plot <- tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
+    rownames_to_column("pc") %>%
+    mutate(pc = fct_inorder(pc)) %>%
+    filter(pc %in% 1:25) %>%
+    ggplot(aes(pc, sdev)) +
+    geom_line(aes(group = 1)) +
+    theme_bw() +
+    theme(panel.grid.minor = element_blank()) +
+    labs(x = "Principal component", y = "Standard deviation")
 
-```{r, echo=FALSE}
 pca_df <- bcells_singlet@reductions$pca@feature.loadings %>%
   as.data.frame() %>%
   rownames_to_column("gene_id") %>%
   as_tibble() 
 
-pca_df %>%
+loadings_plot <- pca_df %>%
   select(gene_id, PC_1, PC_2) %>%
   pivot_longer(-gene_id, names_to = "pc") %>%
   mutate(direction = case_when(sign(value) == 1 ~ "+",
@@ -400,21 +406,12 @@ pca_df %>%
   facet_wrap(~pc, scales = "free") +
   labs(x = "Loading", y = NULL) +
   theme_bw()
+
+plot_grid(plot_grid(pca_plot, sdev_plot, rel_widths = c(1, .7)),
+          loadings_plot,
+          ncol = 1, rel_heights = c(.7, 1))
 ```
 
-### Standard deviation for each PC
-
-```{r, echo=FALSE, fig.width=5, fig.height=3}
-tibble(sdev = bcells_singlet@reductions$pca@stdev) %>%
-    rownames_to_column("pc") %>%
-    mutate(pc = fct_inorder(pc)) %>%
-    filter(pc %in% 1:25) %>%
-    ggplot(aes(pc, sdev)) +
-    geom_line(aes(group = 1)) +
-    theme_bw() +
-    theme(panel.grid.minor = element_blank()) +
-    labs(x = "Principal component", y = "Standard deviation")
-```
 
 ## Clustering
 
@@ -513,7 +510,8 @@ cluster_markers <-
                    only.pos = TRUE,
                    min.pct = 1/3,
                    logfc.threshold = 1) %>%
-    as_tibble()
+    as_tibble() %>%
+    filter(p_val_adj < 0.01)
 ```  
 
 ## Top 5 marker genes per cluster

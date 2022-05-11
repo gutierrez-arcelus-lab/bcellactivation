@@ -175,14 +175,6 @@ bcells_singlet <- RunPCA(bcells_singlet, features = VariableFeatures(bcells_sing
 
 ![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
-### Gene loadings
-
-![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
-
-### Standard deviation for each PC
-
-![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
-
 ## Clustering
 
 ``` r
@@ -201,7 +193,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.9192
     # Number of communities: 7
-    # Elapsed time: 0 seconds
+    # Elapsed time: 1 seconds
 
 ``` r
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
@@ -215,7 +207,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.8844
     # Number of communities: 10
-    # Elapsed time: 0 seconds
+    # Elapsed time: 1 seconds
 
 ``` r
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.8)
@@ -229,7 +221,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.8)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.8517
     # Number of communities: 13
-    # Elapsed time: 0 seconds
+    # Elapsed time: 1 seconds
 
 ``` r
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
@@ -243,7 +235,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.8162
     # Number of communities: 17
-    # Elapsed time: 0 seconds
+    # Elapsed time: 1 seconds
 
 ## UMAP
 
@@ -253,11 +245,11 @@ bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 
 ### HTO classification
 
-![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ### Clustering at different resolutions
 
-![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 ## Marker genes for Seurat clusters (whole data, res = 1.25)
 
@@ -267,16 +259,17 @@ cluster_markers <-
                    only.pos = TRUE,
                    min.pct = 1/3,
                    logfc.threshold = 1) %>%
-    as_tibble()
+    as_tibble() %>%
+    filter(p_val_adj < 0.01)
 ```
 
 ## Top 5 marker genes per cluster
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 ### Cell cycling
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 ### Downsampling
 
@@ -341,31 +334,31 @@ bcells_singlet_downsamp <- FindClusters(bcells_singlet_downsamp, resolution = 0.
 bbcells_singlet_downsamp <- RunUMAP(bcells_singlet_downsamp, dims = 1:20)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 ## B cell genes (RNA)
 
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
 ## B cell genes (Protein)
 
-![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ### IgD vs CD27
 
-![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 ## DN2 genes (Jenks et al. (2018); Fig 4-C)
 
-![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
 
 ## Lupus genes
 
-![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
 
 ## TLR genes
 
-![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 ## Find marker genes for each stim condition
 
@@ -382,7 +375,7 @@ bcells_markers <-
 
 ## Top 15 marker genes per cluster
 
-![](README_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
 
 ## Marker genes IgG vs RSQ
 
@@ -404,14 +397,14 @@ bcells_markers_24 <-
 
 #### GWAS genes
 
-![](README_files/figure-gfm/unnamed-chunk-39-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-37-1.png)<!-- -->
 
 ## MAGMA
 
 Scores taken from the scDRS figshare.
 
-![](README_files/figure-gfm/unnamed-chunk-40-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-38-1.png)<!-- -->
 
 ## scDRS
 
-![](README_files/figure-gfm/unnamed-chunk-41-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-39-1.png)<!-- -->

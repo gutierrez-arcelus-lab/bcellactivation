@@ -2,7 +2,7 @@
 
 conda activate scDRS
 
-sourceprograms
+source /programs/biogrids.shrc
 
 export PYTHON_X=3.8
 
