@@ -75,6 +75,7 @@ bcells <- ScaleData(bcells, features = VariableFeatures(bcells))
 bcells <- NormalizeData(bcells, assay = "HTO", 
                         normalization.method = "CLR")
 
+
 bcells <- NormalizeData(bcells, assay = "ADT", 
                         normalization.method = "CLR",
                         margin = 2)
@@ -193,7 +194,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.9192
     # Number of communities: 7
-    # Elapsed time: 1 seconds
+    # Elapsed time: 0 seconds
 
 ``` r
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
@@ -207,7 +208,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.5)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.8844
     # Number of communities: 10
-    # Elapsed time: 1 seconds
+    # Elapsed time: 0 seconds
 
 ``` r
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.8)
@@ -221,7 +222,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 0.8)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.8517
     # Number of communities: 13
-    # Elapsed time: 1 seconds
+    # Elapsed time: 0 seconds
 
 ``` r
 bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
@@ -235,7 +236,7 @@ bcells_singlet <- FindClusters(bcells_singlet, resolution = 1.25)
     # Running Louvain algorithm...
     # Maximum modularity in 10 random starts: 0.8162
     # Number of communities: 17
-    # Elapsed time: 1 seconds
+    # Elapsed time: 0 seconds
 
 ## UMAP
 
@@ -257,10 +258,10 @@ bcells_singlet <- RunUMAP(bcells_singlet, dims = 1:20)
 cluster_markers <- 
     FindAllMarkers(bcells_singlet, 
                    only.pos = TRUE,
-                   min.pct = 1/3,
+                   min.pct = 0.05,
                    logfc.threshold = 1) %>%
     as_tibble() %>%
-    filter(p_val_adj < 0.01)
+    filter(p_val_adj < 0.05)
 ```
 
 ## Top 5 marker genes per cluster
@@ -368,7 +369,7 @@ Idents(bcells_singlet) <- "HTO_maxID"
 bcells_markers <- 
     FindAllMarkers(bcells_singlet, 
                    only.pos = TRUE,
-                   min.pct = 1/3,
+                   min.pct = 0.1,
                    logfc.threshold = 1) %>%
     as_tibble()
 ```
@@ -387,12 +388,12 @@ bcells_markers_24 <-
                    ident.1 = "IgG24",
                    ident.2 = "RSQ24",
                    only.pos = FALSE,
-                   min.pct = 1/3,
+                   min.pct = 0.1,
                    logfc.threshold = 0.5) %>%
     rownames_to_column("gene") %>%
     as_tibble() %>%
     select(gene, avg_log2FC, IgG24 = pct.1, RSQ24 = pct.2, p = p_val_adj) %>%
-    filter(p < 0.01)
+    filter(p < 0.05)
 ```
 
 #### GWAS genes
