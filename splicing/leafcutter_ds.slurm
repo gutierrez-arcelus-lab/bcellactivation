@@ -18,6 +18,7 @@ TYPE="${CELLTYPES[$SLURM_ARRAY_TASK_ID]}"
 
 COUNT=./results/${TYPE}/${TYPE}_perind_numers.counts.gz
 GROUP=./results/${TYPE}/groups_file.txt
+EXON=./grch38_exon.txt.gz
 OUT=./results/${TYPE}/leafcutter
 
 $HOME/leafcutter/scripts/leafcutter_ds.R \
