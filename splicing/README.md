@@ -5,8 +5,10 @@ README
 
 ``` r
 library(tidyverse)
+library(tidytext)
 library(ggsci)
 library(ggrepel)
+library(cowplot)
 ```
 
 ## Functions
@@ -31,8 +33,7 @@ read_leaf <- function(cell_type) {
 ```
 
 ``` r
-cell_types <- list.files("results") %>%
-    .[!. %in% "PbPc"] %>%
+cell_types <- c("rN", "aN", "T3", "SM", "DN") %>%
     setNames(., .)
 
 leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
@@ -42,3 +43,15 @@ leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+
+## GO enrichment
+
+GO enrichment analysis on genes with at least one cluster with absolute
+delta PSI &gt; 0.1
+
+``` r
+go <- read_tsv("./results/enrichment.tsv") %>%
+    arrange(Description)
+```
+
+![](README_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->

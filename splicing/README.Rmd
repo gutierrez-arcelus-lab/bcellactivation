@@ -11,8 +11,10 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, dpi = 300)
 
 ```{r}
 library(tidyverse)
+library(tidytext)
 library(ggsci)
 library(ggrepel)
+library(cowplot)
 ```
 
 ## Functions
@@ -38,8 +40,7 @@ read_leaf <- function(cell_type) {
 
 
 ```{r}
-cell_types <- list.files("results") %>%
-    .[!. %in% "PbPc"] %>%
+cell_types <- c("rN", "aN", "T3", "SM", "DN") %>%
     setNames(., .)
 
 leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
@@ -70,5 +71,44 @@ ggplot(leaf_df, aes(deltapsi, -log10(p.adjust))) +
          y = "-log10(p-value)",
          color = "Significant?")
 ```
+
+## GO enrichment
+
+GO enrichment analysis on genes with at least one cluster with absolute delta PSI > 0.1.
+
+
+```{r}
+go <- read_tsv("./results/enrichment.tsv") %>%
+    arrange(Description)
+```
+
+
+```{r, echo = FALSE, fig.height=7, fig.width=8}
+go_top15 <- go %>%
+    group_by(cell_type) %>%
+    top_n(15, -log10(qvalue)) %>%
+    ungroup() %>%
+    filter(cell_type != "T3") %>%
+    mutate(cell_type = factor(cell_type, levels = c("rN", "aN", "SM", "DN"))) %>%
+    arrange(cell_type, qvalue)
+
+goterms <- distinct(go_top15, Description) %>%
+    pull(Description)
+
+go_top15 %>%
+    mutate(Description = factor(Description, levels = rev(goterms))) %>%
+    ggplot(aes(cell_type, Description)) +
+        geom_point(aes(size = Count, fill = -log10(qvalue)), shape = 21) +
+        scale_fill_viridis_c(option = "magma") +
+        theme_minimal() +
+        theme(axis.title = element_blank(),
+              legend.position = "top") +
+        labs(size = "# Genes:") +
+        guides(color = guide_legend(direction = "horizontal"),
+               size = guide_legend(direction = "horizontal"))
+             
+```
+
+
 
 
