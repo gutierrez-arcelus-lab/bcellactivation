@@ -45,11 +45,13 @@ cell_types <- c("rN", "aN", "T3", "SM", "DN") %>%
 
 leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
     group_by(cell_type, cluster) %>%
-    slice(which.min(p.adjust)) %>%
+    slice(which.max(abs(deltapsi))) %>%
     ungroup()
 ```
 
-```{r, echo = FALSE, fig.height=14}
+
+
+```{r, echo = FALSE, fig.height=14, fig.width=7}
 labs_df <- leaf_df %>%
     filter(p.adjust < 0.05) %>%
     mutate(weight = deltapsi * -log10(p.adjust)) %>%
@@ -59,7 +61,7 @@ labs_df <- leaf_df %>%
     mutate(gene_label = str_trunc(genes, 10))
 
 ggplot(leaf_df, aes(deltapsi, -log10(p.adjust))) +
-    geom_point(aes(color = p.adjust < .05), show.legend = FALSE) +
+    geom_point(aes(color = p.adjust < .05), size = .7, show.legend = FALSE) +
     geom_text_repel(data = labs_df, aes(label = gene_label),
                     size = 2.5) +
     scale_color_npg() +
@@ -104,7 +106,7 @@ go_plot <- go_top15 %>%
         theme(axis.title = element_blank(),
               legend.position = "top") +
         labs(size = "# Genes:") +
-        guides(fill = guide_colorbar(direction = "horizontal", barheight = .5),
+        guides(fill = guide_colorbar(direction = "horizontal", barheight = 0.5),
                size = guide_legend(direction = "horizontal"))
 
 plot_grid(get_legend(go_plot), 

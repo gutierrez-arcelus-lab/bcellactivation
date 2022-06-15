@@ -38,7 +38,7 @@ cell_types <- c("rN", "aN", "T3", "SM", "DN") %>%
 
 leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
     group_by(cell_type, cluster) %>%
-    slice(which.min(p.adjust)) %>%
+    slice(which.max(abs(deltapsi))) %>%
     ungroup()
 ```
 
