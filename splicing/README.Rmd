@@ -95,7 +95,7 @@ go_top15 <- go %>%
 goterms <- distinct(go_top15, Description) %>%
     pull(Description)
 
-go_top15 %>%
+go_plot <- go_top15 %>%
     mutate(Description = factor(Description, levels = rev(goterms))) %>%
     ggplot(aes(cell_type, Description)) +
         geom_point(aes(size = Count, fill = -log10(qvalue)), shape = 21) +
@@ -104,8 +104,13 @@ go_top15 %>%
         theme(axis.title = element_blank(),
               legend.position = "top") +
         labs(size = "# Genes:") +
-        guides(color = guide_legend(direction = "horizontal"),
+        guides(fill = guide_colorbar(direction = "horizontal", barheight = .5),
                size = guide_legend(direction = "horizontal"))
+
+plot_grid(get_legend(go_plot), 
+          go_plot + theme(legend.position = "none"),
+          ncol = 1,
+          rel_heights = c(0.1, 1))
              
 ```
 

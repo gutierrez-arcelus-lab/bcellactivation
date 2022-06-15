@@ -47,7 +47,7 @@ leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
 ## GO enrichment
 
 GO enrichment analysis on genes with at least one cluster with absolute
-delta PSI &gt; 0.1
+delta PSI &gt; 0.1.
 
 ``` r
 go <- read_tsv("./results/enrichment.tsv") %>%
