@@ -4,6 +4,7 @@ library(DRIMSeq)
 
 # Cell type
 cell_type <- commandArgs(TRUE)[1]
+#cell_type <- "DN"
 
 # Sample specs
 samps <- file.path("./results", cell_type, "groups_file.txt") %>%
@@ -45,41 +46,54 @@ d <- dmDSdata(counts = as.data.frame(counts), samples = as.data.frame(samps))
 
 # Filters
 d_filt <- dmFilter(d, 
-		   min_samps_feature_expr = 3, min_feature_expr = 10,
-		   min_samps_feature_prop = 3, min_feature_prop = 0.1,
-		   min_samps_gene_expr = 3, min_gene_expr = 10)
+		   min_samps_feature_expr = 5, min_feature_expr = 10,
+		   min_samps_feature_prop = 5, min_feature_prop = 0.1,
+		   min_samps_gene_expr = 10, min_gene_expr = 10)
 
 table(table(counts(d_filt)$gene_id))
 
-# DTU analysis
-design_full <- model.matrix(~condition, data = DRIMSeq::samples(d_filt))
+## DEXSeq
+library(DEXSeq)
 
-set.seed(1)
-d_filt <- dmPrecision(d_filt, design = design_full) %>%
-    dmFit(design = design_full) %>%
-    dmTest(coef = "conditionSLE")
+sample_data <- DRIMSeq::samples(d_filt)
 
-res <- DRIMSeq::results(d_filt) %>%
-    mutate_at(vars(pvalue, adj_pvalue), ~replace_na(., 1))
+count_data <- round(as.matrix(counts(d_filt)[, -c(1,2)]))
 
-res_txp <- DRIMSeq::results(d_filt, level = "feature") %>%
-    mutate_at(vars(pvalue, adj_pvalue), ~replace_na(., 1))
+dxd <- DEXSeqDataSet(countData = count_data,
+		     sampleData = sample_data,
+		     design = ~sample + exon + condition:exon,
+		     featureID = counts(d_filt)$feature_id,
+		     groupID = counts(d_filt)$gene_id)
 
-out_gene <- res %>%
-    as_tibble() %>%
-    filter(adj_pvalue < 0.05) %>%
-    arrange(adj_pvalue) %>%
-    left_join(distinct(tx_to_gene, gene_id, gene_name))
+colData(dxd)
+dxd <- estimateSizeFactors(dxd)
+dxd <- estimateDispersions(dxd, quiet = TRUE)
+dxd <- testForDEU(dxd, reducedModel = ~sample + exon)
 
-out_tx <- res_txp %>%
-    as_tibble() %>%
-    filter(adj_pvalue < 0.05) %>%
-    arrange(adj_pvalue) %>%
-    left_join(tx_to_gene, by = c("feature_id" = "transcript_id", "gene_id"))
+dxr <- DEXSeqResults(dxd, independentFiltering = FALSE)
+qval <- perGeneQValue(dxr)
+dxr_g <- data.frame(gene = names(qval), qval) %>%
+    as_tibble()
 
-out_file_gene <- file.path("./results", cell_type, "dtu_perGene.tsv") 
-out_file_tx <- file.path("./results", cell_type, "dtu_perTx.tsv") 
+head(dxr)
 
-write_tsv(out_gene, out_file_gene)
-write_tsv(out_tx, out_file_tx)
+## stageR
+library(stageR)
 
+strp <- function(x) substr(x,1,15)
+pConfirmation <- matrix(dxr$pvalue,ncol=1)
+dimnames(pConfirmation) <- list(strp(dxr$featureID),"transcript")
+pScreen <- qval
+names(pScreen) <- strp(names(pScreen))
+tx2gene <- as.data.frame(dxr[,c("featureID", "groupID")]) %>%
+    mutate_at(vars(1:2), strp) 
+
+stageRObj <- stageRTx(pScreen=pScreen, pConfirmation=pConfirmation,
+                      pScreenAdjusted=TRUE, tx2gene=tx2gene)
+stageRObj <- stageWiseAdjustment(stageRObj, method="dtu", alpha=0.05)
+suppressWarnings({
+  dex.padj <- getAdjustedPValues(stageRObj, order=FALSE,
+                                 onlySignificantGenes=TRUE)
+})
+
+write_tsv(dex.padj, file.path("./results", cell_type, "dtu.tsv"))
