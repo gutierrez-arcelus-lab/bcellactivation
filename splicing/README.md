@@ -40,6 +40,13 @@ leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
     group_by(cell_type, cluster) %>%
     slice(which.max(abs(deltapsi))) %>%
     ungroup()
+
+dtu <- 
+    file.path("./results", cell_types, "dtu_perTx.tsv") %>%
+    setNames(cell_types) %>%
+    map_df(~read_tsv(.) %>%
+               select(gene_name, tx_id = feature_id, adj_pvalue),
+           .id = "cell_type")
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
@@ -55,3 +62,5 @@ go <- read_tsv("./results/enrichment.tsv") %>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
