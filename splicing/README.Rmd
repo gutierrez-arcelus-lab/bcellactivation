@@ -49,10 +49,10 @@ leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
     ungroup()
 
 dtu <- 
-    file.path("./results", cell_types, "dtu_perTx.tsv") %>%
+    file.path("./results", cell_types, "dtu_perGene.tsv") %>%
     setNames(cell_types) %>%
     map_df(~read_tsv(.) %>%
-               select(gene_name, tx_id = feature_id, adj_pvalue),
+               select(gene_name, adj_pvalue),
            .id = "cell_type")
 ```
 
@@ -61,16 +61,17 @@ dtu <-
 ```{r, echo = FALSE, fig.height=14, fig.width=6}
 labs_df <- leaf_df %>%
     filter(p.adjust < 0.05) %>%
-    mutate(weight = deltapsi * -log10(p.adjust)) %>%
     group_by(cell_type) %>%
-    top_n(30, abs(weight)) %>%
+    filter(abs(deltapsi) >= quantile(abs(deltapsi), 0.99) |
+               -log10(p.adjust) >= quantile(-log10(p.adjust), 0.99)) %>%
     ungroup() %>%
-    mutate(gene_label = str_trunc(genes, 10))
+    mutate(gene_label = str_trunc(genes, 10),
+           gene_label = replace_na(gene_label, "N/A"))
 
 ggplot(leaf_df, aes(deltapsi, -log10(p.adjust))) +
     geom_point(aes(color = p.adjust < .05), size = .7, show.legend = FALSE) +
     geom_text_repel(data = labs_df, aes(label = gene_label),
-                    size = 2) +
+                    size = 1.5, segment.size = .2) +
     scale_color_npg() +
     scale_x_continuous(limits = c(-.75, .75)) +
     facet_wrap(~cell_type, ncol = 1, scales = "free") +
@@ -143,15 +144,14 @@ leaf_dtu <- full_join(leaf_uniq, dtu_uniq, by = c("cell_type", "gene_name")) %>%
                            TRUE ~ "FALSE"))
 
 top_leaf_dtu <- leaf_dtu %>%
-    filter(col == "TRUE") %>%
-    mutate(p = pmin(adj_pvalue_leaf, adj_pvalue_dtu)) %>%
     group_by(cell_type) %>%
-    top_n(25, -log10(p)) %>%
-    mutate(shift_y = max(-log10(adj_pvalue_dtu)) - -log10(adj_pvalue_dtu)) %>%
-    ungroup()
+    filter(abs(-log10(adj_pvalue_leaf)) >= quantile(-log10(adj_pvalue_leaf), 0.995) |
+               -log10(adj_pvalue_dtu) >= quantile(-log10(adj_pvalue_dtu), 0.995)) %>%
+    ungroup() %>%
+    mutate(gene_name = replace_na(gene_name, "N/A"))
 
 ggplot(leaf_dtu, aes(-log10(adj_pvalue_leaf), -log10(adj_pvalue_dtu))) +
-    geom_point(aes(color = col), alpha = .5) +
+    geom_point(aes(color = col), alpha = .5, show.legend = FALSE) +
     geom_label_repel(data = top_leaf_dtu,
                     aes(label = gene_name),
                     force = .5,
@@ -164,8 +164,7 @@ ggplot(leaf_dtu, aes(-log10(adj_pvalue_leaf), -log10(adj_pvalue_dtu))) +
     facet_wrap(~cell_type, ncol = 1, scales = "free") +
     theme_bw() +
     theme(panel.grid = element_blank()) +
-    labs(x = "-log10(p) [Leafcutter]", y = "-log10(p) [DTU]", 
-         color = "Both significant?")
+    labs(x = "-log10(p) [Leafcutter]", y = "-log10(p) [DTU]")
 ```
 
 

@@ -42,10 +42,10 @@ leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
     ungroup()
 
 dtu <- 
-    file.path("./results", cell_types, "dtu_perTx.tsv") %>%
+    file.path("./results", cell_types, "dtu_perGene.tsv") %>%
     setNames(cell_types) %>%
     map_df(~read_tsv(.) %>%
-               select(gene_name, tx_id = feature_id, adj_pvalue),
+               select(gene_name, adj_pvalue),
            .id = "cell_type")
 ```
 
