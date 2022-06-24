@@ -98,8 +98,7 @@ go_top15 <- go %>%
     group_by(cell_type) %>%
     top_n(15, -log10(qvalue)) %>%
     ungroup() %>%
-    filter(cell_type != "T3") %>%
-    mutate(cell_type = factor(cell_type, levels = c("rN", "aN", "SM", "DN"))) %>%
+    mutate(cell_type = factor(cell_type, levels = c("rN", "aN", "T3", "SM", "DN"))) %>%
     arrange(cell_type, qvalue)
 
 goterms <- distinct(go_top15, Description) %>%
