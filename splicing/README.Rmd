@@ -58,11 +58,11 @@ dtu <-
 
 
 
-```{r, echo = FALSE, fig.height=14, fig.width=6}
+```{r, echo = FALSE, fig.height=8, fig.width=10}
 labs_df <- leaf_df %>%
     filter(p.adjust < 0.05) %>%
     group_by(cell_type) %>%
-    filter(abs(deltapsi) >= quantile(abs(deltapsi), 0.99) |
+    filter(abs(deltapsi) >= 0.4 |
                -log10(p.adjust) >= quantile(-log10(p.adjust), 0.99)) %>%
     ungroup() %>%
     mutate(gene_label = str_trunc(genes, 10),
@@ -71,10 +71,10 @@ labs_df <- leaf_df %>%
 ggplot(leaf_df, aes(deltapsi, -log10(p.adjust))) +
     geom_point(aes(color = p.adjust < .05), size = .7, show.legend = FALSE) +
     geom_text_repel(data = labs_df, aes(label = gene_label),
-                    size = 1.5, segment.size = .2) +
-    scale_color_npg() +
+                    size = 2, segment.size = .2) +
+    scale_color_manual(values = c("FALSE" = "grey85", "TRUE" = "grey60")) +
     scale_x_continuous(limits = c(-.75, .75)) +
-    facet_wrap(~cell_type, ncol = 1, scales = "free") +
+    facet_wrap(~cell_type, ncol = 2, scales = "free") +
     theme_bw() +
     theme(panel.grid = element_blank()) +
     labs(x = "Delta PSI", 
@@ -124,7 +124,7 @@ plot_grid(get_legend(go_plot),
              
 ```
 
-```{r, echo = FALSE, fig.height=14, fig.width=6}
+```{r, echo = FALSE, fig.height=10, fig.width=10}
 leaf_uniq <- leaf_df %>%
     separate_rows(genes, sep = ",") %>%
     group_by(cell_type, genes) %>%
@@ -155,13 +155,13 @@ ggplot(leaf_dtu, aes(-log10(adj_pvalue_leaf), -log10(adj_pvalue_dtu))) +
     geom_label_repel(data = top_leaf_dtu,
                     aes(label = gene_name),
                     force = .5,
-                    size = 1.5,
+                    size = 2,
                     label.size = NA,
                     label.padding = unit(0.1, "lines"),
                     alpha = .75,
                     segment.color = "grey35") +
     scale_color_manual(values = c("TRUE" = "black", "FALSE" = "grey")) +
-    facet_wrap(~cell_type, ncol = 1, scales = "free") +
+    facet_wrap(~cell_type, ncol = 2, scales = "free") +
     theme_bw() +
     theme(panel.grid = element_blank()) +
     labs(x = "-log10(p) [Leafcutter]", y = "-log10(p) [DTU]")
