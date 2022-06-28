@@ -1,8 +1,9 @@
 library(tidyverse)
 
-gwas <- read_tsv("../data/gwas_catalog_v1.0.2.tsv")
+gwas <- read_tsv("../data/gwas_catalog_v1.0.2.tsv", col_types = c(.default = "c"))
 
 sle_gwas <- gwas %>%
+    mutate(`P-VALUE` = as.numeric(`P-VALUE`)) %>%	
     filter(`DISEASE/TRAIT` %in% c("Systemic lupus erythematosus",
 				  "Lupus nephritis in systemic lupus erythematosus",
 				  "Cutaneous lupus erythematosus",
@@ -16,12 +17,16 @@ sle_gwas <- gwas %>%
 	   reported_gene = `REPORTED GENE(S)`,
 	   mapped_gene = MAPPED_GENE,
 	   snp = SNPS, 
-	   snp_current = SNP_ID_CURRENT) %>%
+	   snp_current = SNP_ID_CURRENT,
+	   p = `P-VALUE`) %>%
     distinct(chr, pos, .keep_all = TRUE)
 
 sle_gwas %>%
     separate_rows(reported_gene, sep = ",") %>%
     mutate(reported_gene = trimws(reported_gene)) %>%
-    distinct(reported_gene) %>%
-    pull(reported_gene) %>%
-    write_lines("./reported_genes.tsv")
+    group_by(reported_gene) %>%
+    summarise(author = paste(author, collapse = ","),
+	      snp = paste(snp, collapse = ","),
+	      p = paste(p, collapse = ",")) %>%
+    ungroup() %>%
+    write_tsv("./reported_genes.tsv")
