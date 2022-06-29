@@ -1,13 +1,12 @@
 ---
-title: "README"
+title: "Splicing"
 output: github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, dpi = 300)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, dpi = 300)
 ```
 
-## Packages
 
 ```{r}
 library(tidyverse)
@@ -17,7 +16,7 @@ library(ggrepel)
 library(cowplot)
 ```
 
-## Functions
+
 
 ```{r}
 read_leaf <- function(cell_type) {
@@ -57,6 +56,8 @@ dtu <-
 ```
 
 
+## Differential splicing events between patients and controls in Scharer dataset
+
 
 ```{r, echo = FALSE, fig.height=8, fig.width=10}
 labs_df <- leaf_df %>%
@@ -93,7 +94,7 @@ go <- read_tsv("./results/enrichment.tsv") %>%
 ```
 
 
-```{r, echo = FALSE, fig.height=7, fig.width=8}
+```{r, fig.height=7, fig.width=8}
 go_top15 <- go %>%
     group_by(cell_type) %>%
     top_n(15, -log10(qvalue)) %>%
@@ -123,7 +124,10 @@ plot_grid(get_legend(go_plot),
              
 ```
 
-```{r, echo = FALSE, fig.height=10, fig.width=10}
+## Comparison with differential transcript usage obtained with the DEXSeq pipeline
+
+
+```{r, fig.height=10, fig.width=10}
 leaf_uniq <- leaf_df %>%
     separate_rows(genes, sep = ",") %>%
     group_by(cell_type, genes) %>%
@@ -166,5 +170,41 @@ ggplot(leaf_dtu, aes(-log10(adj_pvalue_leaf), -log10(adj_pvalue_dtu))) +
     labs(x = "-log10(p) [Leafcutter]", y = "-log10(p) [DTU]")
 ```
 
+## Differentially spliced genes that are also GWAS genes
+
+
+```{r, fig.width=6, fig.height=6}
+gwas <- read_tsv("../bcell_scrna/reported_genes.tsv") %>%
+    separate_rows(author, snp, p, sep = ",")
+    
+leaf_filtered <- read_tsv("./results/filtered_leafcutter.tsv")
+sqtl <- read_tsv("./mu2021_data/filtered_sqtl.tsv", col_types = c(sid = "c"))
+
+inner_join(leaf_filtered, gwas, by = c("genes" = "gene")) %>%
+    arrange(desc(genes), author) %>%
+    mutate_at(vars(genes, author), fct_inorder) %>%
+    ggplot(aes(author, genes)) +
+    geom_point(aes(color = deltapsi), size = 4) +
+    scale_color_gradient2(guide = guide_colorbar(barheight = .5)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+          legend.position = "top",
+          panel.grid = element_line(color = "grey96")) +
+    labs(x = NULL, y = NULL)
+```
+
+```{r, fig.width=10, eval=FALSE}
+inner_join(leaf_filtered, sqtl, by = "genes") %>%
+    arrange(desc(genes), dataset) %>%
+    mutate_at(vars(genes, dataset), fct_inorder) %>%
+    ggplot(aes(genes, dataset)) +
+    geom_point(aes(color = deltapsi), size = 4) +
+    scale_color_gradient2(guide = guide_colorbar(barheight = .5)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+          legend.position = "top",
+          panel.grid = element_line(color = "grey96")) +
+    labs(x = NULL, y = NULL)
+```
 
 
