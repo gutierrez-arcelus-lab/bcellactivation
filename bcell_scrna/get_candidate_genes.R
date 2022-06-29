@@ -22,9 +22,19 @@ sle_gwas <- gwas %>%
     distinct(chr, pos, .keep_all = TRUE)
 
 sle_gwas %>%
-    separate_rows(reported_gene, sep = ",") %>%
-    mutate(reported_gene = trimws(reported_gene)) %>%
-    group_by(reported_gene) %>%
+    mutate(gene = ifelse(is.na(reported_gene), mapped_gene, reported_gene),
+	   gene = na_if(gene, "NR")) %>%
+    filter(!is.na(gene)) %>%
+    select(-reported_gene, -mapped_gene) %>%
+    separate_rows(gene, sep = ",") %>%
+    separate_rows(gene, sep = " - ") %>%
+    mutate(gene = trimws(gene),
+	   gene = na_if(gene, "NA")) %>%
+    filter(!is.na(gene)) %>%
+    group_by(author, trait, gene) %>%
+    slice(which.min(p)) %>%
+    ungroup() %>% 
+    group_by(gene) %>%
     summarise(author = paste(author, collapse = ","),
 	      snp = paste(snp, collapse = ","),
 	      p = paste(p, collapse = ",")) %>%
