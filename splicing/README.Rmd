@@ -185,10 +185,9 @@ inner_join(leaf_filtered, gwas, by = c("genes" = "gene")) %>%
     mutate_at(vars(genes, author), fct_inorder) %>%
     ggplot(aes(author, genes)) +
     geom_point(aes(color = deltapsi), size = 4) +
-    scale_color_gradient2(guide = guide_colorbar(barheight = .5)) +
+    scale_color_gradient2(guide = guide_colorbar(barwidth = .5)) +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
-          legend.position = "top",
           panel.grid = element_line(color = "grey96")) +
     labs(x = NULL, y = NULL)
 ```
