@@ -19,3 +19,7 @@ delta PSI &gt; 0.1.
 ## Differentially spliced genes that are also GWAS genes
 
 ![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+## Differentially spliced genes with sQTL-GWAS co-localizations in Mu et al. (2021)
+
+![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->

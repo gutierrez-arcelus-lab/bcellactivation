@@ -192,18 +192,40 @@ inner_join(leaf_filtered, gwas, by = c("genes" = "gene")) %>%
     labs(x = NULL, y = NULL)
 ```
 
-```{r, fig.width=10, eval=FALSE}
-inner_join(leaf_filtered, sqtl, by = "genes") %>%
-    arrange(desc(genes), dataset) %>%
-    mutate_at(vars(genes, dataset), fct_inorder) %>%
-    ggplot(aes(genes, dataset)) +
+## Differentially spliced genes with sQTL-GWAS co-localizations in Mu et al. (2021)
+
+
+```{r}
+sqtl_coloc <- read_tsv("./plot_data/coloc_sqtl.tsv") %>%
+    unite("dataset", c("study", "cell"), sep = "-") %>%
+    select(dataset, intron, coloc_locus, gene)
+
+coloc_df <- leaf_df %>%
+    select(cluster, genes, p.adjust, deltapsi) %>%
+    filter(p.adjust < 0.05, abs(deltapsi) > 0.1) %>%
+    separate_rows(genes, sep = ",") %>%
+    mutate(genes = trimws(genes)) %>%
+    inner_join(sqtl_coloc, by = c("genes" = "gene"))
+
+ggplot(coloc_df, aes(dataset, genes)) +
     geom_point(aes(color = deltapsi), size = 4) +
-    scale_color_gradient2(guide = guide_colorbar(barheight = .5)) +
+    scale_color_gradient2(guide = guide_colorbar(barwidth = .5)) +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
-          legend.position = "top",
           panel.grid = element_line(color = "grey96")) +
     labs(x = NULL, y = NULL)
+
 ```
+
+
+
+
+
+
+
+
+
+
+
 
 
