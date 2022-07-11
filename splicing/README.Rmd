@@ -14,6 +14,7 @@ library(tidytext)
 library(ggsci)
 library(ggrepel)
 library(cowplot)
+library(ggbeeswarm)
 ```
 
 
@@ -59,7 +60,7 @@ dtu <-
 ## Differential splicing events between patients and controls in Scharer dataset
 
 
-```{r, echo = FALSE, fig.height=8, fig.width=8}
+```{r, fig.height=8, fig.width=8}
 labs_df <- leaf_df %>%
     filter(p.adjust < 0.05) %>%
     group_by(cell_type) %>%
@@ -72,7 +73,7 @@ labs_df <- leaf_df %>%
 ggplot(leaf_df, aes(deltapsi, -log10(p.adjust))) +
     geom_point(aes(color = p.adjust < .05), size = .7, show.legend = FALSE) +
     geom_text_repel(data = labs_df, aes(label = gene_label),
-                    size = 2.5, segment.size = .2) +
+                    size = 2, segment.size = .2) +
     scale_color_manual(values = c("FALSE" = "grey85", "TRUE" = "grey60")) +
     scale_x_continuous(limits = c(-.75, .75)) +
     facet_wrap(~cell_type, ncol = 2, scales = "free") +
@@ -108,8 +109,8 @@ leaf_dtu <- full_join(leaf_uniq, dtu_uniq, by = c("cell_type", "gene_name")) %>%
 
 top_leaf_dtu <- leaf_dtu %>%
     group_by(cell_type) %>%
-    filter(abs(-log10(adj_pvalue_leaf)) >= quantile(-log10(adj_pvalue_leaf), 0.995) |
-               -log10(adj_pvalue_dtu) >= quantile(-log10(adj_pvalue_dtu), 0.995)) %>%
+    filter(abs(-log10(adj_pvalue_leaf)) >= quantile(-log10(adj_pvalue_leaf), 0.999) |
+               -log10(adj_pvalue_dtu) >= quantile(-log10(adj_pvalue_dtu), 0.999)) %>%
     ungroup() %>%
     mutate(gene_name = replace_na(gene_name, "N/A"))
 
@@ -132,26 +133,30 @@ ggplot(leaf_dtu, aes(-log10(adj_pvalue_leaf), -log10(adj_pvalue_dtu))) +
 
 ## Exploring why AS sometimes does not lead to DTU
 
-In the plots above we see that HMGB1 has a strong AS effect, but no DTU. On the other hand, EIF4A2 has both AS and DTU.
 
-### AS in HMGB1 and EIF4A2
+### AS in HMGB1, EIF4A2, and RPL15
 
-```{r, fig.height=4}
+```{r, fig.height=8}
 annots <- read_rds("./plot_data/transcripts_annot.rds") %>%
     mutate(transcript_id = str_remove(transcript_id, "\\.\\d+$"))
 
 load("./results/DN/DN.Rdata")
 
-
-
-# HMGB1
-hmgb1 <- as_tibble(introns) %>%
-    filter(gene == "HMGB1") %>%
-    filter(grepl("\\-$", clusterID)) %>%
-    filter(clusterID == first(clusterID))
+intron_df <- as_tibble(introns) %>%
+    filter(gene %in% c("HMGB1", "EIF4A2", "RPL15")) %>%
+    extract(clusterID, c("clusterID", "strand"), "(clu_.+)_([+-])") %>%
+    filter(gene == "EIF4A2" & strand == "+" |
+           gene == "HMGB1" & strand == "-" | 
+           gene == "RPL15" & strand == "+") %>%
+    group_by(clusterID) %>%
+    mutate(i = max(abs(deltapsi))) %>%
+    group_by(gene) %>%
+    filter(i == max(i)) %>%
+    ungroup() %>%
+    select(-i)
 
 plot_df <- annots %>% 
-    filter(gene_name == "HMGB1") %>%
+    filter(gene_name %in% c("HMGB1", "EIF4A2", "RPL15")) %>%
     group_by(transcript_id) %>%
     mutate(i = row_number(),
            col = case_when(feature == "intron" & i == min(i) ~ NA_character_,
@@ -160,72 +165,37 @@ plot_df <- annots %>%
                            TRUE ~ "intron")) %>%
     ungroup()
 
-    
-intron_cluster <- 
-    tibble(event = letters[1:3],
-           start = hmgb1$start,
-           end = hmgb1$end) %>%
-    mutate(transcript_id = "ENST00000399489")
+as_ifoforms <-
+    tribble(~gene_name, ~transcript_id,
+            "HMGB1", "ENST00000399489",
+            "EIF4A2", "ENST00000494445",
+            "EIF4A2", "ENST00000425053")
 
+intron_curves <- intron_df %>%
+    select(gene_name = gene, start, end) %>%
+    group_by(gene_name) %>%
+    mutate(event = letters[1:n()]) %>%
+    ungroup() %>%
+    left_join(as_ifoforms)
 
-ggplot(filter(plot_df, start > 30460000, end < 30463000)) +
+  
+plot_df %>%
+    filter((gene_name == "HMGB1" & start > 30460000 & end < 30463000) |
+           (gene_name == "EIF4A2" & start > 186787500 & end < 186790000) |
+           (gene_name == "RPL15")) %>%
+    filter(!is.na(col)) %>%
+    ggplot() +
     geom_segment(aes(x = start, xend = end, 
                      y = transcript_id, yend = transcript_id,
                      color = as.factor(col)), 
                  size = 5) +
-    geom_curve(data = intron_cluster, 
-               aes(x = start, xend = end, 
-                   y = transcript_id, yend = transcript_id), 
-               curvature = -.25) +
-    scale_x_continuous(breaks = scales::pretty_breaks(10)) +
-    scale_color_manual(values = c("intron" = "grey80", "exon" = "blue"),
-                       na.translate = FALSE) +
-    facet_wrap(~gene_name) +
-    theme_bw() +
-    theme(panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank(),
-          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
-    labs(x = "Position", y = NULL, color = "Feature")
-```
-
-```{r, fig.height=4}
-#EIF4A2
-eif4a2 <- as_tibble(introns) %>%
-    filter(gene == "EIF4A2") %>%
-    filter(grepl("\\+$", clusterID)) %>%
-    filter(clusterID == first(clusterID))
-
-intron_cluster_eif <- 
-    tibble(event = letters[1:nrow(eif4a2)],
-           start = eif4a2$start,
-           end = eif4a2$end) %>%
-    expand_grid(distinct(eif4a2, transcripts) %>% filter(!grepl("\\+", transcripts))) %>%
-    rename(transcript_id = "transcripts") %>%
-    mutate(transcript_id = str_remove(transcript_id, "\\.\\d+$"))
-
-
-plot_df2 <- annots %>% 
-    filter(gene_name == "EIF4A2") %>%
-    group_by(transcript_id) %>%
-    mutate(i = row_number(),
-           col = case_when(feature == "intron" & i == min(i) ~ NA_character_,
-                           feature == "intron" & i == max(i) ~ NA_character_,
-                           feature == "exon" ~ "exon",
-                           TRUE ~ "intron")) %>%
-    ungroup()
-
-ggplot(filter(plot_df2, start > 186787500, end < 186790000)) +
-    geom_segment(aes(x = start, xend = end, 
-                     y = transcript_id, yend = transcript_id,
-                     color = as.factor(col)), 
-                 size = 5) +
-    geom_curve(data = intron_cluster_eif, 
+    geom_curve(data = intron_curves, 
                aes(x = start, xend = end, 
                    y = transcript_id, yend = transcript_id), 
                curvature = -.1) +
     scale_color_manual(values = c("intron" = "grey80", "exon" = "blue"),
                        na.translate = FALSE) +
-    facet_wrap(~gene_name) +
+    facet_wrap(~gene_name, scales = "free", ncol = 1) +
     theme_bw() +
     theme(panel.grid.major = element_blank(),
           panel.grid.minor = element_blank()) +
@@ -235,11 +205,11 @@ ggplot(filter(plot_df2, start > 186787500, end < 186790000)) +
 
 ### Expression levels for the AS isoforms in HMGB1 and EIF4A2
 
-```{r, fig.height=6}
+```{r, fig.height=5}
 sample_annot <- 
     "../../../External_datasets/Scharer/RNAseq/metadata/file_description.tsv" %>%
     read_tsv() %>%
-    select(sample_id = run, status) %>%
+    select(sample_id = run, status, cell_subtype) %>%
     mutate(status = ifelse(grepl("SLE", status), "SLE", status))
 
 transcript_gene <- 
@@ -252,18 +222,33 @@ scharer_tpm <-
     pivot_longer(-transcript_id, names_to = "sample_id", values_to = "tpm") %>%
     left_join(transcript_gene, by = "transcript_id") %>%
     left_join(sample_annot, by = "sample_id") %>%
-    select(sample_id, status, transcript_id, gene_id, gene_name, tpm) %>%
+    select(sample_id, cell_subtype, status, transcript_id, gene_id, gene_name, tpm) %>%
     mutate(transcript_id = str_remove(transcript_id, "\\.\\d+$"))
     
-scharer_tpm %>%
-    filter(gene_name %in% c("HMGB1", "EIF4A2")) %>%
-    ggplot(aes(x = tpm, y = reorder(transcript_id, tpm, "median"), fill = status)) +
-    geom_boxplot(outlier.size = .5) +
+scharer_plot_df <- scharer_tpm %>%
+    filter(grepl("DN2", cell_subtype),
+           gene_name %in% c("HMGB1", "EIF4A2", "RPL15")) 
+    
+top_expressed <- scharer_plot_df %>%
+    group_by(gene_name, transcript_id) %>%
+    summarise(m = mean(tpm)) %>%
+    ungroup() %>%
+    group_by(gene_name) %>%
+    top_n(8, m) %>%
+    ungroup() %>%
+    select(-m)
+
+scharer_plot_df %>%
+    inner_join(top_expressed) %>%
+    ggplot(aes(x = reorder(transcript_id, tpm, "median"), y = tpm)) +
+    geom_boxplot(aes(fill = status), outlier.color = NA, alpha = .5) +
+    geom_point(aes(group = status), size = .5, position = position_dodge(width = 0.75)) +
     scale_fill_manual(values = c("Healthy" = "cornflowerblue", "SLE" = "tomato3")) +
-    facet_wrap(~gene_name, scales = "free") +
+    facet_wrap(~gene_name, scales = "free", ncol = 2) +
     theme_bw() +
-    theme(panel.grid.major.y = element_blank()) +
-    labs(x = "Transcripts per Million", y = NULL)
+    theme(panel.grid.major.y = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+    labs(y = "Transcripts per Million", x = NULL)
 ```
 
 
@@ -333,7 +318,7 @@ inner_join(leaf_filtered, gwas, by = c("genes" = "gene")) %>%
 ```
 
 ## Differentially spliced genes with sQTL-GWAS co-localizations in Mu et al. (2021)
-```{r}
+```{r, fig.height=3}
 sqtl_coloc <- read_tsv("./plot_data/coloc_sqtl.tsv") %>%
     unite("dataset", c("study", "cell"), sep = "-") %>%
     select(dataset, intron, coloc_locus, gene)
