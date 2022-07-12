@@ -18,22 +18,19 @@ transc_df <- read_tsv("./results/transcript_quants.tsv")
 
 transc_types_summary <- transc_df %>%
     group_by(condition_id, transcript_type) %>%
-    summarise(cpm = sum(cpm),
-              tpm = sum(tpm)) %>%
+    summarise(tpm = sum(tpm)) %>%
     group_by(condition_id) %>%
-    mutate(cpm = cpm/sum(cpm),
-           tpm = tpm/sum(tpm)) %>%
+    mutate(tpm = tpm/sum(tpm)) %>%
     group_by(transcript_type) %>%
     mutate(transcript_type = ifelse(any(tpm>0.01), transcript_type, "other")) %>%
     group_by(condition_id, transcript_type) %>%
-    summarise(avg_cpm = sum(cpm),
-              avg_tpm = sum(tpm)) %>%
+    summarise(avg_tpm = sum(tpm)) %>%
     ungroup()
 
 biotypes_order <-
     transc_types_summary %>%
     filter(condition_id == "16hr_resting") %>%
-    arrange(-avg_cpm) %>%
+    arrange(-avg_tpm) %>%
     pull(transcript_type) %>%
     fct_inorder() %>%
     fct_relevel("other", after = Inf) %>%
@@ -109,7 +106,6 @@ ggsave("./plots/bentham.png", bentham_plot, height = 6, width = 8)
 
 bentham_fc <- bentham_tpm %>%
     mutate(gene_name = as.character(gene_name)) %>%
-    select(-cpm) %>%
     mutate(tpm = tpm + 1L) %>%
     pivot_wider(names_from = condition_id, values_from = tpm) %>%
     pivot_longer(-(1:3), names_to = "condition_id", values_to = "tpm") %>%
@@ -135,7 +131,7 @@ bentham_fc_plot <- ggplot(bentham_fc, aes(fc, reorder_within(gene_name, fc, cond
     labs(x = expression(paste("Log"[2], "FC TPM")),
          y = NULL,
          title = "Fold change in respect to resting state\nfor genes in Bentham et al.",
-         caption = "Genes with TPM > 10 in both resting and stim and |FC| > 0.5") 
+         caption = "Genes with TPM > 10 in both resting and stim and |log2(FC)| > 0.5") 
     
 ggsave("./plots/bentham_fc.png", bentham_fc_plot, height = 6.5)
 

@@ -2,6 +2,11 @@ library(tidyverse)
 library(rvest)
 library(ggridges)
 library(cowplot)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+
+select <- dplyr::select
+slice <- dplyr::slice
 
 
 #plot colors
@@ -116,53 +121,96 @@ ggsave("./plots/number_of_sites.png", width = 5)
 
 
 # SLE genes
-
-bentham_genes <- 
-    "https://www.nature.com/articles/ng.3434/tables/2" %>%
-    read_html() %>%
-    html_node("table") %>%
-    html_table(header = TRUE, fill = TRUE) %>%
-    select(gene = `Likely causal genec`) %>%
-    slice(-1) %>%
-    separate_rows(gene, sep = ",") %>%
-    mutate(gene = trimws(gene)) %>%
-    filter(gene != "") %>%
-    pull(gene)
-
-bentham_genes[bentham_genes == "CXorf21"] <- "TASL"
-
+gwas_genes <- read_tsv("../bcell_scrna/reported_genes.tsv") %>%
+    mutate(gene = recode(gene, "CXorf21" = "TASL"))
 
 genes_ase <- ase_df %>%
     filter(method == "ASEReadCounter", !is.na(annot)) %>%
+    select(-method) %>%
     separate_rows(annot, sep = ";") %>%
     separate(annot, c("gene_id", "gene_name"), sep = ":") %>%
-    filter(gene_name %in% bentham_genes) %>%
-    group_by(chr, pos, ref, alt) %>%
-    filter(all(conditions %in% id) & any(q < 0.05)) %>%
+    mutate(chr = sub("chr", "", chr),
+           var_id = paste0(gene_name, ":", chr, "_", pos, "_", ref, "_", alt)) %>%
+    distinct(stim = id, var_id, gene_name, gene_id, pos, ref_ratio, q)
+
+ase_igg <- genes_ase %>%
+    filter(stim %in% c("16hr_resting", "24hr_IgG", "72hr_IgG")) %>%
+    arrange(var_id) %>%
+    group_by(var_id) %>%
+    filter(all(c("16hr_resting", "24hr_IgG", "72hr_IgG") %in% stim)) %>%
+    mutate(eff = abs(first(ref_ratio) - ref_ratio)) %>%
+    filter(any(eff > .2 & q < .05)) %>%
     ungroup() %>%
-    unite("var_id", c("gene_name", "pos", "ref", "alt")) 
+    select(-eff)
 
-genes_ase_pivot <- genes_ase %>%
-    mutate(alt_n = depth - ref_n) %>%
-    select(id, var_id, REF = ref_n, ALT = alt_n) %>%
-    pivot_longer(REF:ALT, names_to = "allele", values_to = "count") %>%
-    mutate(allele = factor(allele, levels = c("REF", "ALT")))
+ase_rsq <- genes_ase %>%
+    filter(stim %in% c("16hr_resting", "24hr_RSQ", "72hr_RSQ")) %>%
+    arrange(var_id) %>%
+    group_by(var_id) %>%
+    filter(all(c("16hr_resting", "24hr_RSQ", "72hr_RSQ") %in% stim)) %>%
+    mutate(eff = abs(first(ref_ratio) - ref_ratio)) %>%
+    filter(any(eff > .2 & q < .05)) %>%
+    ungroup() %>%
+    select(-eff)
 
-
-ggplot(genes_ase_pivot, aes(id, count, fill = allele)) +
-    geom_bar(stat = "identity", position = "dodge") +
-    scale_fill_manual(values = c("REF" = "grey30", "ALT" = "grey")) +
-    scale_x_discrete(labels = function(x) sub("_", "\n", x)) +
-    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
-    facet_wrap(~var_id, scales = "free_y", ncol = 4) +
+bind_rows("BCR stim" = ase_igg, "TLR7 stim" = ase_rsq, .id = "condition") %>%
+    filter(gene_name %in% gwas_genes$gene) %>%
+    ggplot(aes(stim, var_id)) +
+    geom_tile(aes(fill = ref_ratio)) +
+    scale_fill_gradient2(midpoint = 0.5) +
+    facet_wrap(~condition, scales = "free") +
     theme_bw() +
     theme(panel.grid = element_blank(),
-          legend.position = "bottom") +
-    labs(x = NULL, y = "Allele counts")
+          axis.title = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+          strip.text = element_text(size = 12),
+          strip.background = element_blank()) +
+    labs(fill = "Ref allele\nratio")
 
-ggsave("./plots/sle_genes_refalt.png", height = 8, width = 8)
+ggsave("./plots/ase_gwasgenes.png", width = 8, height = 5, dpi = 300)
 
 
+## enrichment
+run_enrichment <- function(gene_list) {
+    
+    enrichGO(gene = gene_list,
+             OrgDb = org.Hs.eg.db,
+             ont = "BP",
+             keyType = "ENSEMBL",
+             pAdjustMethod = "fdr",
+             pvalueCutoff = 0.05,
+             qvalueCutoff = 0.05,
+             readable = TRUE) %>%
+        as.data.frame() %>%
+        as_tibble()
+}
+
+go_igg <- ase_igg %>%
+    pull(gene_id) %>%
+    unique() %>%
+    str_remove("\\.\\d+$") %>%
+    run_enrichment()
+
+go_rsq <- ase_rsq %>%
+    pull(gene_id) %>%
+    unique() %>%
+    str_remove("\\.\\d+$") %>%
+    run_enrichment()
+
+bind_rows("BCR" = go_igg, "TLR7" = go_rsq, .id = "condition") %>%
+    select(condition, Description, Count, qvalue) %>%
+    ggplot(aes(condition, reorder(Description, -log10(qvalue)))) +
+    geom_point(aes(size = Count, fill = -log10(qvalue)), shape = 21) +
+    scale_fill_viridis_c(option = "magma") +
+    theme_bw() +
+    theme(axis.title = element_blank()) +
+    labs(size = "# of Genes:")
+
+ggsave("./plots/ase_go.png", dpi = 300)
+
+
+
+##
 genes_ase %>%
     mutate(gene_name = sub("^([^_]+).*$", "\\1", var_id)) %>%
     select(condition = id, gene_name, var_id, qvalue = q) %>%

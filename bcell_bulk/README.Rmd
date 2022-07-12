@@ -148,6 +148,19 @@ Example variants selected after filtering for:
 include_graphics("./plots/selected_genes_ai.png")
 ```
 
+##### ASE in GWAS genes
+
+```{r}
+include_graphics("./plots/ase_gwasgenes.png")
+```
+
+##### Pathway enrichment analysis with ASE genes
+
+```{r}
+include_graphics("./plots/ase_go.png")
+```
+
+
 #### Gene-level ASE
 
 Gene-level ASE reveals additional genes in respect to the SNP-level ASE. Here we show selected genes after filtering for:
