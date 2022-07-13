@@ -15,21 +15,24 @@ datasets <- excel_sheets(coloc_file)[-7]
 coloc_eqtl <- grep("eQTL", datasets, value = TRUE) %>%
     map_df(~read_excel(coloc_file, ., skip = 1)) %>%
     filter(trait == "SLE") %>%
-    separate(colocSnp, c("chr_gwas", "pos_gwas"), sep = ":", convert = TRUE) %>%
-    select(study, cell, gene, chr_gwas, pos_gwas, coloc_locus = colocLoci, pp4 = PP.H4.abf) %>%
-    group_by(study, cell, gene) %>%
-    slice(which.max(pp4)) %>%
-    ungroup()
+    separate(colocSnp, c("chr", "coloc_var_pos"), sep = ":", convert = TRUE) %>%
+    select(study, cell, chr, gene, gwas_var = colocLoci, coloc_var_pos, pp4 = PP.H4.abf) %>%
+    group_by(gwas_var) %>%
+    filter(pp4 == max(pp4)) %>%
+    ungroup() %>%
+    arrange(chr, coloc_var_pos)
 
 coloc_sqtl <- grep("sQTL", datasets, value = TRUE) %>%
     map_df(~read_excel(coloc_file, ., skip = 1)) %>%
     filter(trait == "SLE") %>%
-    separate(colocSnp, c("chr_gwas", "pos_gwas"), sep = ":", convert = TRUE) %>%
-    select(study, cell, intron, chr_gwas, pos_gwas, coloc_locus = colocLoci, pp4 = PP.H4.abf) %>%
+    separate(colocSnp, c("chr", "coloc_var_pos"), sep = ":", convert = TRUE) %>%
+    select(study, cell, chr, intron, gwas_var = colocLoci, coloc_var_pos, pp4 = PP.H4.abf) %>%
     left_join(intron_gene, by = "intron") %>%
     filter(!is.na(gene)) %>%
-    group_by(study, cell, gene) %>%
-    slice(which.max(pp4)) %>%
+    arrange(chr, coloc_var_pos) %>%
+    distinct() %>%
+    group_by(gwas_var) %>%
+    filter(pp4 == max(pp4)) %>%
     ungroup()
 
 
@@ -44,9 +47,12 @@ gwas <- "../data/gwas_catalog_v1.0.2.tsv" %>%
 	   snp = SNPS,
 	   snp_current = SNP_ID_CURRENT,
 	   context = CONTEXT,
+	   population = `P-VALUE (TEXT)`,
 	   p = `P-VALUE`) %>%
     mutate(snp_current = ifelse(!is.na(snp_current), paste0("rs", snp_current), snp_current),
-	   pos = as.integer(pos)) %>%
+	   pos = as.integer(pos),
+	   population = str_remove_all(population, "[()]"),
+	   population = ifelse(is.na(population), "Meta", population)) %>%
     arrange(as.numeric(chr), pos)
 
 # liftOver GWAS
@@ -77,7 +83,7 @@ map_positions <- read_tsv(bed19, col_names = c("chr", "start", "end"), col_types
 gwas_hg19 <- gwas %>%
     left_join(map_positions, by = c("chr", "pos" = "pos_hg38")) %>%
     distinct() %>%
-    select(chr, pos = pos_hg19, reported_gene, snp, p) %>%
+    select(chr, pos = pos_hg19, reported_gene, snp, population, p) %>%
     mutate(chr = ifelse(is.na(chr) & reported_gene == "BANK1", sub("^([^:]+):.*$", "\\1", snp), chr),
 	   pos = ifelse(is.na(pos) & reported_gene == "BANK1", sub("^[^:]+:(.+)$", "\\1", snp), pos),
 	   pos = as.integer(pos))
