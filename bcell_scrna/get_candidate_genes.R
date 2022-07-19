@@ -19,7 +19,7 @@ sle_gwas <- gwas %>%
 	   snp = SNPS, 
 	   snp_current = SNP_ID_CURRENT,
 	   p = `P-VALUE`) %>%
-    distinct(chr, pos, .keep_all = TRUE)
+    distinct(author, chr, pos, .keep_all = TRUE)
 
 sle_gwas %>%
     mutate(gene = ifelse(is.na(reported_gene), mapped_gene, reported_gene),
