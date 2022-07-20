@@ -86,7 +86,6 @@ vcf_exons <- map2(pos_list, exons_ranges, subsetByOverlaps) %>%
     select(chr, pos = start) %>%
     inner_join(vcf, ., by = c("#CHROM" = "chr", "POS" = "pos"))
 
-
 # Subsample 
 vcf_exons %>%
     sample_n(100) %>%
