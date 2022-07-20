@@ -94,7 +94,7 @@ bcells[["percent_ribo"]] <- PercentageFeatureSet(bcells, features = ribo_genes)
 
 Here we use the miQC package to model the percentage of mitochondrial reads and number of genes, in order to identify and remove compromised cells.
 
-```{r, fig.height=3, fig.width=5}
+```{r, fig.height=2, fig.width=4}
 bcells_sce <- bcells %>%
     as.SingleCellExperiment() %>%
     addPerCellQC(subsets = list(mito = mt_genes))
@@ -248,6 +248,7 @@ bcells_singlet <- subset(bcells, idents = "Singlet")
 
 table(bcells_singlet@meta.data$HTO_maxID)[stims]
 ```
+
 ```{r, include=FALSE, eval=FALSE, echo=FALSE}
 saveRDS(bcells_singlet, "./scDRS/data/expression/bcells_singlet_seurat.rds")
 #bcells_singlet <- readRDS("./scDRS/data/expression/bcells_singlet_seurat.rds")
@@ -347,7 +348,7 @@ plot_grid(plot_grid(pca_plot, sdev_plot, rel_widths = c(1, .7)),
 
 ### Number of genes
 
-```{r, echo=FALSE, fig.width=6, fig.height=4}
+```{r, echo=FALSE, fig.width=4, fig.height=3}
 pca_plot_df_2 <- pca_cell_emb %>%
   left_join(filter(bcells_singlet_meta, feature == "n_genes") %>% select(barcode, n_genes = value))
 
@@ -394,9 +395,17 @@ umap_stims <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
           axis.ticks = element_blank()) +
     guides(color = guide_legend(override.aes = list(size = 2)))
 
-umap_clusters <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = cluster_0.5)) +
-    geom_point(size = 1) +
-    scale_color_viridis_d() +
+cluster_labels <- umap_df %>%
+  group_by(cluster_0.5) %>%
+  summarise_at(vars(UMAP_1, UMAP_2), median) %>%
+  ungroup()
+
+umap_clusters <- ggplot(umap_df) +
+    geom_point(aes(UMAP_1, UMAP_2, color = cluster_0.5), size = 1) +
+    geom_label(data = cluster_labels, 
+               aes(UMAP_1, UMAP_2, label = cluster_0.5),
+               alpha = .5) +
+    scale_color_brewer(palette = "Paired") +
     theme_bw() +
     theme(panel.grid = element_blank(),
           panel.border = element_blank(),
@@ -477,9 +486,6 @@ cluster_markers <-
 
 ## Marker genes per cluster
 
-```{r, echo=FALSE, fig.height=8, fig.width=10}
-```
-
 
 ```{r, echo=FALSE, fig.height=8, fig.width=10}
 plot_markers <- function(cluster_df) {
@@ -553,7 +559,9 @@ bcells_markers <-
 ```  
 
 ```{r, echo=FALSE, fig.height=5, fig.width=10}
-plot_markers(bcells_markers)
+bcells_markers %>%
+  mutate(cluster = factor(cluster, levels = stims)) %>%
+  plot_markers()
 ```
 
 

@@ -185,7 +185,7 @@ Marker genes for Seurat clusters (whole data, res = 0.5)
 Marker genes per cluster
 ------------------------
 
-![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 Marker genes for each stim condition
 ------------------------------------
@@ -199,22 +199,22 @@ Marker genes for each stim condition
                        logfc.threshold = 1) %>%
         as_tibble()
 
-![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 B cell genes (RNA)
 ------------------
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 B cell genes (Protein)
 ----------------------
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 Lupus genes
 -----------
 
-![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 Marker genes IgG vs RSQ
 -----------------------
@@ -235,7 +235,7 @@ Marker genes IgG vs RSQ
 
 #### GWAS genes
 
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 MAGMA
 -----
