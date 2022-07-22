@@ -89,6 +89,8 @@ vcf_exons <- map2(pos_list, exons_ranges, subsetByOverlaps) %>%
     bind_rows(.id = "chr") %>%
     as_tibble() %>%
     select(chr, pos = start) %>%
-    inner_join(vcf, ., by = c("#CHROM" = "chr", "POS" = "pos"))
+    inner_join(vcf, ., by = c("#CHROM" = "chr", "POS" = "pos")) %>%
+    mutate(`#CHROM` = paste0("chr", `#CHROM`)) %>%
+    arrange(`#CHROM`)
 
 write_tsv(vcf_exons, "./demuxlet_vcf.txt")
