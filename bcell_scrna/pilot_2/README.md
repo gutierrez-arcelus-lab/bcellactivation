@@ -88,7 +88,7 @@ Create the Seurat object
 QC
 --
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
 Here we use the miQC package to model the percentage of mitochondrial
 reads and number of genes, in order to identify and remove compromised
@@ -104,7 +104,7 @@ cells.
       scale_y_continuous(breaks = scales::pretty_breaks(8)) +
       theme_bw()
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
 Remove compromised cells
 ------------------------
@@ -129,9 +129,9 @@ Demultiplex cells based on HTO
 
     Idents(bcells) <- "HTO_maxID"
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 Extract Singlets
 ----------------
@@ -149,7 +149,7 @@ Extract Singlets
 Feature quantifications
 -----------------------
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 PCA
 ---
@@ -164,11 +164,11 @@ PCA
         ScaleData(., features = rownames(.)) %>%
         RunPCA(., features = VariableFeatures(.))
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ### Number of genes
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 UMAP and clustering
 -------------------
@@ -183,23 +183,23 @@ UMAP and clustering
       FindNeighbors(dims = 1:20, verbose = FALSE) %>%
       FindClusters(resolution = 0.5, verbose = FALSE)
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
 ### Hashtag staining
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ### Total of B and T cells
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 ### Cell type annotation with MCP counter
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
 ### Cell cycling
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 Marker genes for Seurat clusters (whole data, res = 0.5)
 --------------------------------------------------------
@@ -215,9 +215,9 @@ Marker genes for Seurat clusters (whole data, res = 0.5)
 Marker genes per cluster
 ------------------------
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ADTs
 ----
 
-![](README_pilot2_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
