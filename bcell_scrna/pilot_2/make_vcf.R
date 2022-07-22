@@ -1,3 +1,4 @@
+library(IRanges)
 library(tidyverse)
     
 # Functions
@@ -45,18 +46,22 @@ dbsnp <- file.path(citeseq_dir, "dbsnp.vcf") %>%
 vcf <- inner_join(geno_merge, dbsnp, by = c("rsid" = "ID")) %>%
     mutate_at(vars(a1.x:a2.y), ~case_when(. == REF ~ 0L, . == ALT ~ 1L, TRUE ~ NA_integer_)) %>%
     drop_na() %>%
+    rowwise() %>%
+    mutate(ac = sum(c(a1.x, a2.x, a1.y, a2.y))) %>%
+    ungroup() %>%
+    mutate(an = 4, 
+	   af = ac/an,
+	   info = paste0("AC=", ac, ";AN=", an, ";AF=", af, ";VT=SNP;NS=2")) %>%
     unite("sample_1", c("a1.x", "a2.x"), sep = "/") %>%
     unite("sample_2", c("a1.y", "a2.y"), sep = "/") %>%
     filter(sample_1 != sample_2) %>%
-    mutate(QUAL = ".", FILTER = "PASS", INFO = ".", FORMAT = "GT") %>%
+    mutate(QUAL = ".", FILTER = "PASS", FORMAT = "GT") %>%
     select(`#CHROM` = chr, POS = pos, ID = rsid, REF, ALT,
-	   QUAL, FILTER, INFO, FORMAT,
+	   QUAL, FILTER, INFO = info, FORMAT,
 	   sample_1, sample_2)
 
 
 # select exonic SNPs
-library(IRanges)
-
 annot <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/References", 
 	      "Annotations/hsapiens/gencode.v19.chr_patch_hapl_scaff.annotation.gtf") %>%
@@ -86,8 +91,4 @@ vcf_exons <- map2(pos_list, exons_ranges, subsetByOverlaps) %>%
     select(chr, pos = start) %>%
     inner_join(vcf, ., by = c("#CHROM" = "chr", "POS" = "pos"))
 
-# Subsample 
-vcf_exons %>%
-    sample_n(100) %>%
-    mutate(`#CHROM` = factor(`#CHROM`, levels = str_sort(unique(`#CHROM`), numeric = TRUE))) %>%
-    arrange(`#CHROM`, POS)
+write_tsv(vcf_exons, "./demuxlet_vcf.txt")
