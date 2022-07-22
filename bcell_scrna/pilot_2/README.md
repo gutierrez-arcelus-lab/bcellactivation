@@ -58,9 +58,20 @@ Create the Seurat object
         .[grepl("^Hashtag", rownames(.)), ]
 
     rownames(hashtags) <- 
-        c("day0", "IL4 24hr", "BCR 24hr", "BCR+TLR7 24hr", "TLR7 24hr", 
-          "sCD40L 24hr", "CpG 24hr", "DN2 24hr", "BCR 72hr", "BCR+TLR7 72hr",
-          "TLR7 72hr", "sCD40L 72hr", "CpG 72hr", "DN2 72hr")
+        c("day0", 
+          "IL4 24hr",
+          "BCR 24hr",
+          "BCR+TLR7 24hr",
+          "TLR7 24hr", 
+          "sCD40L 24hr",
+          "CpG 24hr",
+          "DN2 24hr",
+          "BCR 72hr",
+          "BCR+TLR7 72hr",
+          "TLR7 72hr",
+          "sCD40L 72hr",
+          "DN2 72hr",
+          "CpG 72hr")
 
     # stims in order for plotting
     stims <- c("day0", "IL4 24hr", "BCR 24hr", "BCR 72hr", "TLR7 24hr", "TLR7 72hr",
@@ -144,12 +155,12 @@ Extract Singlets
 
     # 
     #          day0      IL4 24hr      BCR 24hr      BCR 72hr     TLR7 24hr     TLR7 72hr BCR+TLR7 24hr BCR+TLR7 72hr      CpG 24hr      CpG 72hr   sCD40L 24hr   sCD40L 72hr      DN2 24hr      DN2 72hr 
-    #           634           345           615           501           534           447           393           364            48           273           148           750           481           425
+    #           634           345           615           501           534           447           393           364            48           425           148           750           481           273
 
 Feature quantifications
 -----------------------
 
-![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 PCA
 ---
@@ -164,11 +175,11 @@ PCA
         ScaleData(., features = rownames(.)) %>%
         RunPCA(., features = VariableFeatures(.))
 
-![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ### Number of genes
 
-![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 UMAP and clustering
 -------------------
@@ -183,23 +194,23 @@ UMAP and clustering
       FindNeighbors(dims = 1:20, verbose = FALSE) %>%
       FindClusters(resolution = 0.5, verbose = FALSE)
 
-![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 ### Hashtag staining
 
-![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
 ### Total of B and T cells
 
-![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ### Cell type annotation with MCP counter
 
-![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 ### Cell cycling
 
-![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
 Marker genes for Seurat clusters (whole data, res = 0.5)
 --------------------------------------------------------
@@ -215,9 +226,9 @@ Marker genes for Seurat clusters (whole data, res = 0.5)
 Marker genes per cluster
 ------------------------
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 ADTs
 ----
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->

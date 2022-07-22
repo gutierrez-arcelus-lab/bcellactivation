@@ -70,9 +70,20 @@ hashtags <- data10x[["Antibody Capture"]] %>%
     .[grepl("^Hashtag", rownames(.)), ]
 
 rownames(hashtags) <- 
-    c("day0", "IL4 24hr", "BCR 24hr", "BCR+TLR7 24hr", "TLR7 24hr", 
-      "sCD40L 24hr", "CpG 24hr", "DN2 24hr", "BCR 72hr", "BCR+TLR7 72hr",
-      "TLR7 72hr", "sCD40L 72hr", "CpG 72hr", "DN2 72hr")
+    c("day0", 
+      "IL4 24hr",
+      "BCR 24hr",
+      "BCR+TLR7 24hr",
+      "TLR7 24hr", 
+      "sCD40L 24hr",
+      "CpG 24hr",
+      "DN2 24hr",
+      "BCR 72hr",
+      "BCR+TLR7 72hr",
+      "TLR7 72hr",
+      "sCD40L 72hr",
+      "DN2 72hr",
+      "CpG 72hr")
 
 # stims in order for plotting
 stims <- c("day0", "IL4 24hr", "BCR 24hr", "BCR 72hr", "TLR7 24hr", "TLR7 72hr",
@@ -195,7 +206,8 @@ ggplot(hto_global_df, aes(classif, n, fill = maxid)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.major.x = element_blank(),
         panel.spacing = unit(0, "lines"),
-        panel.border = element_blank()) +
+        panel.border = element_blank(),
+        strip.text = element_text(size = 6)) +
   labs(x = NULL, y = "Number of droplets")
 ```
 
@@ -221,43 +233,6 @@ hto_plot_df <- hto_df %>%
   left_join(hto_top, by = c("barcode", "classif")) %>%
   mutate(top_hto = factor(top_hto, levels = stims),
          stim = factor(stim, stims))
-```
-
-
-```{r, echo=FALSE, fig.width=10, fig.height=8, eval=FALSE}
-### HTO relative levels in Singlet, Doublet, and Negative droplets
-
-plot_admix <- function(plot_df) {
-  ggplot(plot_df, aes(reorder_within(barcode, by = value, within = stim), value)) +
-  geom_col(aes(fill = hto), position = "fill", width = 1.01, show.legend = FALSE) +
-  scale_fill_manual(values = stims_colors) +
-  facet_grid(~stim, scales = "free_x", space = "free") +
-  theme_bw() +
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.line = element_blank(),
-        panel.grid = element_blank(),
-        panel.border = element_blank(),
-        strip.text = element_blank()) +
-  labs(x = NULL, y = "HTO proportion", fill = "Stim")
-}
-
-admix_singlet <- hto_plot_df %>%
-  filter(classif == "Singlet") %>%
-  plot_admix() +
-  labs(title = "Singlets")
-
-admix_doublet <- hto_plot_df %>%
-  filter(classif == "Doublet") %>%
-  plot_admix() +
-  labs(title = "Doublets")
-
-admix_negative <- hto_plot_df %>%
-  filter(classif == "Negative") %>%
-  plot_admix() +
-  labs(title = "Negatives")
-
-plot_grid(admix_singlet, admix_doublet, admix_negative, ncol = 1)
 ```
 
 
