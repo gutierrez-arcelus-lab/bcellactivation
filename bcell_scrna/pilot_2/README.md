@@ -182,9 +182,13 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
     #          day0      IL4 24hr      BCR 24hr      BCR 72hr     TLR7 24hr     TLR7 72hr BCR+TLR7 24hr BCR+TLR7 72hr      CpG 24hr      CpG 72hr   sCD40L 24hr   sCD40L 72hr      DN2 24hr      DN2 72hr 
     #           607           325           574           474           498           427           372           356            48           404           192           531           447           336
 
-## Feature quantifications
+## Number of cells from each sample
 
 ![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
+## Feature quantifications
+
+![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 ## PCA
 
@@ -195,11 +199,11 @@ bcells_singlet <- bcells_singlet %>%
     RunPCA(., features = VariableFeatures(.))
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ### Number of genes and Individual
 
-![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ## UMAP and clustering
 
@@ -210,25 +214,25 @@ bcells_singlet <- bcells_singlet %>%
   FindClusters(resolution = 0.5, verbose = FALSE)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
-
 ![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
-
-### Hashtag staining
 
 ![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
-### Total of B and T cells
+### Hashtag staining
 
 ![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
-### Cell type annotation with MCP counter
+### Total of B and non-B cells
 
 ![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
-### Cell cycling
+### Cell type annotation with MCP counter
 
 ![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+
+### Cell cycling
+
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 ## Marker genes for Seurat clusters (whole data, res = 0.5)
 
@@ -244,8 +248,8 @@ cluster_markers <-
 
 ## Marker genes per cluster
 
-![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ## ADTs
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->

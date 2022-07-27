@@ -32,7 +32,7 @@ library(cowplot)
 
 ## Cell Ranger data
 
-```{r}
+```{r, cache=TRUE}
 cellranger_dir <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/CITEseq_pilot_2",
     "SN0257788/broad/hptmp/curtism/bwh10x/KW10170_Maria/220617_10X_KW10170_bcl",
@@ -221,6 +221,25 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
 ```
 
 
+## Number of cells from each sample
+
+```{r, echo=FALSE, fig.height=4, fig.width=10}
+stim_class_df %>%
+  as_tibble() %>%
+  filter(classif == "Singlet") %>%
+  left_join(demuxlet_sng) %>%
+  count(stim, sample) %>%
+  mutate(stim = factor(stim, levels = stims)) %>%
+  ggplot(aes(stim, n, fill = sample)) +
+  geom_col(color = "black", size = .5, position = "dodge") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.x = element_blank()) +
+  labs(x = NULL, y = "Number of droplets")
+```
+
+
+
 ## Feature quantifications
 
 ```{r, echo=FALSE, fig.width=10, fig.height=3}
@@ -397,7 +416,7 @@ plot_grid(umap_stims, umap_clusters, nrow = 1)
 ```
 
 
-```{r, echo=FALSE, fig.height=3, fig.width=5}
+```{r, echo = FALSE, fig.height=3, fig.width=5}
 umap_df %>%
   left_join(demuxlet_sng) %>%
   select(barcode, sample, UMAP_1, UMAP_2) %>%
@@ -446,7 +465,7 @@ umap_df %>%
   
 ```
 
-### Total of B and T cells
+### Total of B and non-B cells
 
 ```{r, echo=FALSE, fig.width=8, fig.height=4}
 cell_totals <- meta_data %>%
