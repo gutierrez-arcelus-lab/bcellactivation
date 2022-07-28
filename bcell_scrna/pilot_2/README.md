@@ -201,7 +201,7 @@ bcells_singlet <- bcells_singlet %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
-### Number of genes and Individual
+### Number of genes and cells per individual
 
 ![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 

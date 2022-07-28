@@ -232,6 +232,7 @@ stim_class_df %>%
   mutate(stim = factor(stim, levels = stims)) %>%
   ggplot(aes(stim, n, fill = sample)) +
   geom_col(color = "black", size = .5, position = "dodge") +
+  ggsci::scale_fill_npg() +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.major.x = element_blank()) +
@@ -332,7 +333,7 @@ plot_grid(plot_grid(pca_plot, sdev_plot, rel_widths = c(1, .7)),
 ```
 
 
-### Number of genes and Individual
+### Number of genes and cells per individual
 
 ```{r, echo=FALSE, fig.width=8, fig.height=3}
 pca_samples <- left_join(pca_cell_emb, demuxlet_sng) %>%
