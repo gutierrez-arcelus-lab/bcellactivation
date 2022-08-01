@@ -20,22 +20,22 @@ library(ggbeeswarm)
 
 
 ```{r}
-read_leaf <- function(cell_type) {
-    
-    sig <- 
-        file.path("./results", cell_type, "leafcutter_cluster_significance.txt") %>%
-        read_tsv() %>%
-        separate(cluster, c("chr", "cluster"), sep = ":") %>%
-        select(cluster, p.adjust, genes)
-
-    eff <- 
-        file.path("./results", cell_type, "leafcutter_effect_sizes.txt") %>%
-        read_tsv() %>%
-        mutate(cluster = sub("^.*(clu.*)$", "\\1", intron)) %>%
-        select(cluster, logef, deltapsi)
-
-    inner_join(sig, eff)
-}
+# read_leaf <- function(cell_type) {
+#     
+#     sig <- 
+#         file.path("./results", cell_type, "leafcutter_cluster_significance.txt") %>%
+#         read_tsv() %>%
+#         separate(cluster, c("chr", "cluster"), sep = ":") %>%
+#         select(cluster, p.adjust, genes)
+# 
+#     eff <- 
+#         file.path("./results", cell_type, "leafcutter_effect_sizes.txt") %>%
+#         read_tsv() %>%
+#         mutate(cluster = sub("^.*(clu.*)$", "\\1", intron)) %>%
+#         select(cluster, logef, deltapsi)
+# 
+#     inner_join(sig, eff)
+# }
 ```
 
 
@@ -43,10 +43,7 @@ read_leaf <- function(cell_type) {
 cell_types <- c("rN", "aN", "T3", "SM", "DN") %>%
     setNames(., .)
 
-leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
-    group_by(cell_type, cluster) %>%
-    slice(which.max(abs(deltapsi))) %>%
-    ungroup()
+leaf_df <- read_tsv("./results/leafcutter_filtered.tsv")
 
 dtu <- 
     file.path("./results", cell_types, "dtu_perGene.tsv") %>%
@@ -64,8 +61,8 @@ dtu <-
 labs_df <- leaf_df %>%
     filter(p.adjust < 0.05) %>%
     group_by(cell_type) %>%
-    filter(abs(deltapsi) >= 0.4 |
-               -log10(p.adjust) >= quantile(-log10(p.adjust), 0.99)) %>%
+    filter(abs(deltapsi) >= quantile(abs(deltapsi), 0.95) |
+           -log10(p.adjust) >= quantile(-log10(p.adjust), 0.95)) %>%
     ungroup() %>%
     mutate(gene_label = str_trunc(genes, 10),
            gene_label = replace_na(gene_label, "N/A"))
@@ -205,7 +202,7 @@ plot_df %>%
 
 ### Expression levels for the AS isoforms in HMGB1 and EIF4A2
 
-```{r, fig.height=5}
+```{r, fig.height=3, fig.width=10}
 sample_annot <- 
     "../../../External_datasets/Scharer/RNAseq/metadata/file_description.tsv" %>%
     read_tsv() %>%
@@ -240,15 +237,14 @@ top_expressed <- scharer_plot_df %>%
 
 scharer_plot_df %>%
     inner_join(top_expressed) %>%
-    ggplot(aes(x = reorder(transcript_id, tpm, "median"), y = tpm)) +
+    ggplot(aes(y = reorder(transcript_id, tpm, "median"), x = tpm)) +
     geom_boxplot(aes(fill = status), outlier.color = NA, alpha = .5) +
     geom_point(aes(group = status), size = .5, position = position_dodge(width = 0.75)) +
     scale_fill_manual(values = c("Healthy" = "cornflowerblue", "SLE" = "tomato3")) +
-    facet_wrap(~gene_name, scales = "free", ncol = 2) +
+    facet_wrap(~gene_name, scales = "free", ncol = 3) +
     theme_bw() +
-    theme(panel.grid.major.y = element_blank(),
-          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
-    labs(y = "Transcripts per Million", x = NULL)
+    theme(panel.grid.major.y = element_blank()) +
+    labs(x = "Transcripts per Million", y = NULL)
 ```
 
 
@@ -297,12 +293,11 @@ plot_grid(get_legend(go_plot),
 
 ## Differentially spliced genes that are also GWAS genes
 
-
-```{r, fig.width=6, fig.height=6}
+```{r, fig.width=6, fig.height=4}
 gwas <- read_tsv("../bcell_scrna/reported_genes.tsv") %>%
     separate_rows(author, snp, p, sep = ",")
     
-leaf_filtered <- read_tsv("./results/filtered_leafcutter.tsv")
+leaf_filtered <- read_tsv("./results/leafcutter_filtered_significant.tsv")
 sqtl <- read_tsv("./mu2021_data/filtered_sqtl.tsv", col_types = c(sid = "c"))
 
 inner_join(leaf_filtered, gwas, by = c("genes" = "gene")) %>%
@@ -321,7 +316,7 @@ inner_join(leaf_filtered, gwas, by = c("genes" = "gene")) %>%
 ```{r, fig.height=3}
 sqtl_coloc <- read_tsv("./plot_data/coloc_sqtl.tsv") %>%
     unite("dataset", c("study", "cell"), sep = "-") %>%
-    select(dataset, intron, coloc_locus, gene)
+    select(dataset, intron, gene)
 
 coloc_df <- leaf_df %>%
     select(cluster, genes, p.adjust, deltapsi) %>%
@@ -337,23 +332,5 @@ ggplot(coloc_df, aes(dataset, genes)) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
           panel.grid = element_line(color = "grey96")) +
     labs(x = NULL, y = NULL)
-
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

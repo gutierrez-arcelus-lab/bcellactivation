@@ -72,10 +72,7 @@ dxd <- testForDEU(dxd, reducedModel = ~sample + exon)
 
 dxr <- DEXSeqResults(dxd, independentFiltering = FALSE)
 qval <- perGeneQValue(dxr)
-dxr_g <- data.frame(gene = names(qval), qval) %>%
-    as_tibble()
-
-head(dxr)
+dxr_g <- data.frame(gene = names(qval), qval)
 
 ## stageR
 library(stageR)
