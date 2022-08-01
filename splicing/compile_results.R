@@ -36,18 +36,18 @@ leaf_df <- map_df(cell_types, read_leaf, .id = "cell_type") %>%
 # filter according to gene strand orientation
 # recompute adjusted p-values
 leaf_filt_df <- leaf_df %>%
-  mutate(strand_clu = str_extract(cluster, "([+-]$)")) %>%
-  separate_rows(genes, sep = ",") %>%
-  left_join(gene_strand, by = c("genes" = "gene_name")) %>%
-  group_by(cell_type, cluster) %>%
-  filter(n_distinct(strand) == 1) %>%
-  ungroup() %>%
-  filter(strand_clu == strand) %>%
-  group_by(cell_type, cluster, p, p.adjust, logef, deltapsi) %>%
-  summarise(genes = paste(genes, collapse = ",")) %>%
-  group_by(cell_type) %>%
-  mutate(p.adjust = p.adjust(p, "fdr")) %>%
-  ungroup()
+    mutate(strand_clu = str_extract(cluster, "([+-]$)")) %>%
+    separate_rows(genes, sep = ",") %>%
+    left_join(gene_strand, by = c("genes" = "gene_name")) %>%
+    group_by(cell_type, cluster) %>%
+    filter(n_distinct(strand) == 1) %>%
+    ungroup() %>%
+    filter(strand_clu == strand) %>%
+    group_by(cell_type, cluster, p, p.adjust, logef, deltapsi) %>%
+    summarise(genes = paste(genes, collapse = ",")) %>%
+    group_by(cell_type) %>%
+    mutate(p.adjust = p.adjust(p, "fdr")) %>%
+    ungroup()
 
 leaf_signif <- leaf_filt_df %>%
     filter(p.adjust < 0.05, abs(deltapsi) > 0.1, !is.na(genes)) %>%

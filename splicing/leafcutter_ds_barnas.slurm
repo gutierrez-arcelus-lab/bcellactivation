@@ -5,11 +5,11 @@
 #SBATCH --mem=8gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute-pe
-#SBATCH --array=0-4
+#SBATCH --array=0
 #SBATCH --job-name=leafcut
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /temp_work/ch229163/log/leafcutter.%A.%a
+#SBATCH -o /temp_work/ch229163/log/leafcutter-barnas.%A.%a
 
 source /programs/biogrids/biogrids.shrc
 export PYTHON_X=2.7.2
@@ -17,9 +17,9 @@ export R_X=4.1
 
 cd $SLURM_SUBMIT_DIR
 
-CELLTYPES=("aN" "DN" "rN" "SM" "T3")
+CELLTYPES=("DN")
 TYPE="${CELLTYPES[$SLURM_ARRAY_TASK_ID]}"
-OUT=./results/scharer/$TYPE
+OUT=./results/barnas/$TYPE
 JUNC=${OUT}/juncfiles.txt
 
 # Intron clustering

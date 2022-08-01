@@ -16,7 +16,8 @@ export STAR_X=2.7.9a
 LABSHR=/lab-share/IM-Gutierrez-e2/Public 
 GENOME=${LABSHR}/References/Genomes/hsapiens/GRCh38/GRCh38.primary_assembly.genome.fa
 GTF=${LABSHR}/References/Annotations/hsapiens/gencode.v38.primary_assembly.annotation.gtf
-OUT=${SLURM_SUBMIT_DIR}/starindex_51bp
+#OUT=${SLURM_SUBMIT_DIR}/starindex_51bp
+OUT=${SLURM_SUBMIT_DIR}/starindex_101bp
 
 mkdir -p $OUT
 
@@ -25,4 +26,5 @@ STAR --runMode genomeGenerate \
     --genomeDir $OUT \
     --genomeFastaFiles $GENOME \
     --sjdbGTFfile $GTF \
-    --sjdbOverhang 50
+    --sjdbOverhang 100
+#    --sjdbOverhang 50
