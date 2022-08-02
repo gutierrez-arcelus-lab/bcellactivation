@@ -46,5 +46,5 @@ rm -r ${OUT}__*
 # Extract junctions
 BAM=${OUT}_Aligned.sortedByCoord.out.bam
 samtools index -@ $SLURM_CPUS_PER_TASK $BAM
-regtools junctions extract -a 8 -m 50 -M 500000 $BAM -o ${OUT}.junc
+regtools junctions extract -s 0 -a 8 -m 50 -M 500000 $BAM -o ${OUT}.junc
 

@@ -30,7 +30,7 @@ gene_id_df <-
 
 cell_types <- c("aN", "DN", "rN", "T3", "SM")
 
-leaf_df <- read_tsv("results/leafcutter_filtered_significant.tsv") %>%
+leaf_df <- read_tsv("results/scharer/leafcutter_filtered_significant.tsv") %>%
     group_by(cell_type, cluster) %>%
     slice(which.min(p.adjust)) %>%
     ungroup() %>%
@@ -48,4 +48,4 @@ go_res <- leaf_genes %>%
     map("gene_id") %>%
     map_df(run_enrichment, .id = "cell_type")
 
-write_tsv(go_res, "./results/enrichment.tsv")
+write_tsv(go_res, "./results/scharer/enrichment.tsv")

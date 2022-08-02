@@ -26,7 +26,7 @@ JUNC=${OUT}/juncfiles.txt
 python $HOME/leafcutter/clustering/leafcutter_cluster_regtools.py \
     -j $JUNC \
     -m 30 \
-    -l 100000 \
+    -l 500000 \
     -p 0.05 \
     -o ${OUT}/leafcutter
 
@@ -39,12 +39,11 @@ done
 COUNT=${OUT}/leafcutter_perind_numers.counts.gz
 GROUP=${OUT}/groups_file.txt
 EXON=./grch38_exon.txt.gz
-OUT=${OUT}/leafcutter
 
 $HOME/leafcutter/scripts/leafcutter_ds.R \
     -p $SLURM_CPUS_PER_TASK \
     -e $EXON \
-    -o $OUT \
+    -o ${OUT}/leafcutter \
     $COUNT \
     $GROUP
 
