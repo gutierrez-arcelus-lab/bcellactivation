@@ -3,6 +3,10 @@ Splicing
 
 ## Differential splicing events between patients and controls in Scharer dataset
 
+![](README_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+
+## Top 30 genes for Scharer and Barnas datasets (DN cells)
+
 ![](README_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
 ## Comparison with differential transcript usage obtained with the DEXSeq pipeline

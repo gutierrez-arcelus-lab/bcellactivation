@@ -18,35 +18,15 @@ library(ggbeeswarm)
 ```
 
 
-
-```{r}
-# read_leaf <- function(cell_type) {
-#     
-#     sig <- 
-#         file.path("./results", cell_type, "leafcutter_cluster_significance.txt") %>%
-#         read_tsv() %>%
-#         separate(cluster, c("chr", "cluster"), sep = ":") %>%
-#         select(cluster, p.adjust, genes)
-# 
-#     eff <- 
-#         file.path("./results", cell_type, "leafcutter_effect_sizes.txt") %>%
-#         read_tsv() %>%
-#         mutate(cluster = sub("^.*(clu.*)$", "\\1", intron)) %>%
-#         select(cluster, logef, deltapsi)
-# 
-#     inner_join(sig, eff)
-# }
-```
-
-
 ```{r}
 cell_types <- c("rN", "aN", "T3", "SM", "DN") %>%
     setNames(., .)
 
-leaf_df <- read_tsv("./results/leafcutter_filtered.tsv")
+leaf_scharer_df <- read_tsv("./results/scharer/leafcutter_filtered.tsv")
+leaf_barnas_df <- read_tsv("./results/barnas/leafcutter_filtered.tsv")
 
-dtu <- 
-    file.path("./results", cell_types, "dtu_perGene.tsv") %>%
+dtu_scharer <- 
+    file.path("./results/scharer", cell_types, "dtu_perGene.tsv") %>%
     setNames(cell_types) %>%
     map_df(~read_tsv(.) %>%
                select(gene_name, adj_pvalue),
@@ -56,18 +36,17 @@ dtu <-
 
 ## Differential splicing events between patients and controls in Scharer dataset
 
-
 ```{r, fig.height=8, fig.width=8}
-labs_df <- leaf_df %>%
+labs_df <- leaf_scharer_df %>%
     filter(p.adjust < 0.05) %>%
     group_by(cell_type) %>%
-    filter(abs(deltapsi) >= quantile(abs(deltapsi), 0.95) |
-           -log10(p.adjust) >= quantile(-log10(p.adjust), 0.95)) %>%
+    filter(abs(deltapsi) >= quantile(abs(deltapsi), 0.98) |
+           -log10(p.adjust) >= quantile(-log10(p.adjust), 0.98)) %>%
     ungroup() %>%
     mutate(gene_label = str_trunc(genes, 10),
            gene_label = replace_na(gene_label, "N/A"))
 
-ggplot(leaf_df, aes(deltapsi, -log10(p.adjust))) +
+ggplot(leaf_scharer_df, aes(deltapsi, -log10(p.adjust))) +
     geom_point(aes(color = p.adjust < .05), size = .7, show.legend = FALSE) +
     geom_text_repel(data = labs_df, aes(label = gene_label),
                     size = 2, segment.size = .2) +
@@ -82,18 +61,50 @@ ggplot(leaf_df, aes(deltapsi, -log10(p.adjust))) +
 ```
 
 
+## Top 30 genes for Scharer and Barnas datasets (DN cells)
+
+```{r, fig.height=5}
+top30_scharer <- leaf_scharer_df %>%
+  filter(!is.na(genes)) %>%
+  filter(cell_type == "DN") %>%
+  top_n(30, abs(deltapsi)) %>%
+  select(genes, deltapsi) %>%
+  arrange(-abs(deltapsi)) %>%
+  mutate(i = 1:n())
+
+top30_barnas <- leaf_barnas_df %>%
+  filter(!is.na(genes)) %>%
+  top_n(30, abs(deltapsi)) %>%
+  select(genes, deltapsi) %>%
+  arrange(-abs(deltapsi)) %>%
+  mutate(i = 1:n())
+
+top30_df <- bind_rows("Scharer" = top30_scharer, "Barnas" = top30_barnas, .id = "dataset")
+
+ggplot(top30_df, aes(dataset, i)) +
+  geom_point(aes(color = deltapsi), size = 3) +
+  scale_color_gradient2(guide = guide_colorbar(barwidth = .5)) +
+  geom_text(aes(label = genes), nudge_x = .05, hjust = 0, size = 3) +
+  scale_y_reverse() +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  labs(y = NULL, x = NULL)
+```
+
+
+
 ## Comparison with differential transcript usage obtained with the DEXSeq pipeline
 
 
 ```{r, fig.height=8, fig.width=8}
-leaf_uniq <- leaf_df %>%
+leaf_uniq <- leaf_scharer_df %>%
     separate_rows(genes, sep = ",") %>%
     group_by(cell_type, genes) %>%
     slice(which.min(p.adjust)) %>%
     ungroup() %>%
     select(cell_type, gene_name = genes, adj_pvalue_leaf = p.adjust)
 
-dtu_uniq <- dtu %>%
+dtu_uniq <- dtu_scharer %>%
     group_by(cell_type, gene_name) %>%
     slice(which.min(adj_pvalue)) %>%
     ungroup() %>%
@@ -137,7 +148,7 @@ ggplot(leaf_dtu, aes(-log10(adj_pvalue_leaf), -log10(adj_pvalue_dtu))) +
 annots <- read_rds("./plot_data/transcripts_annot.rds") %>%
     mutate(transcript_id = str_remove(transcript_id, "\\.\\d+$"))
 
-load("./results/DN/DN.Rdata")
+load("./results/scharer/DN/DN.Rdata")
 
 intron_df <- as_tibble(introns) %>%
     filter(gene %in% c("HMGB1", "EIF4A2", "RPL15")) %>%
@@ -255,7 +266,7 @@ GO enrichment analysis on genes with at least one cluster with absolute delta PS
 
 
 ```{r}
-go <- read_tsv("./results/enrichment.tsv") %>%
+go <- read_tsv("./results/scharer/enrichment.tsv") %>%
     arrange(Description)
 ```
 
@@ -297,17 +308,18 @@ plot_grid(get_legend(go_plot),
 gwas <- read_tsv("../bcell_scrna/reported_genes.tsv") %>%
     separate_rows(author, snp, p, sep = ",")
     
-leaf_filtered <- read_tsv("./results/leafcutter_filtered_significant.tsv")
+leaf_filtered <- read_tsv("./results/scharer/leafcutter_filtered_significant.tsv")
 sqtl <- read_tsv("./mu2021_data/filtered_sqtl.tsv", col_types = c(sid = "c"))
 
 inner_join(leaf_filtered, gwas, by = c("genes" = "gene")) %>%
     arrange(desc(genes), author) %>%
     mutate_at(vars(genes, author), fct_inorder) %>%
     ggplot(aes(author, genes)) +
-    geom_point(aes(color = deltapsi), size = 4) +
+    geom_point(aes(color = deltapsi), size = 3) +
     scale_color_gradient2(guide = guide_colorbar(barwidth = .5)) +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+          axis.text.y = element_text(size = 7),
           panel.grid = element_line(color = "grey96")) +
     labs(x = NULL, y = NULL)
 ```
@@ -318,7 +330,7 @@ sqtl_coloc <- read_tsv("./plot_data/coloc_sqtl.tsv") %>%
     unite("dataset", c("study", "cell"), sep = "-") %>%
     select(dataset, intron, gene)
 
-coloc_df <- leaf_df %>%
+coloc_df <- leaf_scharer_df %>%
     select(cluster, genes, p.adjust, deltapsi) %>%
     filter(p.adjust < 0.05, abs(deltapsi) > 0.1) %>%
     separate_rows(genes, sep = ",") %>%
