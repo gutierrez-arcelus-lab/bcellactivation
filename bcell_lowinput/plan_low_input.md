@@ -1,0 +1,139 @@
+Low input RNA-seq design
+================
+
+### Packages
+
+    library(tidyverse)
+    library(cowplot)
+
+Data frame with the experimental design
+---------------------------------------
+
+    # Sample IDs
+    ind_id <- c("MGB-10092121", "HD01", "HD02", "MGB-10034466", "HD03", "HD04")
+
+    # Conditions
+    stims <- c("Unstim", "IL4", "BCR", "TLR7", "BCR+TLR7", "TLR9", "CD40L", "DN2")
+
+    # Timepoints
+    timeps <- paste0(c(4, 24, 48, 72), "hrs")
+
+    # Experiment design
+    design_df <- tibble(plate = rep(c("plate1", "plate2"), each = 96)) %>%
+        group_by(plate) %>%
+        mutate(index = seq_len(n())) %>%
+        ungroup()
+
+    # Samples
+    expr_df <- expand_grid(ind_id, stims, timeps) %>%
+        filter(!(stims %in% c("Unstim", "IL4") & timeps %in% c("48hrs", "72hrs")))
+
+    # Replicates
+    ## put all reps for HD01 in plate #1
+    ## put all reps for HD03 in plate #2
+    n_reps <- 4
+
+    reps_df <- 
+        bind_rows(filter(expr_df, ind_id == "HD01", timeps == "24hrs", stims == "DN2") %>%
+                      .[rep(seq_len(nrow(.)), each = n_reps), ] %>%
+                      mutate(plate = "plate1", index = 1:n_reps),
+                  filter(expr_df, ind_id == "HD03", timeps == "48hrs", stims == "DN2") %>%
+                      .[rep(seq_len(nrow(.)), each = n_reps), ] %>%
+                      mutate(plate = "plate2", index = 1:n_reps)) %>%
+        mutate(ind_id = paste0(ind_id, ".rep.", index))
+
+    # Reserve 9 wells for Maggie on plate #2
+    maggie_df <- 
+        tibble(ind_id = "Maggie", stims = "Maggie", timeps = "Maggie") %>%
+        .[rep(seq_len(nrow(.)), each = 9), ] %>%
+        mutate(plate = "plate2", index = 88:96)
+
+    # Add blank wells evenly between plates
+    blanks_n <- (8 * 12 * 2) - (nrow(expr_df) + nrow(reps_df) + nrow(maggie_df))
+
+    blanks_df <- 
+        tibble(ind_id = rep("blank", blanks_n),
+               stims = rep("blank", blanks_n),
+               timeps = rep("blank", blanks_n)) %>%
+        mutate(plate = paste0("plate", ntile(x = row_number(), 2))) %>%
+        group_by(plate) %>%
+        mutate(index = seq_len(n()) + n_reps) %>%
+        ungroup()
+
+    # Put everything together
+    temp_df <- bind_rows(reps_df, blanks_df, maggie_df) %>%
+        anti_join(design_df, ., by = c("index", "plate")) %>%
+        bind_cols(expr_df) %>%
+        bind_rows(reps_df, blanks_df, maggie_df) %>%
+        arrange(plate, index)
+        
+    # Randomize all samples that are not Maggie's
+    set.seed(1)
+    final_design <- temp_df %>%
+        filter(ind_id != "Maggie") %>%
+        slice_sample(n = nrow(.)) %>%
+        group_by(plate) %>%
+        mutate(index = seq_len(n())) %>%
+        ungroup() %>%
+        arrange(plate, index) %>%
+        select(ind_id, stims, timeps, plate, index) %>%
+        bind_rows(maggie_df)
+     
+    final_design
+
+    # A tibble: 192 × 5
+       ind_id       stims    timeps plate  index
+       <chr>        <chr>    <chr>  <chr>  <int>
+     1 HD02         IL4      24hrs  plate1     1
+     2 HD01         BCR      48hrs  plate1     2
+     3 MGB-10092121 BCR      24hrs  plate1     3
+     4 HD01         BCR+TLR7 48hrs  plate1     4
+     5 HD02         CD40L    4hrs   plate1     5
+     6 MGB-10092121 BCR+TLR7 4hrs   plate1     6
+     7 HD02         TLR7     24hrs  plate1     7
+     8 blank        blank    blank  plate1     8
+     9 HD02         TLR7     4hrs   plate1     9
+    10 HD02         BCR+TLR7 48hrs  plate1    10
+    # … with 182 more rows
+
+Plate array
+-----------
+
+    # create plate matrix
+    design_matrices <- final_design %>%
+        split(.$plate) %>%
+        map(~select(., -plate)) %>%
+        map(~unite(., "ID", c(ind_id, stims, timeps), sep = "_")) %>%
+        map(~mutate(., ID = recode(ID, 
+                                   "blank_blank_blank" = "BLANK", 
+                                   "Maggie_Maggie_Maggie" = "Maggie"))) %>%
+        map(~pull(., ID)) %>%
+        map(~matrix(data = ., nrow = 8, ncol = 12))
+
+Plot plate array
+----------------
+
+    design_plot_list <- design_matrices %>%
+        map(. %>% 
+                as.data.frame() %>% 
+                rowid_to_column("row") %>% 
+                pivot_longer(-row, "column") %>%
+                mutate(column = as.character(parse_number(column)),
+                       column = factor(column, levels = 1:12),
+                       row = factor(row, levels = rev(1:8)),
+                       value = gsub("_", "\n", value))
+            )
+
+    plate_plots <- design_plot_list %>%
+        map(~ggplot(., aes(column, row)) +
+                geom_tile(fill = "white", color = "black") +
+                geom_text(aes(label = value), size = 2.5, lineheight = .8) +
+                theme_minimal() +
+                theme(axis.title = element_blank(),
+                      plot.margin = margin(t = 1, b = 1, r = 1, l = 1, unit = "cm")))
+        
+
+    plot_grid(plotlist = plate_plots, ncol = 1, 
+              labels = c("Plate 1", "Plate 2"))
+
+![](plan_low_input_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
