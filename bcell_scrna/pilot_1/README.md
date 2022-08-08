@@ -58,7 +58,7 @@ Create the Seurat object
         .[grepl("^Hashtag", rownames(.)), ]
 
     rownames(hashtags) <- 
-        c("IgG72", "RSQ72", "IgG24", "RSQ24", "Res24", "Res00")
+        c("BCR 72hr", "TLR7 72hr", "BCR 24hr", "TLR7 24hr", "Res 24hr", "Res 0hr")
 
     # Create object
     bcells <- CreateSeuratObject(counts = gene_exp, project = "bcells")
@@ -89,9 +89,10 @@ cells.
 
     plotFiltering(bcells_sce, model, posterior_cutoff = 0.8) +
       scale_y_continuous(breaks = scales::pretty_breaks(8)) +
-      theme_bw()
+      theme_bw() +
+      theme(text = element_text(size = 8))
 
-![](README_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
 Remove compromised cells
 ------------------------
@@ -101,7 +102,9 @@ Remove compromised cells
     # Removing 4104 out of 13946 cells.
 
     cells_keep <- rownames(colData(bcells_sce))
-    bcells <- subset(bcells, cells = cells_keep)
+
+    bcells <- subset(bcells, cells = cells_keep) %>%
+      subset(nFeature_RNA > 500)
 
 Demultiplex cells based on HTO
 ------------------------------
@@ -112,16 +115,17 @@ Demultiplex cells based on HTO
 
     # 
     #  Doublet Negative  Singlet 
-    #     2755      692     6395
+    #     3143      131     6518
 
     Idents(bcells) <- "HTO_maxID"
 
-![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
-
-![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- --> \#\#\# HTO
-relative levels in Singlet, Doublet, and Negative droplets
+![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 ![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+
+### HTO relative levels in Singlet, Doublet, and Negative droplets
+
+![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 Extract Singlets
 ----------------
@@ -133,13 +137,13 @@ Extract Singlets
     table(bcells_singlet@meta.data$HTO_maxID)[stims]
 
     # 
-    # Res00 Res24 IgG24 IgG72 RSQ24 RSQ72 
-    #  1442   768  1455  1489  1063   178
+    #   Res 0hr  Res 24hr  BCR 24hr  BCR 72hr TLR7 24hr TLR7 72hr 
+    #      1786       725      1496      1408       943       160
 
 Feature quantifications
 -----------------------
 
-![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 PCA
 ---
@@ -149,11 +153,11 @@ PCA
         ScaleData(., features = rownames(.)) %>%
         RunPCA(., features = VariableFeatures(.))
 
-![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ### Number of genes
 
-![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 UMAP and clustering
 -------------------
@@ -163,16 +167,18 @@ UMAP and clustering
       FindNeighbors(dims = 1:20, verbose = FALSE) %>%
       FindClusters(resolution = 0.5, verbose = FALSE)
 
-### HTO classification
-
-![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
-
-### Cell cycling
+### Stimulus and Seurat clusters
 
 ![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
+### Cell cycling
+
+![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+
 Marker genes for Seurat clusters (whole data, res = 0.5)
 --------------------------------------------------------
+
+    Idents(bcells_singlet) <- "seurat_clusters"
 
     cluster_markers <- 
         FindAllMarkers(bcells_singlet, 
@@ -185,7 +191,7 @@ Marker genes for Seurat clusters (whole data, res = 0.5)
 Marker genes per cluster
 ------------------------
 
-![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
 Marker genes for each stim condition
 ------------------------------------
@@ -199,22 +205,22 @@ Marker genes for each stim condition
                        logfc.threshold = 1) %>%
         as_tibble()
 
-![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 B cell genes (RNA)
 ------------------
 
-![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 B cell genes (Protein)
 ----------------------
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 Lupus genes
 -----------
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 Marker genes IgG vs RSQ
 -----------------------
@@ -223,19 +229,19 @@ Marker genes IgG vs RSQ
 
     bcells_markers_24 <- 
         FindMarkers(bcells_singlet, 
-                       ident.1 = "IgG24",
-                       ident.2 = "RSQ24",
+                       ident.1 = "BCR 24hr",
+                       ident.2 = "TLR7 24hr",
                        only.pos = FALSE,
                        min.pct = 0.1,
                        logfc.threshold = 0.5) %>%
         rownames_to_column("gene") %>%
         as_tibble() %>%
-        select(gene, avg_log2FC, IgG24 = pct.1, RSQ24 = pct.2, p = p_val_adj) %>%
+        select(gene, avg_log2FC, `BCR 24hr` = pct.1, `TLR7 24hr` = pct.2, p = p_val_adj) %>%
         filter(p < 0.05)
 
 #### GWAS genes
 
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 MAGMA
 -----

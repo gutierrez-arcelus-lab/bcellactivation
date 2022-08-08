@@ -73,7 +73,7 @@ hashtags <- data10x[["Antibody Capture"]] %>%
     .[grepl("^Hashtag", rownames(.)), ]
 
 rownames(hashtags) <- 
-    c("IgG72", "RSQ72", "IgG24", "RSQ24", "Res24", "Res00")
+    c("BCR 72hr", "TLR7 72hr", "BCR 24hr", "TLR7 24hr", "Res 24hr", "Res 0hr")
 
 # Create object
 bcells <- CreateSeuratObject(counts = gene_exp, project = "bcells")
@@ -90,6 +90,15 @@ bcells[["percent_mt"]] <- PercentageFeatureSet(bcells, features = mt_genes)
 bcells[["percent_ribo"]] <- PercentageFeatureSet(bcells, features = ribo_genes)
 ```
 
+
+```{r, echo = FALSE}
+stims <- c("Res 0hr", "Res 24hr", "BCR 24hr", "BCR 72hr", "TLR7 24hr", "TLR7 72hr")
+
+stim_colors <- c("grey80", "grey50", brewer.pal(n = 4, "Paired")) %>%
+  setNames(stims)
+```
+
+
 ## QC
 
 Here we use the miQC package to model the percentage of mitochondrial reads and number of genes, in order to identify and remove compromised cells.
@@ -103,7 +112,8 @@ model <- mixtureModel(bcells_sce)
 
 plotFiltering(bcells_sce, model, posterior_cutoff = 0.8) +
   scale_y_continuous(breaks = scales::pretty_breaks(8)) +
-  theme_bw()
+  theme_bw() +
+  theme(text = element_text(size = 8))
 ```
 
 ## Remove compromised cells
@@ -111,7 +121,9 @@ plotFiltering(bcells_sce, model, posterior_cutoff = 0.8) +
 ```{r}
 bcells_sce <- filterCells(bcells_sce, model)
 cells_keep <- rownames(colData(bcells_sce))
-bcells <- subset(bcells, cells = cells_keep)
+
+bcells <- subset(bcells, cells = cells_keep) %>%
+  subset(nFeature_RNA > 500)
 ```
 
 ## Demultiplex cells based on HTO
@@ -125,15 +137,6 @@ Idents(bcells) <- "HTO_maxID"
 ```
 
 ```{r, echo=FALSE}
-stims <- c("Res00", "Res24", "IgG24", "IgG72", "RSQ24", "RSQ72")
-
-stim_colors <- c("Res00" = "grey75", 
-                 "Res24" = "grey60", 
-                 "IgG24" = "gold1", 
-                 "IgG72" = "gold3", 
-                 "RSQ24" = "mediumpurple1", 
-                 "RSQ72" = "mediumpurple4")
-
 hto_data <- bcells@assays$HTO@data
 hto_class_df <- tibble(barcode = colnames(hto_data),
                        maxid = bcells@meta.data$HTO_maxID)
@@ -181,14 +184,15 @@ ggplot(hto_global_df, aes(classif, n, fill = maxid)) +
         panel.border = element_blank()) +
   labs(x = NULL, y = "Number of droplets")
 ```
+
 ### HTO relative levels in Singlet, Doublet, and Negative droplets
 
 ```{r, echo=FALSE, fig.width=10, fig.height=8}
-stim_class_df <- tibble(barcode = colnames(bcells@assays$HTO@data),
+stim_class_df <- tibble(barcode = colnames(bcells@assays$HTO@counts),
                         stim = bcells@meta.data$HTO_maxID,
                         classif = bcells@meta.data$HTO_classification.global)
 
-hto_df <- bcells@assays$HTO@data %>%
+hto_df <- bcells@assays$HTO@counts %>%
   as.data.frame() %>%
   rownames_to_column("hto") %>%
   as_tibble() %>%
@@ -250,10 +254,9 @@ table(bcells_singlet@meta.data$HTO_maxID)[stims]
 ```
 
 ```{r, include=FALSE, eval=FALSE, echo=FALSE}
-saveRDS(bcells_singlet, "./scDRS/data/expression/bcells_singlet_seurat.rds")
-#bcells_singlet <- readRDS("./scDRS/data/expression/bcells_singlet_seurat.rds")
+saveRDS(bcells_singlet, "../scDRS/data/expression/bcells_singlet_seurat.rds")
+#bcells_singlet <- readRDS("../scDRS/data/expression/bcells_singlet_seurat.rds")
 ```
-
 
 
 ## Feature quantifications
@@ -372,7 +375,7 @@ bcells_singlet <- bcells_singlet %>%
 ```
 
 
-### HTO classification
+### Stimulus and Seurat clusters
 
 ```{r, echo = FALSE, fig.height=3, fig.width=10}
 umap_df <- as.data.frame(bcells_singlet@reductions$umap@cell.embeddings) %>%
@@ -415,6 +418,7 @@ umap_clusters <- ggplot(umap_df) +
 
 plot_grid(umap_stims, umap_clusters, nrow = 1)
 ```
+
 
 ### Cell cycling
 
@@ -475,6 +479,8 @@ plot_grid(ki67, ngenes, mt, ribo, nrow = 2)
 ## Marker genes for Seurat clusters (whole data, res = 0.5)
 
 ```{r}
+Idents(bcells_singlet) <- "seurat_clusters"
+
 cluster_markers <- 
     FindAllMarkers(bcells_singlet, 
                    only.pos = TRUE,
@@ -498,8 +504,10 @@ plot_markers <- function(cluster_df) {
     ungroup() %>%
     select(cluster, gene_name, gene_id = gene, avg_log2FC)
   
-  cluster_cell <- tibble(cluster_cell = Idents(bcells_singlet),
-                         barcode = names(Idents(bcells_singlet)))
+  cluster_cell <- 
+    tibble(cluster_cell = Idents(bcells_singlet),
+           barcode = names(Idents(bcells_singlet))) %>%
+    mutate(cluster_cell = factor(cluster_cell, levels = levels(top_markers$cluster)))
   
   cell_gene_expr <- bcells_singlet@assays$RNA@data %>%
     .[unique(top_markers$gene_id), ] %>%
@@ -561,7 +569,8 @@ bcells_markers <-
 ```{r, echo=FALSE, fig.height=5, fig.width=10}
 bcells_markers %>%
   mutate(cluster = factor(cluster, levels = stims)) %>%
-  plot_markers()
+  plot_markers() +
+  scale_x_discrete(labels = function(x) sub("\\s", "\n", x))
 ```
 
 
@@ -753,22 +762,22 @@ plot_grid(plotlist = sle_genes_plot_list, ncol = 4)
 ```{r}
 bcells_markers_24 <- 
     FindMarkers(bcells_singlet, 
-                   ident.1 = "IgG24",
-                   ident.2 = "RSQ24",
+                   ident.1 = "BCR 24hr",
+                   ident.2 = "TLR7 24hr",
                    only.pos = FALSE,
                    min.pct = 0.1,
                    logfc.threshold = 0.5) %>%
     rownames_to_column("gene") %>%
     as_tibble() %>%
-    select(gene, avg_log2FC, IgG24 = pct.1, RSQ24 = pct.2, p = p_val_adj) %>%
+    select(gene, avg_log2FC, `BCR 24hr` = pct.1, `TLR7 24hr` = pct.2, p = p_val_adj) %>%
     filter(p < 0.05)
 ```
 
 ```{r, echo=FALSE}
 markers_timep_df <- bcells_markers_24 %>%
-  mutate(cluster_top = ifelse(avg_log2FC > 0, "IgG24", "RSQ24")) %>%
+  mutate(cluster_top = ifelse(avg_log2FC > 0, "BCR 24hr", "TLR7 24hr")) %>%
   left_join(select(features_df, 1:2), by = c("gene" = "gene_id")) %>%
-  pivot_longer(IgG24:RSQ24, names_to = "cluster", values_to = "pct")
+  pivot_longer(`BCR 24hr`:`TLR7 24hr`, names_to = "cluster", values_to = "pct")
 
 cell_gene_expr_timep <- bcells_singlet@assays$RNA@data %>%
   .[unique(markers_timep_df$gene), ] %>%
@@ -782,7 +791,7 @@ cluster_cell <- tibble(cluster_cell = Idents(bcells_singlet),
 
 timep_gene_avg_expr <- cell_gene_expr_timep %>%
   left_join(cluster_cell) %>%
-  filter(cluster_cell %in% c("IgG24", "RSQ24")) %>%
+  filter(cluster_cell %in% c("BCR 24hr", "TLR7 24hr")) %>%
   group_by(cluster = cluster_cell, gene_id) %>%
   summarise(scale_expr = mean(logexpr)) %>%
   ungroup() %>%
@@ -795,13 +804,11 @@ timep_gene_avg_expr <- cell_gene_expr_timep %>%
 #### GWAS genes
 
 ```{r, echo = FALSE, fig.width=4, fig.height=3}
-reported_genes <- read_tsv("./reported_genes.tsv")
+reported_genes <- read_tsv("../reported_genes.tsv")
 
 de_24_df <- timep_gene_avg_expr %>%
   filter(gene_name %in% unique(reported_genes$gene)) %>%
-  filter(! grepl("HLA", gene_name)) %>% 
-  mutate_at(vars(cluster, cluster_top),
-            ~recode(., "IgG24" = "BCR", "RSQ24" = "TRL7"))
+  filter(! grepl("HLA", gene_name))
 
 
 ggplot(de_24_df, aes(cluster, gene_name)) +
@@ -824,7 +831,7 @@ ggplot(de_24_df, aes(cluster, gene_name)) +
 Scores taken from the scDRS figshare.
 
 ```{r, echo=FALSE, fig.height=6, eval=FALSE}
-magma <- "./scDRS/data/MAGMA_v108_GENE_10_ZSTAT_for_scDRS.txt" %>%
+magma <- "../scDRS/data/MAGMA_v108_GENE_10_ZSTAT_for_scDRS.txt" %>%
   read.table() %>%
   rownames_to_column("gene_name") %>%
   select(gene_name, z = PASS_Lupus) %>%
@@ -848,7 +855,7 @@ ggplot(magma_plot_df, aes(abs_z, gene_name)) +
 ## scDRS
 
 ```{r, echo=FALSE, fig.width=5, fig.height=3, eval=FALSE}
-scdrs_scores <- read_tsv("./scDRS/results/Bentham_data_scDRSpaper/SLE.score.gz") %>%
+scdrs_scores <- read_tsv("../scDRS/results/Bentham_data_scDRSpaper/SLE.score.gz") %>%
   rename("barcode" = 1)
 
 umap_scdrs_df <- umap_df %>%
