@@ -1,218 +1,211 @@
 CITE-seq Pilot
 ================
 
-## Packages
+Packages
+--------
 
-``` r
-# single-cell data analysis
-library(Seurat)
-library(miQC)
-library(scater)
-library(MCPcounter)
+    # single-cell data analysis
+    library(Seurat)
+    library(miQC)
+    library(scater)
+    library(MCPcounter)
 
-# Data wrangling
-library(tidyverse)
+    # Data wrangling
+    library(tidyverse)
 
-# Plotting
-library(tidytext)
-library(ggridges)
-library(RColorBrewer)
-library(cowplot)
-```
+    # Plotting
+    library(tidytext)
+    library(UpSetR)
+    library(ggridges)
+    library(RColorBrewer)
+    library(cowplot)
 
-## Cell Ranger data
+Cell Ranger data
+----------------
 
-``` r
-cellranger_dir <- 
-    file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/CITEseq_pilot_2",
-    "SN0257788/broad/hptmp/curtism/bwh10x/KW10170_Maria/220617_10X_KW10170_bcl",
-    "cellranger-6.1.1/GRCh38/BRI-1743_hashing/outs/filtered_feature_bc_matrix") 
+    cellranger_dir <- 
+        file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/CITEseq_pilot_2",
+        "SN0257788/broad/hptmp/curtism/bwh10x/KW10170_Maria/220617_10X_KW10170_bcl",
+        "cellranger-6.1.1/GRCh38/BRI-1743_hashing/outs/filtered_feature_bc_matrix") 
 
-features_df <- file.path(cellranger_dir, "features.tsv.gz") %>%
-    read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
+    features_df <- file.path(cellranger_dir, "features.tsv.gz") %>%
+        read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
 
-mt_genes <- features_df %>%
-    filter(phenotype == "Gene Expression", 
-           grepl("^MT-", gene_name)) %>%
-    pull(gene_id)
+    gene_ids <- features_df  %>%
+      filter(phenotype == "Gene Expression") %>%
+      select(gene_id, gene_name)
 
-ribo_genes <- features_df %>%
-    filter(phenotype == "Gene Expression", 
-           grepl("^RPS\\d+|^RPL\\d+", gene_name)) %>%
-    pull(gene_id)
+    mt_genes <- features_df %>%
+        filter(phenotype == "Gene Expression", 
+               grepl("^MT-", gene_name)) %>%
+        pull(gene_id)
 
-data10x <- Read10X(cellranger_dir, gene.column = 1)
-```
+    ribo_genes <- features_df %>%
+        filter(phenotype == "Gene Expression", 
+               grepl("^RPS\\d+|^RPL\\d+", gene_name)) %>%
+        pull(gene_id)
 
-## Create the Seurat object
+    data10x <- Read10X(cellranger_dir, gene.column = 1)
 
-``` r
-gene_exp <- data10x[["Gene Expression"]]
+Create the Seurat object
+------------------------
 
-antibody <- data10x[["Antibody Capture"]] %>%
-    .[!grepl("^Hashtag", rownames(.)), ] 
+    gene_exp <- data10x[["Gene Expression"]]
 
-rownames(antibody) <- rownames(antibody) %>%
-    sub("_prot$", "", .) %>%
-    gsub("_", ".", .)
+    antibody <- data10x[["Antibody Capture"]] %>%
+        .[!grepl("^Hashtag", rownames(.)), ] 
 
-hashtags <- data10x[["Antibody Capture"]] %>%
-    .[grepl("^Hashtag", rownames(.)), ]
+    rownames(antibody) <- rownames(antibody) %>%
+        sub("_prot$", "", .) %>%
+        gsub("_", ".", .)
 
-rownames(hashtags) <- 
-    c("day0", 
-      "IL4 24hr",
-      "BCR 24hr",
-      "BCR+TLR7 24hr",
-      "TLR7 24hr", 
-      "sCD40L 24hr",
-      "CpG 24hr",
-      "DN2 24hr",
-      "BCR 72hr",
-      "BCR+TLR7 72hr",
-      "TLR7 72hr",
-      "sCD40L 72hr",
-      "DN2 72hr",
-      "CpG 72hr")
+    hashtags <- data10x[["Antibody Capture"]] %>%
+        .[grepl("^Hashtag", rownames(.)), ]
 
-# stims in order for plotting
-stims <- c("day0", "IL4 24hr", "BCR 24hr", "BCR 72hr", "TLR7 24hr", "TLR7 72hr",
-           "BCR+TLR7 24hr", "BCR+TLR7 72hr", "CpG 24hr", "CpG 72hr", 
-           "sCD40L 24hr", "sCD40L 72hr", "DN2 24hr", "DN2 72hr")
+    rownames(hashtags) <- 
+        c("day0", 
+          "IL4 24hr",
+          "BCR 24hr",
+          "BCR+TLR7 24hr",
+          "TLR7 24hr", 
+          "sCD40L 24hr",
+          "CpG 24hr",
+          "DN2 24hr",
+          "BCR 72hr",
+          "BCR+TLR7 72hr",
+          "TLR7 72hr",
+          "sCD40L 72hr",
+          "DN2 72hr",
+          "CpG 72hr")
 
-stims_colors <- c("grey", "black", brewer.pal(12, "Paired")) %>%
-  setNames(stims)
+    # stims in order for plotting
+    stims <- c("day0", "IL4 24hr", "BCR 24hr", "BCR 72hr", "TLR7 24hr", "TLR7 72hr",
+               "BCR+TLR7 24hr", "BCR+TLR7 72hr", "CpG 24hr", "CpG 72hr", 
+               "sCD40L 24hr", "sCD40L 72hr", "DN2 24hr", "DN2 72hr")
+
+    stims_colors <- c("grey", "black", brewer.pal(12, "Paired")) %>%
+      setNames(stims)
 
 
-# Create object
-bcells <- CreateSeuratObject(counts = gene_exp, project = "bcells")
-bcells[["ADT"]] <- CreateAssayObject(counts = antibody)
-bcells[["HTO"]] <- CreateAssayObject(counts = hashtags)
+    # Create object
+    bcells <- CreateSeuratObject(counts = gene_exp, project = "bcells")
+    bcells[["ADT"]] <- CreateAssayObject(counts = antibody)
+    bcells[["HTO"]] <- CreateAssayObject(counts = hashtags)
 
-# Normalize
-bcells <- bcells %>%
-  NormalizeData(normalization.method = "LogNormalize", margin = 2) %>%
-  NormalizeData(assay = "HTO", normalization.method = "CLR", margin = 2) %>%
-  NormalizeData(assay = "ADT", normalization.method = "CLR", margin = 2)
+    # Normalize
+    bcells <- bcells %>%
+      NormalizeData(normalization.method = "LogNormalize", margin = 2) %>%
+      NormalizeData(assay = "HTO", normalization.method = "CLR", margin = 2) %>%
+      NormalizeData(assay = "ADT", normalization.method = "CLR", margin = 2)
 
-bcells[["percent_mt"]] <- PercentageFeatureSet(bcells, features = mt_genes)
-bcells[["percent_ribo"]] <- PercentageFeatureSet(bcells, features = ribo_genes)
+    bcells[["percent_mt"]] <- PercentageFeatureSet(bcells, features = mt_genes)
+    bcells[["percent_ribo"]] <- PercentageFeatureSet(bcells, features = ribo_genes)
 
-# demuxlet result
-demuxlet_df <-
-  "/lab-share/IM-Gutierrez-e2/Public/vitor/lupus/bcell_scrna/pilot_2/demuxlet/demuxlet_allsnps.best" %>%
-  read_tsv() %>%
-  select(barcode = BARCODE, best = BEST) %>%
-  extract(best, c("status", "sample"), "([^-]+)-(.+)")
+    # demuxlet result
+    demuxlet_df <-
+      "/lab-share/IM-Gutierrez-e2/Public/vitor/lupus/bcell_scrna/pilot_2/demuxlet/demuxlet_allsnps.best" %>%
+      read_tsv() %>%
+      select(barcode = BARCODE, best = BEST) %>%
+      extract(best, c("status", "sample"), "([^-]+)-(.+)")
 
-demuxlet_sng <- demuxlet_df %>%
-  filter(status == "SNG")
-```
+    demuxlet_sng <- demuxlet_df %>%
+      filter(status == "SNG")
 
-## QC
+QC
+--
 
 Here we use the miQC package to model the percentage of mitochondrial
 reads and number of genes, in order to identify and remove compromised
 cells.
 
-``` r
-bcells_sce <- bcells %>%
-    as.SingleCellExperiment() %>%
-    addPerCellQC(subsets = list(mito = mt_genes))
+    bcells_sce <- bcells %>%
+        as.SingleCellExperiment() %>%
+        addPerCellQC(subsets = list(mito = mt_genes))
 
-model <- mixtureModel(bcells_sce)
+    model <- mixtureModel(bcells_sce)
 
-plotFiltering(bcells_sce, model, posterior_cutoff = 0.8) +
-  scale_y_continuous(breaks = scales::pretty_breaks(8)) +
-  theme_bw()
-```
+    plotFiltering(bcells_sce, model, posterior_cutoff = 0.8) +
+      scale_y_continuous(breaks = scales::pretty_breaks(8)) +
+      theme_bw() +
+      theme(text = element_text(size = 8))
 
 ![](README_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
-## Remove compromised cells
+Remove compromised cells
+------------------------
 
-``` r
-bcells_sce <- filterCells(bcells_sce, model)
-```
+    bcells_sce <- filterCells(bcells_sce, model)
 
     # Removing 723 out of 10562 cells.
 
-``` r
-cells_keep <- rownames(colData(bcells_sce))
-bcells <- subset(bcells, cells = cells_keep)
-```
+    cells_keep <- rownames(colData(bcells_sce))
 
-## Demultiplex given the individual genotypes
+    bcells <- subset(bcells, cells = cells_keep) %>%
+      subset(nFeature_RNA > 500)
 
-``` r
-bcells_sng <- subset(bcells, cells = demuxlet_sng$barcode)
-```
+Demultiplex given the individual genotypes
+------------------------------------------
 
-## Demultiplex cells based on HTO
+    bcells_sng <- subset(bcells, cells = demuxlet_sng$barcode)
 
-``` r
-bcells_sng <- HTODemux(bcells_sng, assay = "HTO", positive.quantile = 0.99)
+Demultiplex cells based on HTO
+------------------------------
 
-table(bcells_sng$HTO_classification.global)
-```
+    bcells_sng <- HTODemux(bcells_sng, assay = "HTO", positive.quantile = 0.99)
+
+    table(bcells_sng$HTO_classification.global)
 
     # 
     #  Doublet Negative  Singlet 
-    #     3697       32     5591
+    #     3665       30     5618
 
-``` r
-Idents(bcells_sng) <- "HTO_maxID"
-```
+    Idents(bcells_sng) <- "HTO_maxID"
 
 ![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 ![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
-## Extract Singlets
+Extract Singlets
+----------------
 
-``` r
-Idents(bcells_sng) <- "HTO_classification.global"
+    Idents(bcells_sng) <- "HTO_classification.global"
 
-bcells_singlet <- subset(bcells_sng, idents = "Singlet")
+    bcells_singlet <- subset(bcells_sng, idents = "Singlet")
 
-table(bcells_singlet@meta.data$HTO_maxID)[stims]
-```
+    table(bcells_singlet@meta.data$HTO_maxID)[stims]
 
     # 
     #          day0      IL4 24hr      BCR 24hr      BCR 72hr     TLR7 24hr     TLR7 72hr BCR+TLR7 24hr BCR+TLR7 72hr      CpG 24hr      CpG 72hr   sCD40L 24hr   sCD40L 72hr      DN2 24hr      DN2 72hr 
-    #           607           325           574           474           498           427           372           356            48           404           192           531           447           336
+    #           608           325           573           478           504           433           375           354            48           403           138           535           446           398
 
-## Number of cells from each sample
+Feature quantifications
+-----------------------
 
 ![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
-## Feature quantifications
+PCA
+---
 
-![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+    bcells_singlet <- bcells_singlet %>%
+        FindVariableFeatures(nfeatures = 2000, selection.method = "vst") %>%
+        ScaleData(., features = rownames(.)) %>%
+        RunPCA(., features = VariableFeatures(.))
 
-## PCA
-
-``` r
-bcells_singlet <- bcells_singlet %>%
-    FindVariableFeatures(nfeatures = 2000, selection.method = "vst") %>%
-    ScaleData(., features = rownames(.)) %>%
-    RunPCA(., features = VariableFeatures(.))
-```
-
-![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 ### Number of genes and cells per individual
 
+![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+
 ![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
-## UMAP and clustering
+UMAP and clustering
+-------------------
 
-``` r
-bcells_singlet <- bcells_singlet %>%
-  RunUMAP(dims = 1:20, verbose = FALSE) %>%
-  FindNeighbors(dims = 1:20, verbose = FALSE) %>%
-  FindClusters(resolution = 0.5, verbose = FALSE)
-```
+    bcells_singlet <- bcells_singlet %>%
+      RunUMAP(dims = 1:20, verbose = FALSE) %>%
+      FindNeighbors(dims = 1:20, verbose = FALSE) %>%
+      FindClusters(resolution = 0.5, verbose = FALSE)
 
 ![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
@@ -234,22 +227,83 @@ bcells_singlet <- bcells_singlet %>%
 
 ![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
-## Marker genes for Seurat clusters (whole data, res = 0.5)
+Extract B cells
+---------------
 
-``` r
-cluster_markers <- 
-    FindAllMarkers(bcells_singlet, 
-                   only.pos = TRUE,
-                   min.pct = 0.05,
-                   logfc.threshold = 1) %>%
-    as_tibble() %>%
-    filter(p_val_adj < 0.05)
-```
+    Idents(bcells_singlet) <- "seurat_clusters"
 
-## Marker genes per cluster
+    bcells_filt <- bcells_singlet %>%
+      subset(idents = c(1, 3, 4, 5, 7, 9, 10))
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
-
-## ADTs
+    bcells_filt <- bcells_filt %>%
+        FindVariableFeatures(nfeatures = 1000, selection.method = "vst") %>%
+        ScaleData(., features = rownames(.)) %>%
+        RunPCA(., features = VariableFeatures(.)) %>%
+        RunUMAP(dims = 1:20, verbose = FALSE) %>%
+        FindNeighbors(dims = 1:20, verbose = FALSE) %>%
+        FindClusters(resolution = 0.5, verbose = FALSE)
 
 ![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+
+### Marker genes at 24 hours in respect to day 0
+
+    Idents(bcells_filt) <- "HTO_maxID"
+
+    bcr_markers <- 
+        FindMarkers(bcells_filt, 
+                       ident.1 = "BCR 24hr",
+                       ident.2 = "day0",
+                       only.pos = TRUE,
+                       min.pct = 0.1,
+                       logfc.threshold = 0.5) %>%
+        rownames_to_column("gene") %>%
+        as_tibble()
+
+    tlr_markers <- 
+        FindMarkers(bcells_filt, 
+                       ident.1 = "TLR7 24hr",
+                       ident.2 = "day0",
+                       only.pos = TRUE,
+                       min.pct = 0.1,
+                       logfc.threshold = 0.5) %>%
+        rownames_to_column("gene") %>%
+        as_tibble()
+
+    bcrtlr_markers <- 
+        FindMarkers(bcells_filt, 
+                       ident.1 = "BCR+TLR7 24hr",
+                       ident.2 = "day0",
+                       only.pos = TRUE,
+                       min.pct = 0.1,
+                       logfc.threshold = 0.5) %>%
+        rownames_to_column("gene") %>%
+        as_tibble()
+
+
+    dn2_markers <- 
+        FindMarkers(bcells_filt, 
+                       ident.1 = "DN2 24hr",
+                       ident.2 = "day0",
+                       only.pos = TRUE,
+                       min.pct = 0.1,
+                       logfc.threshold = 0.5) %>%
+        rownames_to_column("gene") %>%
+        as_tibble()
+
+    markers_df <-
+      bind_rows("BCR" = bcr_markers,
+                "TLR7" = tlr_markers,
+                "BCR+TLR7" = bcrtlr_markers,
+                "DN2" = dn2_markers,
+                .id = "stim") %>%
+      filter(p_val_adj < 0.05) %>%
+      select(-p_val, -p_val_adj)
+
+![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+
+ADTs
+----
+
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->

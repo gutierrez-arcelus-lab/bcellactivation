@@ -24,6 +24,7 @@ library(tidyverse)
 
 # Plotting
 library(tidytext)
+library(UpSetR)
 library(ggridges)
 library(RColorBrewer)
 library(cowplot)
@@ -40,6 +41,10 @@ cellranger_dir <-
 
 features_df <- file.path(cellranger_dir, "features.tsv.gz") %>%
     read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
+
+gene_ids <- features_df  %>%
+  filter(phenotype == "Gene Expression") %>%
+  select(gene_id, gene_name)
 
 mt_genes <- features_df %>%
     filter(phenotype == "Gene Expression", 
@@ -133,7 +138,8 @@ model <- mixtureModel(bcells_sce)
 
 plotFiltering(bcells_sce, model, posterior_cutoff = 0.8) +
   scale_y_continuous(breaks = scales::pretty_breaks(8)) +
-  theme_bw()
+  theme_bw() +
+  theme(text = element_text(size = 8))
 ```
 
 ## Remove compromised cells
@@ -141,7 +147,9 @@ plotFiltering(bcells_sce, model, posterior_cutoff = 0.8) +
 ```{r}
 bcells_sce <- filterCells(bcells_sce, model)
 cells_keep <- rownames(colData(bcells_sce))
-bcells <- subset(bcells, cells = cells_keep)
+
+bcells <- subset(bcells, cells = cells_keep) %>%
+  subset(nFeature_RNA > 500)
 ```
 
 
@@ -218,25 +226,6 @@ Idents(bcells_sng) <- "HTO_classification.global"
 bcells_singlet <- subset(bcells_sng, idents = "Singlet")
 
 table(bcells_singlet@meta.data$HTO_maxID)[stims]
-```
-
-
-## Number of cells from each sample
-
-```{r, echo=FALSE, fig.height=4, fig.width=10}
-stim_class_df %>%
-  as_tibble() %>%
-  filter(classif == "Singlet") %>%
-  left_join(demuxlet_sng) %>%
-  count(stim, sample) %>%
-  mutate(stim = factor(stim, levels = stims)) %>%
-  ggplot(aes(stim, n, fill = sample)) +
-  geom_col(color = "black", size = .5, position = "dodge") +
-  ggsci::scale_fill_npg() +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        panel.grid.major.x = element_blank()) +
-  labs(x = NULL, y = "Number of droplets")
 ```
 
 
@@ -359,6 +348,22 @@ pca_ngenes <- bcells_singlet_meta %>%
 plot_grid(pca_ngenes, pca_samples, nrow = 1)
 ```
 
+```{r, echo=FALSE, fig.height=4, fig.width=10}
+stim_class_df %>%
+  as_tibble() %>%
+  filter(classif == "Singlet") %>%
+  left_join(demuxlet_sng) %>%
+  count(stim, sample) %>%
+  mutate(stim = factor(stim, levels = stims)) %>%
+  ggplot(aes(stim, n, fill = sample)) +
+  geom_col(color = "black", size = .5, position = "dodge") +
+  ggsci::scale_fill_npg() +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.x = element_blank()) +
+  labs(x = NULL, y = "Number of droplets")
+```
+
 
 ## UMAP and clustering
 
@@ -417,7 +422,7 @@ plot_grid(umap_stims, umap_clusters, nrow = 1)
 ```
 
 
-```{r, echo = FALSE, fig.height=3, fig.width=5}
+```{r, echo = FALSE, fig.width=5, fig.height=3}
 umap_df %>%
   left_join(demuxlet_sng) %>%
   select(barcode, sample, UMAP_1, UMAP_2) %>%
@@ -471,25 +476,32 @@ umap_df %>%
 ```{r, echo=FALSE, fig.width=8, fig.height=4}
 cell_totals <- meta_data %>%
   count(cluster, stim) %>%
-  mutate(cell_type_cluster = ifelse(cluster %in% c(0, 2, 7, 8), "non-B cells", "B cell"))
+  mutate(cell_type_cluster = ifelse(cluster %in% c(0, 2, 6, 8), "non-B cells", "B cell"))
 
 
 cells_p1 <- cell_totals %>%
   group_by(cell_type_cluster) %>%
   summarise(n = sum(n)) %>%
   ungroup() %>%
-  mutate(cell_type_cluster = str_pad(cell_type_cluster, width = 13, side = "left")) %>%
+  mutate(cell_type_cluster = str_pad(cell_type_cluster, width = 13, side = "left"),
+         time = "Total") %>%
   ggplot(aes(cell_type_cluster, n, fill = cell_type_cluster)) +
   geom_bar(stat = "identity", show.legend = FALSE) +
   ggsci::scale_fill_npg() +
+  facet_wrap(~time) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
-  labs(x = "Totals", y = "Number of cells")
+  labs(x = NULL, y = "Number of cells")
 
 cells_p2 <- cell_totals %>%
+  separate(stim, c("stim", "time"), sep = " ") %>%
+  mutate(time = ifelse(is.na(time) & stim == "day0", "0hr", time),
+         stim = fct_inorder(stim),
+         time = factor(time, levels = c("0hr", "24hr", "72hr"))) %>%
   ggplot(aes(stim, n, fill = cell_type_cluster)) +
   geom_bar(stat = "identity", position = "dodge") +
   ggsci::scale_fill_npg() +
+  facet_grid(.~time, scales = "free_x", space = "free") +
   theme_bw() +
   theme(panel.grid.major.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
@@ -497,8 +509,6 @@ cells_p2 <- cell_totals %>%
 
 plot_grid(cells_p1, cells_p2, rel_widths = c(.25, 1))
 ```
-
-
 
 
 ### Cell type annotation with MCP counter
@@ -533,7 +543,6 @@ umap_celltype_list <- umap_df %>%
 
 plot_grid(plotlist = umap_celltype_list, ncol = 3)
 ```
-
 
 
 ### Cell cycling
@@ -600,63 +609,164 @@ plot_grid(ki67, ngenes, mt, ribo, nrow = 2)
 ```
 
 
-## Marker genes for Seurat clusters (whole data, res = 0.5)
+## Extract B cells
 
 ```{r}
-cluster_markers <- 
-    FindAllMarkers(bcells_singlet, 
+Idents(bcells_singlet) <- "seurat_clusters"
+
+bcells_filt <- bcells_singlet %>%
+  subset(idents = c(1, 3, 4, 5, 7, 9, 10))
+```
+
+
+```{r}
+bcells_filt <- bcells_filt %>%
+    FindVariableFeatures(nfeatures = 1000, selection.method = "vst") %>%
+    ScaleData(., features = rownames(.)) %>%
+    RunPCA(., features = VariableFeatures(.)) %>%
+    RunUMAP(dims = 1:20, verbose = FALSE) %>%
+    FindNeighbors(dims = 1:20, verbose = FALSE) %>%
+    FindClusters(resolution = 0.5, verbose = FALSE)
+```
+
+
+```{r, echo=FALSE, fig.height=3, fig.width=10}
+pca_emb_filt <- bcells_filt@reductions$pca@cell.embeddings %>%
+  as.data.frame() %>%
+  rownames_to_column("barcode") %>%
+  as_tibble() %>%
+  left_join(stim_class_df) %>%
+  select(barcode, stim, PC_1:PC_4)
+
+umap_filt_df <- as.data.frame(bcells_filt@reductions$umap@cell.embeddings) %>%
+    rownames_to_column("barcode") %>%
+    as_tibble() %>%
+    left_join(meta_data)
+
+pca_filt_plot <- ggplot(pca_emb_filt, aes(PC_1, PC_2)) +
+  geom_point(aes(color = stim), size = .5) +
+  scale_color_manual(values = stims_colors) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        legend.key.height = unit(.75, "lines"),
+        panel.border = element_blank()) +
+  guides(color = guide_legend(override.aes = list(size = 2)))
+
+umap_filt_plot <- ggplot(umap_filt_df, aes(UMAP_1, UMAP_2, color = stim)) +
+    geom_point(size = .5) +
+    scale_color_manual(values = stims_colors) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2)))
+
+plot_grid(pca_filt_plot + theme(legend.position = "none"), 
+          umap_filt_plot + theme(legend.position = "none"),
+          get_legend(umap_filt_plot), 
+          nrow = 1,
+          rel_widths = c(1, 1, .25))
+```
+
+### Marker genes at 24 hours in respect to day 0
+
+```{r}
+Idents(bcells_filt) <- "HTO_maxID"
+
+bcr_markers <- 
+    FindMarkers(bcells_filt, 
+                   ident.1 = "BCR 24hr",
+                   ident.2 = "day0",
                    only.pos = TRUE,
-                   min.pct = 0.05,
-                   logfc.threshold = 1) %>%
-    as_tibble() %>%
-    filter(p_val_adj < 0.05)
-```  
+                   min.pct = 0.1,
+                   logfc.threshold = 0.5) %>%
+    rownames_to_column("gene") %>%
+    as_tibble()
+
+tlr_markers <- 
+    FindMarkers(bcells_filt, 
+                   ident.1 = "TLR7 24hr",
+                   ident.2 = "day0",
+                   only.pos = TRUE,
+                   min.pct = 0.1,
+                   logfc.threshold = 0.5) %>%
+    rownames_to_column("gene") %>%
+    as_tibble()
+
+bcrtlr_markers <- 
+    FindMarkers(bcells_filt, 
+                   ident.1 = "BCR+TLR7 24hr",
+                   ident.2 = "day0",
+                   only.pos = TRUE,
+                   min.pct = 0.1,
+                   logfc.threshold = 0.5) %>%
+    rownames_to_column("gene") %>%
+    as_tibble()
 
 
-## Marker genes per cluster
+dn2_markers <- 
+    FindMarkers(bcells_filt, 
+                   ident.1 = "DN2 24hr",
+                   ident.2 = "day0",
+                   only.pos = TRUE,
+                   min.pct = 0.1,
+                   logfc.threshold = 0.5) %>%
+    rownames_to_column("gene") %>%
+    as_tibble()
 
-```{r, echo=FALSE, fig.height=8, fig.width=10}
-plot_markers <- function(cluster_df) {
-  
-  top_markers <- cluster_df %>%
-    as_tibble() %>%
-    left_join(select(features_df, 1:2), by = c("gene" = "gene_id")) %>%
-    group_by(cluster) %>%
-    top_n(10, avg_log2FC) %>%
-    ungroup() %>%
-    select(cluster, gene_name, gene_id = gene, avg_log2FC)
-  
-  cluster_cell <- tibble(cluster_cell = Idents(bcells_singlet),
-                         barcode = names(Idents(bcells_singlet)))
-  
-  cell_gene_expr <- bcells_singlet@assays$RNA@data %>%
-    .[unique(top_markers$gene_id), ] %>%
-    as.data.frame() %>%
-    rownames_to_column("gene_id") %>%
-    as_tibble() %>%
-    pivot_longer(-gene_id, names_to = "barcode", values_to = "logexpr")
-  
-  top_marker_expr <- cell_gene_expr %>%
-    left_join(cluster_cell, by = "barcode") %>%
-    inner_join(top_markers, by = "gene_id")
-  
-  top_marker_summary <- top_marker_expr %>%
-    group_by(cluster = cluster_cell, gene_name) %>%
-    summarise(prop_expr = mean(logexpr > 0),
-              scale_expr = mean(logexpr)) %>%
-    ungroup() %>%
-    left_join(select(top_markers, cluster_top = cluster, gene_name, avg_log2FC)) %>%
-    mutate_at(vars(cluster, cluster_top), factor) %>%
-    arrange(cluster_top, avg_log2FC) %>%
-    mutate(gene_name = fct_inorder(gene_name)) 
-  
-  
-  ggplot(top_marker_summary, aes(cluster, gene_name)) +
-    geom_point(aes(size = prop_expr, fill = scale_expr), 
+markers_df <-
+  bind_rows("BCR" = bcr_markers,
+            "TLR7" = tlr_markers,
+            "BCR+TLR7" = bcrtlr_markers,
+            "DN2" = dn2_markers,
+            .id = "stim") %>%
+  filter(p_val_adj < 0.05) %>%
+  select(-p_val, -p_val_adj)
+```
+
+```{r, echo = FALSE, fig.height=5}
+top30_markers <- markers_df %>%
+  group_by(stim) %>%
+  top_n(30, avg_log2FC) %>%
+  ungroup() %>%
+  pivot_longer(pct.1:pct.2, names_to = "condition", values_to = "perc") %>%
+  mutate(condition = ifelse(condition == "pct.1", stim, "day0"))
+
+bcells_filt_subset <- bcells_filt %>%
+  subset(idents = c("day0", "BCR 24hr", "TLR7 24hr", "BCR+TLR7 24hr", "DN2 24hr"))
+
+meta_data_filtsub <- bcells_filt_subset@meta.data %>% 
+  rownames_to_column("barcode") %>%
+  select(barcode, stim = HTO_maxID) %>%
+  as_tibble() 
+
+filt_stim_avg_expr <- bcells_filt_subset@assays$RNA@data[unique(top30_markers$gene), ] %>%
+  as.data.frame() %>%
+  rownames_to_column("gene") %>%
+  as_tibble() %>%
+  pivot_longer(-gene, names_to = "barcode") %>%
+  left_join(meta_data_filtsub) %>%
+  mutate(stim = sub("\\s24hr", "", stim)) %>%
+  filter(value > 0) %>%
+  group_by(stim, gene) %>%
+  summarise(value = mean(value)) %>%
+  ungroup() 
+
+markers_plot_df <- top30_markers %>%
+  left_join(filt_stim_avg_expr, by = c("condition" = "stim", "gene")) %>%
+  left_join(gene_ids, by = c("gene" = "gene_id")) %>%
+  mutate(condition = fct_relevel(condition, "day0", after = Inf))
+
+
+ggplot(markers_plot_df, aes(x = condition, y = reorder_within(gene_name, avg_log2FC, stim))) +
+    geom_point(aes(size = perc, fill = value), 
                color = "black", shape = 21) +
     scale_size(range = c(0.1, 4), labels = scales::percent) +
     scale_fill_viridis_c(option = "magma") +
-    facet_wrap(~cluster_top, scales = "free", ncol = 3) +
+    scale_y_discrete(labels = function(x) sub("^([^_]+).*$", "\\1", x)) +
+    facet_wrap(~stim, scales = "free", nrow = 1) +
     theme_bw() +
     theme(axis.line = element_blank(),
           axis.text = element_text(size = 8),
@@ -667,9 +777,16 @@ plot_markers <- function(cluster_df) {
          fill = "Scaled\nExpression", 
          size = "% of cells") +
     guides(fill = guide_colorbar(barheight = .5))
-}
+  
+```
 
-plot_markers(cluster_markers)
+
+```{r, echo=FALSE, fig.width=6}
+input_list <- markers_df %>%
+  split(.$stim) %>%
+  map("gene")
+
+upset(fromList(input_list), order.by = "freq")
 ```
 
 
