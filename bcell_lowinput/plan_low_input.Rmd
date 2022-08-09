@@ -112,7 +112,7 @@ design_matrices <- final_design %>%
 
 ## Plot plate array 
 
-```{r, fig.width=12, fig.height=12}
+```{r, fig.width=11, fig.height=8.5}
 design_plot_list <- design_matrices %>%
     map(. %>% 
             as.data.frame() %>% 
