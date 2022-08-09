@@ -16,17 +16,12 @@ Data frame with the experimental design
     stims <- c("Unstim", "IL4", "BCR", "TLR7", "BCR+TLR7", "TLR9", "CD40L", "DN2")
 
     # Timepoints
-    timeps <- paste0(c(4, 24, 48, 72), "hrs")
-
-    # Experiment design
-    design_df <- tibble(plate = rep(c("plate1", "plate2"), each = 96)) %>%
-        group_by(plate) %>%
-        mutate(index = seq_len(n())) %>%
-        ungroup()
+    timeps <- paste(c(0, 4, 24, 48, 72), "hrs")
 
     # Samples
     expr_df <- expand_grid(ind_id, stims, timeps) %>%
-        filter(!(stims %in% c("Unstim", "IL4") & timeps %in% c("48hrs", "72hrs")))
+        filter(!(stims %in% c("Unstim", "IL4") & timeps %in% c("48 hrs", "72 hrs"))) %>%
+        filter(!(timeps == "0 hrs" & stims != "Unstim"))
 
     # Replicates
     ## put all reps for HD01 in plate #1
@@ -34,24 +29,19 @@ Data frame with the experimental design
     n_reps <- 5
 
     reps_df <- 
-        bind_rows(filter(expr_df, ind_id == "HD01", timeps == "24hrs", stims == "DN2") %>%
-                      .[rep(seq_len(nrow(.)), each = n_reps), ] %>%
-                      mutate(plate = "plate1", index = 1:n_reps),
-                  filter(expr_df, ind_id == "HD03", timeps == "24hrs", stims == "DN2") %>%
-                      .[rep(seq_len(nrow(.)), each = n_reps), ] %>%
-                      mutate(plate = "plate2", index = 1:n_reps)) %>%
-        mutate(ind_id = paste0(ind_id, ".rep.", index))
+        bind_rows(filter(expr_df, ind_id == "HD01", timeps == "24 hrs", stims == "DN2") %>%
+                      .[rep(seq_len(nrow(.)), each = n_reps), ],
+                  filter(expr_df, ind_id == "HD03", timeps == "24 hrs", stims == "DN2") %>%
+                      .[rep(seq_len(nrow(.)), each = n_reps), ]) 
 
     # remove the individuals from the original dataset to avoid redundancy 
-    expr_upd_df <- expr_df %>%
-        filter(!((ind_id == "HD01" | ind_id == "HD03") & timeps == "24hrs" & stims == "DN2"))
+    expr_upd_df <- anti_join(expr_df, reps_df, by = c("ind_id", "timeps", "stims"))
 
 
     # Reserve 9 wells for Maggie on plate #2
     maggie_df <- 
         tibble(ind_id = "Maggie", stims = "Maggie", timeps = "Maggie") %>%
-        .[rep(seq_len(nrow(.)), each = 9), ] %>%
-        mutate(plate = "plate2", index = 88:96)
+        .[rep(seq_len(nrow(.)), each = 9), ]
 
     # Add blank wells evenly between plates
     blanks_n <- (8 * 12 * 2) - (nrow(expr_upd_df) + nrow(reps_df) + nrow(maggie_df))
@@ -59,47 +49,55 @@ Data frame with the experimental design
     blanks_df <- 
         tibble(ind_id = rep("blank", blanks_n),
                stims = rep("blank", blanks_n),
-               timeps = rep("blank", blanks_n)) %>%
-        mutate(plate = paste0("plate", ntile(x = row_number(), 2))) %>%
-        group_by(plate) %>%
-        mutate(index = seq_len(n()) + n_reps) %>%
-        ungroup()
+               timeps = rep("blank", blanks_n))
 
     # Put everything together
-    temp_df <- bind_rows(reps_df, blanks_df, maggie_df) %>%
-        anti_join(design_df, ., by = c("index", "plate")) %>%
-        bind_cols(expr_upd_df) %>%
-        bind_rows(reps_df, blanks_df, maggie_df) %>%
-        arrange(plate, index)
-        
+    ind_order <- c("blank", "HD01", "HD03", "MGB-10034466", "HD02", "HD04", "MGB-10092121", "Maggie")
+
+    temp_df <- bind_rows(expr_upd_df, reps_df, blanks_df, maggie_df) %>%
+        mutate(ind_id = factor(ind_id, levels = ind_order),
+               timeps = factor(timeps, levels = str_sort(unique(timeps), numeric = TRUE))) %>%
+        arrange(ind_id, stims, timeps) 
+
+    # Check if all samples from a given individual are in the same plate
+    temp_df %>%
+        count(ind_id) %>%
+        mutate(i = cumsum(n))
+
+    # A tibble: 8 × 3
+      ind_id           n     i
+      <fct>        <int> <int>
+    1 blank            1     1
+    2 HD01            33    34
+    3 HD03            33    67
+    4 MGB-10034466    29    96
+    5 HD02            29   125
+    6 HD04            29   154
+    7 MGB-10092121    29   183
+    8 Maggie           9   192
+
+    # Assign index and plate number
+    index_plate_df <- temp_df %>%
+        mutate(index = seq_len(n()),
+               plate = ifelse(between(index, 1, 96), "plate1", "plate2")) %>%
+        group_by(ind_id, stims, timeps) %>%
+        mutate(ind_id = as.character(ind_id),
+               ind_id = ifelse(ind_id != "Maggie" & n() > 1, paste(ind_id, "rep", row_number()), ind_id)) %>% 
+        ungroup()
+
     # Randomize all samples that are not Maggie's
     set.seed(1)
-    final_design <- temp_df %>%
+    final_design <- 
+        index_plate_df %>%
         filter(ind_id != "Maggie") %>%
-        slice_sample(n = nrow(.)) %>%
+        group_by(plate) %>%
+        slice_sample(prop = 1) %>%
+        ungroup() %>%
+        bind_rows(filter(index_plate_df, ind_id == "Maggie")) %>%
         group_by(plate) %>%
         mutate(index = seq_len(n())) %>%
         ungroup() %>%
-        arrange(plate, index) %>%
-        select(ind_id, stims, timeps, plate, index) %>%
-        bind_rows(maggie_df)
-     
-    final_design
-
-    # A tibble: 192 × 5
-       ind_id       stims    timeps plate  index
-       <chr>        <chr>    <chr>  <chr>  <int>
-     1 HD02         IL4      24hrs  plate1     1
-     2 HD01         BCR      24hrs  plate1     2
-     3 MGB-10092121 BCR      4hrs   plate1     3
-     4 HD01         BCR+TLR7 24hrs  plate1     4
-     5 HD02         CD40L    4hrs   plate1     5
-     6 MGB-10092121 TLR7     72hrs  plate1     6
-     7 HD02         TLR7     24hrs  plate1     7
-     8 blank        blank    blank  plate1     8
-     9 HD02         TLR7     4hrs   plate1     9
-    10 HD02         BCR+TLR7 48hrs  plate1    10
-    # … with 182 more rows
+        arrange(plate, index)
 
 Plate array
 -----------
