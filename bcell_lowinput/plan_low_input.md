@@ -31,16 +31,21 @@ Data frame with the experimental design
     # Replicates
     ## put all reps for HD01 in plate #1
     ## put all reps for HD03 in plate #2
-    n_reps <- 4
+    n_reps <- 5
 
     reps_df <- 
         bind_rows(filter(expr_df, ind_id == "HD01", timeps == "24hrs", stims == "DN2") %>%
                       .[rep(seq_len(nrow(.)), each = n_reps), ] %>%
                       mutate(plate = "plate1", index = 1:n_reps),
-                  filter(expr_df, ind_id == "HD03", timeps == "48hrs", stims == "DN2") %>%
+                  filter(expr_df, ind_id == "HD03", timeps == "24hrs", stims == "DN2") %>%
                       .[rep(seq_len(nrow(.)), each = n_reps), ] %>%
                       mutate(plate = "plate2", index = 1:n_reps)) %>%
         mutate(ind_id = paste0(ind_id, ".rep.", index))
+
+    # remove the individuals from the original dataset to avoid redundancy 
+    expr_upd_df <- expr_df %>%
+        filter(!((ind_id == "HD01" | ind_id == "HD03") & timeps == "24hrs" & stims == "DN2"))
+
 
     # Reserve 9 wells for Maggie on plate #2
     maggie_df <- 
@@ -49,7 +54,7 @@ Data frame with the experimental design
         mutate(plate = "plate2", index = 88:96)
 
     # Add blank wells evenly between plates
-    blanks_n <- (8 * 12 * 2) - (nrow(expr_df) + nrow(reps_df) + nrow(maggie_df))
+    blanks_n <- (8 * 12 * 2) - (nrow(expr_upd_df) + nrow(reps_df) + nrow(maggie_df))
 
     blanks_df <- 
         tibble(ind_id = rep("blank", blanks_n),
@@ -63,7 +68,7 @@ Data frame with the experimental design
     # Put everything together
     temp_df <- bind_rows(reps_df, blanks_df, maggie_df) %>%
         anti_join(design_df, ., by = c("index", "plate")) %>%
-        bind_cols(expr_df) %>%
+        bind_cols(expr_upd_df) %>%
         bind_rows(reps_df, blanks_df, maggie_df) %>%
         arrange(plate, index)
         
@@ -85,11 +90,11 @@ Data frame with the experimental design
        ind_id       stims    timeps plate  index
        <chr>        <chr>    <chr>  <chr>  <int>
      1 HD02         IL4      24hrs  plate1     1
-     2 HD01         BCR      48hrs  plate1     2
-     3 MGB-10092121 BCR      24hrs  plate1     3
-     4 HD01         BCR+TLR7 48hrs  plate1     4
+     2 HD01         BCR      24hrs  plate1     2
+     3 MGB-10092121 BCR      4hrs   plate1     3
+     4 HD01         BCR+TLR7 24hrs  plate1     4
      5 HD02         CD40L    4hrs   plate1     5
-     6 MGB-10092121 BCR+TLR7 4hrs   plate1     6
+     6 MGB-10092121 TLR7     72hrs  plate1     6
      7 HD02         TLR7     24hrs  plate1     7
      8 blank        blank    blank  plate1     8
      9 HD02         TLR7     4hrs   plate1     9
