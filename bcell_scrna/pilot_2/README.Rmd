@@ -19,7 +19,7 @@ library(miQC)
 library(scater)
 library(MCPcounter)
 
-# Pathway enrichment analysis
+# Gene Ontology
 library(clusterProfiler)
 library(org.Hs.eg.db)
 
@@ -900,24 +900,20 @@ markers_ident <- markers_df %>%
   pivot_wider(names_from = stim, values_from = i) %>%
   mutate_at(vars(-gene), ~replace_na(., 0))
 
-markers_shared <- markers_ident %>%
-  filter(BCR == 1, TLR7 == 1, `BCR+TLR7` == 1, DN2 == 1)
-
 markers_bcr <- markers_ident %>%
-  filter(BCR == 1, TLR7 == 0, `BCR+TLR7` == 0, DN2 == 0)
+  filter(BCR == 1)
 
 markers_tlr <- markers_ident %>%
-  filter(BCR == 0, TLR7 == 1, `BCR+TLR7` == 0, DN2 == 0)
+  filter(TLR7 == 1)
 
 markers_bcrtlr <- markers_ident %>%
-  filter(BCR == 0, TLR7 == 0, `BCR+TLR7` == 1, DN2 == 0)
+  filter(`BCR+TLR7` == 1)
 
 markers_dn2 <- markers_ident %>%
-  filter(BCR == 0, TLR7 == 0, `BCR+TLR7` == 0, DN2 == 1)
+  filter(DN2 == 1)
 
 enrich_df <- 
-  bind_rows("Shared" = markers_shared,
-            "BCR" = markers_bcr,
+  bind_rows("BCR" = markers_bcr,
             "TLR7" = markers_tlr,
             "BCR+TLR7" = markers_bcrtlr,
             "DN2" = markers_dn2,
@@ -927,31 +923,39 @@ enrich_df <-
   map_df(run_enrichment, .id = "set")
 ```
 
-```{r, echo = FALSE, fig.width=8, fig.height=10}
+```{r, echo = FALSE, fig.width=10, fig.height=10}
 go_top <- enrich_df %>%
     group_by(set) %>%
-    top_n(50, -log10(qvalue)) %>%
+    top_n(30, -log10(qvalue)) %>%
     ungroup() %>%
-    mutate(set = factor(set, levels = c("Shared", "BCR", "TLR7", "BCR+TLR7", "DN2"))) %>%
+    mutate(set = factor(set, levels = c("BCR", "TLR7", "BCR+TLR7", "DN2"))) %>%
     arrange(set, qvalue)
 
-goterms <- distinct(go_top, Description) %>%
-    pull(Description)
+goterms <- go_top %>%
+  arrange(qvalue) %>%
+  distinct(Description) %>%
+  pull(Description)
 
 go_top %>%
     mutate(Description = factor(Description, levels = rev(goterms))) %>%
     ggplot(aes(set, Description)) +
         geom_point(aes(size = Count, fill = -log10(qvalue)), shape = 21) +
+        scale_size(range = c(1, 5)) +
         scale_fill_viridis_c(option = "magma") +
-        scale_y_discrete(labels = function(x) str_trunc(x, width = 50)) +
-        theme_minimal() +
+        scale_y_discrete(labels = function(x) str_trunc(x, width = 80)) +
+        theme_bw() +
         theme(axis.title = element_blank(),
-              axis.text.y = element_text(hjust = 1),
+              axis.text.x = element_text(size = 10),
+              axis.text.y = element_text(size = 11, hjust = 1),
+              axis.ticks = element_blank(),
               panel.grid.major.x = element_blank(),
-              legend.position = "top") +
+              panel.border = element_blank(),
+              legend.position = "top",
+              legend.justification = c(1, 0)) +
         labs(size = "# Genes:") +
         guides(fill = guide_colorbar(direction = "horizontal", barheight = 0.5),
                size = guide_legend(direction = "horizontal"))
+
 ```
 
 

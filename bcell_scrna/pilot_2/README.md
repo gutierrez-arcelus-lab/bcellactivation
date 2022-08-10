@@ -10,7 +10,7 @@ Packages
     library(scater)
     library(MCPcounter)
 
-    # Pathway enrichment analysis
+    # Gene Ontology
     library(clusterProfiler)
     library(org.Hs.eg.db)
 
