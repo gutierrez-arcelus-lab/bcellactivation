@@ -10,6 +10,10 @@ Packages
     library(scater)
     library(MCPcounter)
 
+    # Pathway enrichment analysis
+    library(clusterProfiler)
+    library(org.Hs.eg.db)
+
     # Data wrangling
     library(tidyverse)
 
@@ -230,10 +234,13 @@ UMAP and clustering
 Extract B cells
 ---------------
 
-    Idents(bcells_singlet) <- "seurat_clusters"
+    stims_24 <- c("day0", "BCR 24hr", "TLR7 24hr", "BCR+TLR7 24hr", "DN2 24hr")
+
+    filtered_bcells <- meta_data %>%
+      filter(stim %in% stims_24, ! cluster %in% c(0, 2, 6, 8))
 
     bcells_filt <- bcells_singlet %>%
-      subset(idents = c(1, 3, 4, 5, 7, 9, 10))
+      subset(cells = filtered_bcells$barcode)
 
     bcells_filt <- bcells_filt %>%
         FindVariableFeatures(nfeatures = 1000, selection.method = "vst") %>%
@@ -247,7 +254,19 @@ Extract B cells
 
 ### Marker genes at 24 hours in respect to day 0
 
+### Marker genes across all conditions at 24h and day 0
+
     Idents(bcells_filt) <- "HTO_maxID"
+
+    all_markers_df <- 
+      FindAllMarkers(bcells_filt,
+                     only.pos = TRUE,
+                     min.pct = 0.1,
+                     logfc.threshold = 1) %>%
+      as_tibble() %>%
+      filter(p_val_adj < 0.05)
+
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
     bcr_markers <- 
         FindMarkers(bcells_filt, 
@@ -299,11 +318,15 @@ Extract B cells
       filter(p_val_adj < 0.05) %>%
       select(-p_val, -p_val_adj)
 
-![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
 
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+### Gene ontology analysis of shared and exclusive genes
+
+![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
 
 ADTs
 ----
 
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
