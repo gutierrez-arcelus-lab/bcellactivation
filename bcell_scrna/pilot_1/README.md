@@ -9,15 +9,20 @@ Packages
     library(miQC)
     library(scater)
 
+    # Gene Ontology
+    library(clusterProfiler)
+    library(org.Hs.eg.db)
+
     # Data wrangling
     library(tidyverse)
-    library(rvest)
 
     # Plotting
     library(tidytext)
     library(ggridges)
     library(RColorBrewer)
+    library(scico)
     library(cowplot)
+    library(UpSetR)
 
 Cell Ranger data
 ----------------
@@ -30,15 +35,19 @@ Cell Ranger data
     features_df <- file.path(cellranger_dir, "features.tsv.gz") %>%
         read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
 
-    mt_genes <- features_df %>%
-        filter(phenotype == "Gene Expression", 
-               grepl("^MT-", gene_name)) %>%
+    genes_df <- features_df %>%
+      filter(phenotype == "Gene Expression") %>%
+      select(gene_id, gene_name)
+
+    mt_genes <- genes_df %>%
+        filter(grepl("^MT-", gene_name)) %>%
         pull(gene_id)
 
-    ribo_genes <- features_df %>%
-        filter(phenotype == "Gene Expression", 
-               grepl("^RPS\\d+|^RPL\\d+", gene_name)) %>%
+    ribo_genes <- genes_df %>%
+        filter(grepl("^RPS\\d+|^RPL\\d+", gene_name)) %>%
       pull(gene_id)
+
+    sctype_gs_list <- read_rds("/home/ch229163/mouse10x/sctype_gs_list.rds")
 
     data10x <- Read10X(cellranger_dir, gene.column = 1)
 
@@ -90,7 +99,8 @@ cells.
     plotFiltering(bcells_sce, model, posterior_cutoff = 0.8) +
       scale_y_continuous(breaks = scales::pretty_breaks(8)) +
       theme_bw() +
-      theme(text = element_text(size = 8))
+      theme(text = element_text(size = 8),
+            panel.grid.minor = element_blank())
 
 ![](README_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
@@ -165,7 +175,7 @@ UMAP and clustering
     bcells_singlet <- bcells_singlet %>%
       RunUMAP(dims = 1:20, verbose = FALSE) %>%
       FindNeighbors(dims = 1:20, verbose = FALSE) %>%
-      FindClusters(resolution = 0.5, verbose = FALSE)
+      FindClusters(resolution = 0.25, verbose = FALSE)
 
 ### Stimulus and Seurat clusters
 
@@ -183,7 +193,7 @@ Marker genes for Seurat clusters (whole data, res = 0.5)
     cluster_markers <- 
         FindAllMarkers(bcells_singlet, 
                        only.pos = TRUE,
-                       min.pct = 0.05,
+                       min.pct = 0.1,
                        logfc.threshold = 1) %>%
         as_tibble() %>%
         filter(p_val_adj < 0.05)
@@ -207,46 +217,78 @@ Marker genes for each stim condition
 
 ![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
+### DE genes between each condition and day 0
+
+    bcr24_markers <- 
+        FindMarkers(bcells_singlet, 
+                       ident.1 = "BCR 24hr",
+                       ident.2 = "Res 0hr",
+                       only.pos = TRUE,
+                       min.pct = 0.1,
+                       logfc.threshold = .5) %>%
+        rownames_to_column("gene") %>%
+        as_tibble()
+
+    tlr24_markers <- 
+        FindMarkers(bcells_singlet, 
+                       ident.1 = "TLR7 24hr",
+                       ident.2 = "Res 0hr",
+                       only.pos = TRUE,
+                       min.pct = 0.1,
+                       logfc.threshold = .5) %>%
+        rownames_to_column("gene") %>%
+        as_tibble()
+
+    bcr72_markers <- 
+        FindMarkers(bcells_singlet, 
+                       ident.1 = "BCR 72hr",
+                       ident.2 = "Res 0hr",
+                       only.pos = TRUE,
+                       min.pct = 0.1,
+                       logfc.threshold = .5) %>%
+        rownames_to_column("gene") %>%
+        as_tibble()
+
+    tlr72_markers <- 
+        FindMarkers(bcells_singlet, 
+                       ident.1 = "TLR7 72hr",
+                       ident.2 = "Res 0hr",
+                       only.pos = TRUE,
+                       min.pct = 0.1,
+                       logfc.threshold = .5) %>%
+        rownames_to_column("gene") %>%
+        as_tibble()
+
+    markers_day0_df <-
+      bind_rows("BCR 24hr" = bcr24_markers,
+                "TLR7 24hr" = tlr24_markers,
+                "BCR 72hr" = bcr72_markers,
+                "TLR7 72hr" = tlr72_markers,
+                .id = "stim") %>%
+      filter(p_val_adj < 0.05) %>%
+      select(-p_val, -p_val_adj)
+
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+
 B cell genes (RNA)
 ------------------
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 B cell genes (Protein)
 ----------------------
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
 
-Lupus genes
------------
+SLE GWAS genes
+--------------
 
-![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+Reported genes in GWAS Catalog, with significant differential expression
+(Log2FC &gt; 1, FDR = 5%) in any condition in respect to Resting 0
+hours.
 
-Marker genes IgG vs RSQ
------------------------
-
-### 24 hours
-
-    bcells_markers_24 <- 
-        FindMarkers(bcells_singlet, 
-                       ident.1 = "BCR 24hr",
-                       ident.2 = "TLR7 24hr",
-                       only.pos = FALSE,
-                       min.pct = 0.1,
-                       logfc.threshold = 0.5) %>%
-        rownames_to_column("gene") %>%
-        as_tibble() %>%
-        select(gene, avg_log2FC, `BCR 24hr` = pct.1, `TLR7 24hr` = pct.2, p = p_val_adj) %>%
-        filter(p < 0.05)
-
-#### GWAS genes
-
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
-
-MAGMA
------
-
-Scores taken from the scDRS figshare.
-
-scDRS
------
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
