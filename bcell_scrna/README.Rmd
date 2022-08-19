@@ -1,0 +1,269 @@
+---
+title: "CITE-seq Pilots"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+unix::rlimit_as(1e12)
+
+library(knitr)
+opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, comment = "#",
+               dpi = 300)
+options(width = 999)
+```
+
+```{r, echo=FALSE}
+# single-cell data analysis
+library(Seurat)
+library(miQC)
+library(scater)
+
+# Data wrangling
+library(tidyverse)
+
+# Plotting
+library(tidytext)
+library(ggridges)
+library(RColorBrewer)
+library(scico)
+library(ggsci)
+library(cowplot)
+```
+
+
+```{r, echo = FALSE}
+cellranger_dir_1 <- 
+    file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/CITEseq_pilot", 
+              "SN0231064/KW9100_Maria/210726_10X_KW9100-2_bcl/cellranger-6.0.1",
+              "GRCh38/BRI-1283/outs/filtered_feature_bc_matrix")
+
+cellranger_dir_2 <- 
+    file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/CITEseq_pilot_2",
+	      "SN0257788/broad/hptmp/curtism/bwh10x/KW10170_Maria/220617_10X_KW10170_bcl",
+	      "cellranger-6.1.1/GRCh38/BRI-1743_hashing/outs/filtered_feature_bc_matrix")
+
+features_1_df <- file.path(cellranger_dir_1, "features.tsv.gz") %>%
+    read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
+
+features_2_df <- file.path(cellranger_dir_2, "features.tsv.gz") %>%
+    read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
+
+genes_df <- features_1_df %>%
+  filter(phenotype == "Gene Expression") %>%
+  select(gene_id, gene_name)
+
+mt_genes <- genes_df %>%
+    filter(grepl("^MT-", gene_name)) %>%
+    pull(gene_id)
+
+ribo_genes <- genes_df %>%
+    filter(grepl("^RPS\\d+|^RPL\\d+", gene_name)) %>%
+    pull(gene_id)
+
+data10x_1 <- Read10X(cellranger_dir_1, gene.column = 1)
+data10x_2 <- Read10X(cellranger_dir_2, gene.column = 1)
+```
+
+```{r, echo = FALSE}
+antibody_1 <- data10x_1[["Antibody Capture"]] %>%
+    .[!grepl("^Hashtag", rownames(.)), ] 
+
+antibody_2 <- data10x_2[["Antibody Capture"]] %>%
+    .[!grepl("^Hashtag", rownames(.)), ] 
+
+rownames(antibody_1) <- rownames(antibody_1) %>%
+    sub("_prot$", "", .) %>%
+    gsub("_", ".", .)
+
+rownames(antibody_2) <- rownames(antibody_2) %>%
+    sub("_prot$", "", .) %>%
+    gsub("_", ".", .)
+
+hashtags_1 <- data10x_1[["Antibody Capture"]] %>%
+    .[grepl("^Hashtag", rownames(.)), ]
+
+rownames(hashtags_1) <- 
+    c("BCR 72hr", "TLR7 72hr", "BCR 24hr", "TLR7 24hr", "Res 24hr", "Res 0hr")
+
+hashtags_2 <- data10x_2[["Antibody Capture"]] %>%
+    .[grepl("^Hashtag", rownames(.)), ]
+
+rownames(hashtags_2) <- 
+    c("day0", 
+    "IL4 24hr",
+    "BCR 24hr",
+    "BCR+TLR7 24hr",
+    "TLR7 24hr", 
+    "sCD40L 24hr",
+    "CpG 24hr",
+    "DN2 24hr",
+    "BCR 72hr",
+    "BCR+TLR7 72hr",
+    "TLR7 72hr",
+    "sCD40L 72hr",
+    "DN2 72hr",
+    "CpG 72hr")
+
+# Create object
+bcells_1 <- CreateSeuratObject(counts = data10x_1[["Gene Expression"]], project = "pilot1")
+bcells_1[["ADT"]] <- CreateAssayObject(counts = antibody_1)
+bcells_1[["HTO"]] <- CreateAssayObject(counts = hashtags_1)
+
+bcells_2 <- CreateSeuratObject(counts = data10x_2[["Gene Expression"]], project = "pilot2")
+bcells_2[["ADT"]] <- CreateAssayObject(counts = antibody_2)
+bcells_2[["HTO"]] <- CreateAssayObject(counts = hashtags_2)
+
+bcells_1[["percent_mt"]] <- PercentageFeatureSet(bcells_1, features = mt_genes)
+bcells_1[["percent_ribo"]] <- PercentageFeatureSet(bcells_1, features = ribo_genes)
+
+bcells_2[["percent_mt"]] <- PercentageFeatureSet(bcells_2, features = mt_genes)
+bcells_2[["percent_ribo"]] <- PercentageFeatureSet(bcells_2, features = ribo_genes)
+
+# Normalize
+bcells_1_m1 <- bcells_1 %>%
+  NormalizeData(normalization.method = "LogNormalize", margin = 1) %>%
+  NormalizeData(assay = "HTO", normalization.method = "CLR", margin = 1) %>%
+  NormalizeData(assay = "ADT", normalization.method = "CLR", margin = 2)
+
+bcells_1_m2 <- bcells_1 %>%
+  NormalizeData(normalization.method = "LogNormalize", margin = 1) %>%
+  NormalizeData(assay = "HTO", normalization.method = "CLR", margin = 2) %>%
+  NormalizeData(assay = "ADT", normalization.method = "CLR", margin = 2)
+
+bcells_2_m1 <- bcells_2 %>%
+  NormalizeData(normalization.method = "LogNormalize", margin = 1) %>%
+  NormalizeData(assay = "HTO", normalization.method = "CLR", margin = 1) %>%
+  NormalizeData(assay = "ADT", normalization.method = "CLR", margin = 2)
+
+bcells_2_m2 <- bcells_2 %>%
+  NormalizeData(normalization.method = "LogNormalize", margin = 1) %>%
+  NormalizeData(assay = "HTO", normalization.method = "CLR", margin = 2) %>%
+  NormalizeData(assay = "ADT", normalization.method = "CLR", margin = 2)
+
+```
+
+## QC
+
+Here we use the miQC package to model the percentage of mitochondrial reads and number of genes, in order to identify and remove compromised cells.
+
+```{r, echo=FALSE, fig.height=4, fig.width=4, echo = FALSE}
+bcells_sce_1 <- bcells_1_m1 %>%
+    as.SingleCellExperiment() %>%
+    addPerCellQC(subsets = list(mito = mt_genes))
+
+model_1 <- mixtureModel(bcells_sce_1)
+
+bcells_sce_2 <- bcells_2_m1 %>%
+    as.SingleCellExperiment() %>%
+    addPerCellQC(subsets = list(mito = mt_genes))
+
+model_2 <- mixtureModel(bcells_sce_2)
+
+qc1 <- plotFiltering(bcells_sce_1, model_1, posterior_cutoff = 0.8) +
+  scale_x_continuous(limits = c(0, 1e4)) +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme_bw() +
+  scale_x_continuous(limits = c(0, 1e4)) +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme(text = element_text(size = 8),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Pilot #1")
+
+qc2 <- plotFiltering(bcells_sce_2, model_2, posterior_cutoff = 0.8) +
+  scale_x_continuous(limits = c(0, 1e4)) +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme_bw() +
+  theme(text = element_text(size = 8),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Pilot #2")
+
+plot_grid(qc1, qc2, nrow = 2)
+```
+
+```{r, echo = FALSE}
+bcells_sce_1_filt <- filterCells(bcells_sce_1, model_1)
+bcells_sce_2_filt <- filterCells(bcells_sce_2, model_2)
+
+cells_keep_1 <- rownames(colData(bcells_sce_1_filt))
+cells_keep_2 <- rownames(colData(bcells_sce_2_filt))
+
+bcells_1_m1_qc <- subset(bcells_1_m1, cells = cells_keep_1) %>%
+  subset(nFeature_RNA > 500)
+
+bcells_1_m2_qc <- subset(bcells_1_m2, cells = cells_keep_1) %>%
+  subset(nFeature_RNA > 500)
+
+bcells_2_m1_qc <- subset(bcells_2_m1, cells = cells_keep_2) %>%
+  subset(nFeature_RNA > 500)
+
+bcells_2_m2_qc <- subset(bcells_2_m2, cells = cells_keep_2) %>%
+  subset(nFeature_RNA > 500)
+```
+
+## Demultiplex cells based on HTO
+
+```{r, echo = FALSE, fig.width = 4, fig.height = 3}
+bcells_1_m1_qc_demux <- HTODemux(bcells_1_m1_qc, assay = "HTO", positive.quantile = 0.99)
+bcells_1_m2_qc_demux <- HTODemux(bcells_1_m2_qc, assay = "HTO", positive.quantile = 0.99)
+bcells_2_m1_qc_demux <- HTODemux(bcells_2_m1_qc, assay = "HTO", positive.quantile = 0.99)
+bcells_2_m2_qc_demux <- HTODemux(bcells_2_m2_qc, assay = "HTO", positive.quantile = 0.99)
+
+list("Pilot1\nmargin=1" = table(bcells_1_m1_qc_demux$HTO_classification.global),
+     "Pilot1\nmargin=2" = table(bcells_1_m2_qc_demux$HTO_classification.global),
+     "Pilot2\nmargin=1" = table(bcells_2_m1_qc_demux$HTO_classification.global),
+     "Pilot2\nmargin=2" = table(bcells_2_m2_qc_demux$HTO_classification.global)) %>%
+map_df(as.data.frame, .id = "id") %>%
+as_tibble() %>%
+    ggplot(aes(id, Freq, fill = Var1)) +
+    geom_bar(position = "fill", stat = "identity", color = "black", size = .25) +
+    scale_y_continuous(labels = scales::percent) +
+    scale_fill_manual(values = c("Negative" = "white",
+				 "Singlet" = "grey40",
+				 "Doublet" = "Black")) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8)) +
+    labs(x = NULL, y = "Frequency", fill = NULL)
+
+```
+
+```{r, echo=FALSE, fig.width = 8, fig.height = 4}
+Idents(bcells_1_m1_qc_demux) <- "HTO_maxID"
+Idents(bcells_1_m2_qc_demux) <- "HTO_maxID"
+Idents(bcells_2_m1_qc_demux) <- "HTO_maxID"
+Idents(bcells_2_m2_qc_demux) <- "HTO_maxID"
+
+make_hto_df <- function(seurat_obj) {
+ 
+    hto_data <- seurat_obj@assays$HTO@data %>%
+	as.data.frame() %>%
+	rownames_to_column("stim") %>%
+	pivot_longer(-stim, names_to = "barcode") %>%
+	as_tibble() %>%
+	group_by(barcode) %>%
+	summarise(value = sum(value)) %>%
+	ungroup()
+
+    metadf <- seurat_obj@meta.data %>%
+	rownames_to_column("barcode") %>%
+	as_tibble() %>% 
+	select(barcode, HTO_classification.global)
+
+    left_join(metadf, hto_data, by = "barcode")
+}
+
+hto_dat <- 
+    list("Pilot1\nmargin=1" = bcells_1_m1_qc_demux,
+	 "Pilot1\nmargin=2" = bcells_1_m2_qc_demux,
+	 "Pilot2\nmargin=1" = bcells_2_m1_qc_demux,
+	 "Pilot2\nmargin=2" = bcells_2_m2_qc_demux) %>%
+    map_dfr(make_hto_df, .id = "id")
+
+ggplot(hto_dat, aes(HTO_classification.global, value, fill = HTO_classification.global)) +
+    geom_violin(show.legend = FALSE) +
+    scale_fill_manual(values = c("Negative" = "white",
+				 "Singlet" = "grey40",
+				 "Doublet" = "Black")) +
+    facet_wrap(~id, nrow = 1) +
+    theme_bw() +
+    labs(x = NULL, y = "Total HTO (CLR)")
+```
