@@ -142,6 +142,33 @@ bcells_2_m2 <- bcells_2 %>%
 
 ```
 
+## Raw counts
+
+```{r, echo = FALSE, fig.width = 6, fig.height = 3}
+counts_df <- 
+    bind_rows(bcells_1_m1@meta.data %>%
+	      rownames_to_column("barcode") %>%
+	      select(barcode, pilot = orig.ident, UMIs = nCount_RNA, ADT = nCount_ADT, HTO = nCount_HTO),
+	      bcells_2_m1@meta.data %>%
+	      rownames_to_column("barcode") %>%
+	      select(barcode, pilot = orig.ident, UMIs = nCount_RNA, ADT = nCount_ADT, HTO = nCount_HTO)) %>%
+    as_tibble() %>%
+    pivot_longer(UMIs:HTO, names_to = "assay", values_to = "count")
+
+ggplot(counts_df, aes(x = pilot, y = count)) +
+    geom_violin(aes(fill = pilot), show.legend = FALSE) +
+    scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+		       breaks = scales::log_breaks(base = 10),
+		       labels = scales::comma,
+		       limits = c(10, NA)) +
+    scale_fill_npg() +
+    facet_wrap(~assay, nrow = 1) +
+    theme_bw() +
+    labs(x = NULL)
+
+```
+
+
 ## QC
 
 Here we use the miQC package to model the percentage of mitochondrial reads and number of genes, in order to identify and remove compromised cells.
@@ -163,8 +190,6 @@ qc1 <- plotFiltering(bcells_sce_1, model_1, posterior_cutoff = 0.8) +
   scale_x_continuous(limits = c(0, 1e4)) +
   scale_y_continuous(limits = c(0, 100)) +
   theme_bw() +
-  scale_x_continuous(limits = c(0, 1e4)) +
-  scale_y_continuous(limits = c(0, 100)) +
   theme(text = element_text(size = 8),
         panel.grid.minor = element_blank()) +
   labs(title = "Pilot #1")
@@ -212,17 +237,17 @@ list("Pilot1\nmargin=1" = table(bcells_1_m1_qc_demux$HTO_classification.global),
      "Pilot1\nmargin=2" = table(bcells_1_m2_qc_demux$HTO_classification.global),
      "Pilot2\nmargin=1" = table(bcells_2_m1_qc_demux$HTO_classification.global),
      "Pilot2\nmargin=2" = table(bcells_2_m2_qc_demux$HTO_classification.global)) %>%
-map_df(as.data.frame, .id = "id") %>%
-as_tibble() %>%
+    map_df(as.data.frame, .id = "id") %>%
+    as_tibble() %>%
     ggplot(aes(id, Freq, fill = Var1)) +
-    geom_bar(position = "fill", stat = "identity", color = "black", size = .25) +
-    scale_y_continuous(labels = scales::percent) +
-    scale_fill_manual(values = c("Negative" = "white",
-				 "Singlet" = "grey40",
-				 "Doublet" = "Black")) +
-    theme_minimal() +
-    theme(axis.text.x = element_text(size = 8)) +
-    labs(x = NULL, y = "Frequency", fill = NULL)
+	geom_bar(position = "fill", stat = "identity", color = "black", size = .25) +
+	scale_y_continuous(labels = scales::percent) +
+	scale_fill_manual(values = c("Negative" = "white",
+				     "Singlet" = "grey40",
+				     "Doublet" = "Black")) +
+	theme_bw() +
+	theme(axis.text.x = element_text(size = 8)) +
+	labs(x = NULL, y = "Frequency", fill = NULL)
 
 ```
 
@@ -267,3 +292,5 @@ ggplot(hto_dat, aes(HTO_classification.global, value, fill = HTO_classification.
     theme_bw() +
     labs(x = NULL, y = "Total HTO (CLR)")
 ```
+
+
