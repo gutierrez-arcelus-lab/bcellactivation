@@ -13,23 +13,20 @@
 source /programs/biogrids.shrc
 export RSEM_X=1.2.25
 
+LABSHR=/lab-share/IM-Gutierrez-e2/Public/References
+
 # Genome sequence
-GENOME=$HOME/lupus/data/GRCh38.primary_assembly.genome.fa
+GENOME=${LABSHR}/Genomes/hsapiens/GRCh38/GRCh38.primary_assembly.genome.fa
 
 # Gencode annotations
-GTF=$HOME/lupus/data/gencode.v38.primary_assembly.annotation.gtf
+GTF=${LABSHR}/Annotations/hsapiens/gencode.v38.primary_assembly.annotation.gtf
 
 # Results
-OUT=$HOME/lupus/data/gencode
-
-# Temporarily unzip because rsem does not take zipped files
-zcat $GENOME.gz > $GENOME
-zcat $GTF.gz > $GTF
+OUT=${LABSHR}/Annotations/hsapiens/gencode.v38.primary_assembly
 
 # Run rsem to make our transcript fasta;
 # given the genome sequence and annotations
 rsem-prepare-reference --gtf $GTF $GENOME $OUT
 
 # Remove unnecessary output files
-rm $GENOME $GTF
 rm $OUT.grp $OUT.ti $OUT.chrlist $OUT.seq $OUT.idx.fa $OUT.n2g.idx.fa
