@@ -25,3 +25,7 @@ Demultiplex cells based on HTO
 ![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 ![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->

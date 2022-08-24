@@ -148,12 +148,12 @@ bcells_2_m2 <- bcells_2 %>%
 counts_df <- 
     bind_rows(bcells_1_m1@meta.data %>%
 	      rownames_to_column("barcode") %>%
-	      select(barcode, pilot = orig.ident, UMIs = nCount_RNA, ADT = nCount_ADT, HTO = nCount_HTO),
+	      select(barcode, pilot = orig.ident, RNA = nCount_RNA, ADT = nCount_ADT, HTO = nCount_HTO),
 	      bcells_2_m1@meta.data %>%
 	      rownames_to_column("barcode") %>%
-	      select(barcode, pilot = orig.ident, UMIs = nCount_RNA, ADT = nCount_ADT, HTO = nCount_HTO)) %>%
+	      select(barcode, pilot = orig.ident, RNA = nCount_RNA, ADT = nCount_ADT, HTO = nCount_HTO)) %>%
     as_tibble() %>%
-    pivot_longer(UMIs:HTO, names_to = "assay", values_to = "count")
+    pivot_longer(RNA:HTO, names_to = "assay", values_to = "count")
 
 ggplot(counts_df, aes(x = pilot, y = count)) +
     geom_violin(aes(fill = pilot), show.legend = FALSE) +
@@ -233,13 +233,20 @@ bcells_1_m2_qc_demux <- HTODemux(bcells_1_m2_qc, assay = "HTO", positive.quantil
 bcells_2_m1_qc_demux <- HTODemux(bcells_2_m1_qc, assay = "HTO", positive.quantile = 0.99)
 bcells_2_m2_qc_demux <- HTODemux(bcells_2_m2_qc, assay = "HTO", positive.quantile = 0.99)
 
-list("Pilot1\nmargin=1" = table(bcells_1_m1_qc_demux$HTO_classification.global),
-     "Pilot1\nmargin=2" = table(bcells_1_m2_qc_demux$HTO_classification.global),
-     "Pilot2\nmargin=1" = table(bcells_2_m1_qc_demux$HTO_classification.global),
-     "Pilot2\nmargin=2" = table(bcells_2_m2_qc_demux$HTO_classification.global)) %>%
-    map_df(as.data.frame, .id = "id") %>%
+class_df <-
+    bind_rows("Pilot1\nmargin=1" = bcells_1_m1_qc_demux@meta.data,
+	      "Pilot1\nmargin=2" = bcells_1_m2_qc_demux@meta.data,
+	      "Pilot2\nmargin=1" = bcells_2_m1_qc_demux@meta.data,
+	      "Pilot2\nmargin=2" = bcells_2_m2_qc_demux@meta.data,
+	      .id = "id") %>%
+    rownames_to_column("barcode") %>%
     as_tibble() %>%
-    ggplot(aes(id, Freq, fill = Var1)) +
+    select(id, barcode, classification = HTO_classification.global,
+	   RNA = nCount_RNA, ADT = nCount_ADT, HTO = nCount_HTO) 
+
+class_df %>%
+    count(id, classification) %>%
+    ggplot(aes(id, n, fill = classification)) +
 	geom_bar(position = "fill", stat = "identity", color = "black", size = .25) +
 	scale_y_continuous(labels = scales::percent) +
 	scale_fill_manual(values = c("Negative" = "white",
@@ -248,8 +255,54 @@ list("Pilot1\nmargin=1" = table(bcells_1_m1_qc_demux$HTO_classification.global),
 	theme_bw() +
 	theme(axis.text.x = element_text(size = 8)) +
 	labs(x = NULL, y = "Frequency", fill = NULL)
-
 ```
+
+```{r, echo=FALSE, fig.height = 3, fig.width = 6}
+class_df2 <- class_df %>%
+    select(1:3) %>%
+    separate(id, c("pilot", "margin"), sep = "\n") %>%
+    mutate(barcode = sub("\\.+\\d+$", "", barcode)) %>%
+    group_by(pilot) %>%
+    pivot_wider(names_from = margin, values_from = classification) %>%
+    ungroup() %>%
+    mutate_at(vars(3:4), ~factor(., levels = c("Negative", "Singlet", "Doublet")))
+
+class_df2 %>%
+    count(pilot, `margin=1`, `margin=2`) %>%
+    ggplot(aes(x = `margin=1`, y = `margin=2`)) +
+    geom_point(aes(fill = n, size = n),  
+	       shape = 21, alpha = .5,
+	       show.legend = FALSE) +
+    geom_text(aes(label = n)) +
+    scale_size(range = c(8, 30)) +
+    scale_fill_gradient(low = "white", high = "red") +
+    facet_wrap(~pilot) +
+    theme_bw() +
+    theme(panel.grid = element_blank())
+```
+
+
+
+```{r, echo=FALSE, fig.width=10, fig.height=3}
+class_df %>%
+    pivot_longer(RNA:HTO) %>%
+    mutate_at(vars(classification), ~factor(., levels = c("Negative", "Singlet", "Doublet"))) %>%
+    ggplot(aes(x = id, y = value)) +
+    geom_violin(aes(fill = classification)) +
+    facet_wrap(~name, scales = "free_y") +
+    scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+		       breaks = scales::log_breaks(base = 10),
+		       labels = scales::comma) +
+    scale_fill_manual(values = c("Negative" = "white",
+				 "Singlet" = "grey40",
+				 "Doublet" = "Black")) +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 6)) +
+    labs(x = NULL, y = "Count", fill = NULL)
+```
+
+
+
 
 ```{r, echo=FALSE, fig.width = 8, fig.height = 4}
 Idents(bcells_1_m1_qc_demux) <- "HTO_maxID"
