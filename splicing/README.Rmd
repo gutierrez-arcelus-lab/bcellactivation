@@ -61,34 +61,39 @@ ggplot(leaf_scharer_df, aes(deltapsi, -log10(p.adjust))) +
 ```
 
 
-## Top 30 genes for Scharer and Barnas datasets (DN cells)
+## Comparison between Scharer et al and Barnas et al 
 
-```{r, fig.height=5}
-top30_scharer <- leaf_scharer_df %>%
-  filter(!is.na(genes)) %>%
-  filter(cell_type == "DN") %>%
-  top_n(30, abs(deltapsi)) %>%
-  select(genes, deltapsi) %>%
-  arrange(-abs(deltapsi)) %>%
-  mutate(i = 1:n())
+```{r, fig.height=4, fig.width=8}
+naive_dn <- 
+    bind_rows(scharer = filter(leaf_scharer_df, cell_type %in% c("rN", "DN")),
+	      barnas = filter(leaf_barnas_df, cell_type %in% c("Naive", "DN")),
+	      .id = "dataset") %>%
+    mutate(cell_type = recode(cell_type, "rN" = "Naive"),
+	   abs_deltapsi = abs(deltapsi)) %>%
+    select(dataset, cell_type, genes, abs_deltapsi) %>%
+    separate_rows(genes, sep = ",") %>%
+    group_by(dataset, cell_type, genes) %>%
+    slice(which.max(abs_deltapsi)) %>%
+    ungroup() %>%
+    pivot_wider(names_from = dataset, values_from = abs_deltapsi) %>%
+    mutate_at(vars(barnas:scharer), ~replace_na(., 0)) %>%
+    filter(!is.na(genes))
 
-top30_barnas <- leaf_barnas_df %>%
-  filter(!is.na(genes)) %>%
-  top_n(30, abs(deltapsi)) %>%
-  select(genes, deltapsi) %>%
-  arrange(-abs(deltapsi)) %>%
-  mutate(i = 1:n())
+labs_naivedn <- naive_dn %>%
+    group_by(cell_type) %>%
+    filter(barnas >= quantile(barnas, 0.995) |
+           scharer >= quantile(scharer, 0.995) |
+	   barnas * scharer >= quantile(barnas * scharer, 0.995)) %>%
+    ungroup() %>%
+    mutate(gene_label = str_trunc(genes, 10),
+           gene_label = replace_na(gene_label, "N/A"))
 
-top30_df <- bind_rows("Scharer" = top30_scharer, "Barnas" = top30_barnas, .id = "dataset")
-
-ggplot(top30_df, aes(dataset, i)) +
-  geom_point(aes(color = deltapsi), size = 3) +
-  scale_color_gradient2(guide = guide_colorbar(barwidth = .5)) +
-  geom_text(aes(label = genes), nudge_x = .05, hjust = 0, size = 3) +
-  scale_y_reverse() +
-  theme_bw() +
-  theme(panel.grid = element_blank()) +
-  labs(y = NULL, x = NULL)
+ggplot(naive_dn, aes(x = scharer, y = barnas)) +
+    geom_point(alpha = .5) +
+    geom_text_repel(data = labs_naivedn, aes(label = gene_label),
+                    size = 2, segment.size = .2) +
+    facet_wrap(~cell_type) +
+    theme_bw()
 ```
 
 
