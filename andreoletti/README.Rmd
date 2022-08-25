@@ -1,0 +1,184 @@
+---
+title: "Read me"
+output: github_document
+---
+
+```{r, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, dpi = 300)
+```
+
+
+```{r}
+library(tidyverse)
+library(tidytext)
+#library(uwot)
+```
+
+```{r}
+quant_df <- read_tsv("./compiled_expression.tsv") %>%
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$"))
+
+expressed_df <- quant_df %>%
+    group_by(gene_id) %>%
+    filter(mean(tpm > 1) > .5) %>%
+    ungroup()
+
+#variable_genes <- expressed_df %>%
+#    group_by(gene_id) %>%
+#    summarise(v = var(tpm)) %>%
+#    ungroup() %>%
+#    arrange(desc(v)) %>%
+#    slice(1:5000)
+
+expressed_matrix <- expressed_df %>%
+    #filter(gene_id %in% variable_genes$gene_id) %>%
+    select(-gene_name) %>%
+    pivot_wider(names_from = gene_id, values_from = tpm) %>%
+    column_to_rownames("sampleid") %>%
+    as.matrix()
+
+gene_ids <- distinct(expressed_df, gene_id, gene_name)
+```
+
+## PCA
+
+```{r}
+pca <- prcomp(expressed_matrix, center = TRUE, scale. = TRUE, rank. = 100)
+
+pc_scores <- as_tibble(pca$x, rownames = "sampleid")
+```
+
+### Variance explained
+
+```{r, fig.height=3, fig.width=6}
+tibble(PC = 1:length(pca$sdev),
+       v = pca$sdev^2) %>%
+mutate(pct = v/sum(v)) %>%
+filter(PC %in% 1:50) %>%
+    ggplot(aes(PC, pct)) +
+    geom_point() +
+    geom_line(aes(group = 1)) +
+    scale_y_continuous(labels = scales::percent,
+		       breaks = scales::pretty_breaks(6)) +
+    theme_minimal() +
+    labs(y = "% variance")
+```
+
+### Gene weights
+
+```{r, fig.height = 6}
+pc_loadings <- as_tibble(pca$rotation, rownames = "gene_id") %>%
+    pivot_longer(-gene_id, names_to = "pc") %>%
+    mutate(s = ifelse(value > 0, 1, 0)) %>%
+    group_by(pc, s) %>%
+    slice_max(n = 25, order_by = abs(value)) %>%
+    ungroup() %>%
+    left_join(gene_ids, by = "gene_id") %>%
+    select(gene_id, gene_name, pc, value)
+
+pc_loadings %>%
+    filter(pc %in% c("PC1", "PC2")) %>%
+    ggplot(aes(x = value, y = reorder_within(gene_name, by = value, within = pc))) +
+    geom_col(aes(fill = value > 0), show.legend = FALSE) +
+    scale_y_discrete(labels = function(x) str_remove(x, "_+PC\\d+$")) +
+    facet_wrap(~pc, scales = "free") +
+    theme_minimal() +
+    labs(x = "PC loadings", y = NULL)
+```
+
+### PCA colored by IFN score
+
+IFN score was computed as the cummulative scaled expression levels for 11 IFN genes listed in Davenport et al. (2018).
+
+```{r}
+ifn_genes <- c("HERC5", "IFI27", "IRF7", "ISG15", "LY6E", "MX1", 
+	       "OAS2", "OAS3", "RSAD2", "USP18", "GBP5")
+
+ifn_expression <- expressed_df %>%
+    filter(gene_name %in% ifn_genes) %>%
+    group_by(gene_id) %>%
+    mutate(stdexp = GenABEL::rntransform(tpm),
+	   stdscaled = stdexp + abs(min(stdexp))) %>%
+    ungroup()
+
+ifn_scores <- ifn_expression %>%
+    group_by(sampleid) %>%
+    summarise(ifn = sum(stdscaled)) %>%
+    ungroup()
+
+pc_scores %>%
+    select(sampleid, PC1:PC10) %>%
+    left_join(ifn_scores, by = "sampleid") %>%
+    ggplot(aes(PC1, PC2)) +
+    geom_point(aes(fill = ifn), size = 5, shape = 21) +
+    scale_fill_viridis_c(option = "magma") +
+    theme_minimal() +
+    theme(panel.grid.minor = element_blank()) +
+    labs(fill = "IFN\nscore")
+```
+
+### K-means clustering of IFN genes expression levels 
+
+```{r}
+ifn_matrix <- ifn_expression %>%
+    select(sampleid, gene_name, stdexp) %>%
+    pivot_wider(names_from = gene_name, values_from = stdexp) %>%
+    column_to_rownames("sampleid") %>%
+    as.matrix()
+
+kres <- kmeans(ifn_matrix, 2)
+
+cluster_df <- as.data.frame(kres$cluster) %>%
+    rownames_to_column("sampleid") %>%
+    select(sampleid, cluster = 2) %>%
+    as_tibble()
+
+pc_scores %>%
+    select(sampleid, PC1:PC10) %>%
+    left_join(cluster_df, by = "sampleid") %>%
+    ggplot(aes(PC1, PC2)) +
+    geom_point(aes(fill = factor(cluster)), size = 5, shape = 21) +
+    scale_fill_viridis_d() +
+    theme_minimal() +
+    theme(panel.grid.minor = element_blank()) +
+    labs(fill = "IFN\ncluster")
+```
+
+### Correlation between IFN score and PC1 
+
+```{r}
+test_df <- pc_scores %>%
+    select(sampleid, PC1) %>%
+    left_join(ifn_scores, by = "sampleid")
+
+cor.test(test_df$ifn, test_df$PC1, method = "spearman")
+```
+
+
+```{r}
+#umap_df <- pc_scores %>%
+#    column_to_rownames("sampleid") %>%
+#    select(PC1:PC3) %>%
+#    umap() %>%
+#    as_tibble(rownames = "sampleid")
+#
+#umap_df %>%
+#    left_join(ifn_scores) %>%
+#    ggplot(aes(V1, V2)) +
+#    geom_point(aes(fill = ifn), size = 5, shape = 21) +
+#    scale_fill_viridis_c(option = "magma") +
+#    theme_minimal() +
+#    theme(panel.grid.minor = element_blank()) +
+#    labs(fill = "IFN\nscore")
+#
+#umap_df %>%
+#    left_join(cluster_df) %>%
+#    ggplot(aes(V1, V2)) +
+#    geom_point(aes(fill = factor(cluster)), size = 5, shape = 21) +
+#    scale_fill_viridis_d() +
+#    theme_minimal() +
+#    theme(panel.grid.minor = element_blank()) +
+#    labs(fill = "IFN\ncluster")
+#
+#
+```
