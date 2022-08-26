@@ -186,21 +186,28 @@ bcells_sce_2 <- bcells_2_m1 %>%
 
 model_2 <- mixtureModel(bcells_sce_2)
 
-qc1 <- plotFiltering(bcells_sce_1, model_1, posterior_cutoff = 0.8) +
-  scale_x_continuous(limits = c(0, 1e4)) +
-  scale_y_continuous(limits = c(0, 100)) +
-  theme_bw() +
-  theme(text = element_text(size = 8),
-        panel.grid.minor = element_blank()) +
-  labs(title = "Pilot #1")
+qc1 <- plotFiltering(bcells_sce_1, model_1) +
+    scale_x_continuous(limits = c(0, 1e4)) +
+    scale_y_continuous(limits = c(0, 100)) +
+    theme_bw() +
+    theme(text = element_text(size = 8),
+	panel.grid.minor = element_blank()) +
+    labs(title = "Pilot #1") +
+    guides(color = guide_legend(override.aes = list(size = 2)))
 
-qc2 <- plotFiltering(bcells_sce_2, model_2, posterior_cutoff = 0.8) +
-  scale_x_continuous(limits = c(0, 1e4)) +
-  scale_y_continuous(limits = c(0, 100)) +
-  theme_bw() +
-  theme(text = element_text(size = 8),
-        panel.grid.minor = element_blank()) +
-  labs(title = "Pilot #2")
+qc2 <- plotFiltering(bcells_sce_2, model_2) +
+    scale_x_continuous(limits = c(0, 1e4)) +
+    scale_y_continuous(limits = c(0, 100)) +
+    theme_bw() +
+    theme(text = element_text(size = 8),
+	panel.grid.minor = element_blank()) +
+    labs(title = "Pilot #2") +
+    guides(color = guide_legend(override.aes = list(size = 2)))
+
+qc1$layers[[1]] <- NULL
+qc2$layers[[1]] <- NULL
+qc1 <- qc1 + geom_point(size = .25)
+qc2 <- qc1 + geom_point(size = .25)
 
 plot_grid(qc1, qc2, nrow = 2)
 ```
@@ -346,4 +353,68 @@ ggplot(hto_dat, aes(HTO_classification.global, value, fill = HTO_classification.
     labs(x = NULL, y = "Total HTO (CLR)")
 ```
 
+```{r, echo=FALSE, fig.height = 6, fig.width = 8}
+Idents(bcells_1_m1_qc_demux) <- "HTO_classification.global"
+Idents(bcells_1_m2_qc_demux) <- "HTO_classification.global"
+Idents(bcells_2_m1_qc_demux) <- "HTO_classification.global"
+Idents(bcells_2_m2_qc_demux) <- "HTO_classification.global"
+
+bcells_1_m1_noneg <- subset(bcells_1_m1_qc_demux, idents = "Negative", invert = TRUE)
+bcells_1_m2_noneg <- subset(bcells_1_m2_qc_demux, idents = "Negative", invert = TRUE)
+bcells_2_m1_noneg <- subset(bcells_2_m1_qc_demux, idents = "Negative", invert = TRUE)
+bcells_2_m2_noneg <- subset(bcells_2_m2_qc_demux, idents = "Negative", invert = TRUE)
+
+DefaultAssay(bcells_1_m1_noneg) <- "HTO"
+DefaultAssay(bcells_1_m2_noneg) <- "HTO"
+DefaultAssay(bcells_2_m1_noneg) <- "HTO"
+DefaultAssay(bcells_2_m2_noneg) <- "HTO"
+
+bcells_1_m1_noneg <- bcells_1_m1_noneg %>%
+    ScaleData(., features = rownames(.), verbose = FALSE) %>%
+    RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
+    RunUMAP(., dims = 1:length(rownames(.)), verbose = FALSE)
+
+bcells_1_m2_noneg <- bcells_1_m2_noneg %>%
+    ScaleData(., features = rownames(.), verbose = FALSE) %>%
+    RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
+    RunUMAP(., dims = 1:length(rownames(.)), verbose = FALSE)
+
+bcells_2_m1_noneg <- bcells_2_m1_noneg %>%
+    ScaleData(., features = rownames(.), verbose = FALSE) %>%
+    RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
+    RunUMAP(., dims = 1:length(rownames(.)), verbose = FALSE)
+
+bcells_2_m2_noneg <- bcells_2_m2_noneg %>%
+    ScaleData(., features = rownames(.), verbose = FALSE) %>%
+    RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
+    RunUMAP(., dims = 1:length(rownames(.)), verbose = FALSE)
+
+
+make_umap_df <- function(x) {
+    umap_df <- x@reductions$umap@cell.embeddings %>%
+	as_tibble(rownames = "barcode")
+
+    meta_df <- as_tibble(x@meta.data, rownames = "barcode") %>% 
+	select(barcode, clas = HTO_classification.global)
+
+    left_join(umap_df, meta_df, by = "barcode")
+}
+
+umap_dat <- bind_rows(
+    "Pilot 1, Margin = 1" = make_umap_df(bcells_1_m1_noneg),
+    "Pilot 1, Margin = 2" = make_umap_df(bcells_1_m2_noneg),
+    "Pilot 2, Margin = 1" = make_umap_df(bcells_2_m1_noneg),
+    "Pilot 2, Margin = 2" = make_umap_df(bcells_2_m2_noneg),
+    .id = "set"
+)
+
+ggplot(umap_dat, aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = clas), size = .5) +
+    scale_color_manual(values = c("Singlet" = "grey", "Doublet" = "black")) +
+    facet_wrap(~set, ncol = 2) +
+    theme_minimal() +
+    theme(panel.grid = element_blank()) +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(color = NULL)
+```
 
