@@ -206,8 +206,8 @@ qc2 <- plotFiltering(bcells_sce_2, model_2) +
 
 qc1$layers[[1]] <- NULL
 qc2$layers[[1]] <- NULL
-qc1 <- qc1 + geom_point(size = .25)
-qc2 <- qc1 + geom_point(size = .25)
+qc1 <- qc1 + geom_point(size = .1)
+qc2 <- qc1 + geom_point(size = .1)
 
 plot_grid(qc1, qc2, nrow = 2)
 ```
@@ -295,7 +295,7 @@ class_df %>%
     pivot_longer(RNA:HTO) %>%
     mutate_at(vars(classification), ~factor(., levels = c("Negative", "Singlet", "Doublet"))) %>%
     ggplot(aes(x = id, y = value)) +
-    geom_violin(aes(fill = classification)) +
+    geom_violin(aes(fill = classification), size = .25) +
     facet_wrap(~name, scales = "free_y") +
     scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
 		       breaks = scales::log_breaks(base = 10),
@@ -306,51 +306,6 @@ class_df %>%
     theme_bw() +
     theme(axis.text.x = element_text(size = 6)) +
     labs(x = NULL, y = "Count", fill = NULL)
-```
-
-
-
-
-```{r, echo=FALSE, fig.width = 8, fig.height = 4}
-Idents(bcells_1_m1_qc_demux) <- "HTO_maxID"
-Idents(bcells_1_m2_qc_demux) <- "HTO_maxID"
-Idents(bcells_2_m1_qc_demux) <- "HTO_maxID"
-Idents(bcells_2_m2_qc_demux) <- "HTO_maxID"
-
-make_hto_df <- function(seurat_obj) {
- 
-    hto_data <- seurat_obj@assays$HTO@data %>%
-	as.data.frame() %>%
-	rownames_to_column("stim") %>%
-	pivot_longer(-stim, names_to = "barcode") %>%
-	as_tibble() %>%
-	group_by(barcode) %>%
-	summarise(value = sum(value)) %>%
-	ungroup()
-
-    metadf <- seurat_obj@meta.data %>%
-	rownames_to_column("barcode") %>%
-	as_tibble() %>% 
-	select(barcode, HTO_classification.global)
-
-    left_join(metadf, hto_data, by = "barcode")
-}
-
-hto_dat <- 
-    list("Pilot1\nmargin=1" = bcells_1_m1_qc_demux,
-	 "Pilot1\nmargin=2" = bcells_1_m2_qc_demux,
-	 "Pilot2\nmargin=1" = bcells_2_m1_qc_demux,
-	 "Pilot2\nmargin=2" = bcells_2_m2_qc_demux) %>%
-    map_dfr(make_hto_df, .id = "id")
-
-ggplot(hto_dat, aes(HTO_classification.global, value, fill = HTO_classification.global)) +
-    geom_violin(show.legend = FALSE) +
-    scale_fill_manual(values = c("Negative" = "white",
-				 "Singlet" = "grey40",
-				 "Doublet" = "Black")) +
-    facet_wrap(~id, nrow = 1) +
-    theme_bw() +
-    labs(x = NULL, y = "Total HTO (CLR)")
 ```
 
 ```{r, echo=FALSE, fig.height = 6, fig.width = 8}
@@ -395,7 +350,7 @@ make_umap_df <- function(x) {
 	as_tibble(rownames = "barcode")
 
     meta_df <- as_tibble(x@meta.data, rownames = "barcode") %>% 
-	select(barcode, clas = HTO_classification.global)
+	select(barcode, clas = HTO_classification.global, stim = HTO_maxID)
 
     left_join(umap_df, meta_df, by = "barcode")
 }
@@ -408,13 +363,51 @@ umap_dat <- bind_rows(
     .id = "set"
 )
 
-ggplot(umap_dat, aes(UMAP_1, UMAP_2)) +
-    geom_point(aes(color = clas), size = .5) +
-    scale_color_manual(values = c("Singlet" = "grey", "Doublet" = "black")) +
-    facet_wrap(~set, ncol = 2) +
+
+pilot1_stim <- rownames(hashtags_1) %>%
+    str_sort(numeric = TRUE) %>%
+    fct_relevel("Res 0hr", after = 0) %>%
+    fct_relevel("Res 24hr", after = 1) %>%
+    levels() %>%
+    c("Doublet", .)
+
+pilot2_stim <- rownames(hashtags_2) %>%
+    str_sort(numeric = TRUE) %>%
+    fct_relevel("day0", after = 0) %>%
+    fct_relevel("IL4 24hr", after = 1) %>%
+    levels() %>%
+    c("Doublet", .)
+
+pilot1_pal <- c("black", brewer.pal(n = nrow(hashtags_1), "Paired")) %>%
+    setNames(pilot1_stim)
+
+pilot2_pal <- c("black", "grey", "slategrey", brewer.pal(n = 12, "Paired")) %>%
+    setNames(pilot2_stim)
+
+umap_p1 <- umap_dat %>%
+    filter(grepl("Pilot 1", set)) %>%
+    mutate(lab = ifelse(clas == "Doublet", clas, stim)) %>%
+    ggplot(aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = lab), size = .5) +
+    scale_color_manual(values = pilot1_pal) +
+    facet_wrap(~set, ncol = 2, scales = "free") +
     theme_minimal() +
     theme(panel.grid = element_blank()) +
     guides(color = guide_legend(override.aes = list(size = 4))) +
     labs(color = NULL)
+
+umap_p2 <- umap_dat %>%
+    filter(grepl("Pilot 2", set)) %>%
+    mutate(lab = ifelse(clas == "Doublet", clas, stim)) %>%
+    ggplot(aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = lab), size = .5) +
+    scale_color_manual(values = pilot2_pal) +
+    facet_wrap(~set, ncol = 2, scales = "free") +
+    theme_minimal() +
+    theme(panel.grid = element_blank()) +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(color = NULL)
+
+plot_grid(umap_p1, umap_p2, nrow = 2)
 ```
 
