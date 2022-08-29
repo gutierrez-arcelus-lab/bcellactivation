@@ -44,3 +44,10 @@ Differentially spliced genes with sQTL-GWAS co-localizations in Mu et al. (2021
 --------------------------------------------------------------------------------
 
 ![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
+Andreoletti et al. 
+-------------------
+
+![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->

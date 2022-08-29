@@ -191,7 +191,7 @@ qc1 <- plotFiltering(bcells_sce_1, model_1) +
     scale_y_continuous(limits = c(0, 100)) +
     theme_bw() +
     theme(text = element_text(size = 8),
-	panel.grid.minor = element_blank()) +
+	  panel.grid.minor = element_blank()) +
     labs(title = "Pilot #1") +
     guides(color = guide_legend(override.aes = list(size = 2)))
 
@@ -200,14 +200,14 @@ qc2 <- plotFiltering(bcells_sce_2, model_2) +
     scale_y_continuous(limits = c(0, 100)) +
     theme_bw() +
     theme(text = element_text(size = 8),
-	panel.grid.minor = element_blank()) +
+	  panel.grid.minor = element_blank()) +
     labs(title = "Pilot #2") +
     guides(color = guide_legend(override.aes = list(size = 2)))
 
 qc1$layers[[1]] <- NULL
 qc2$layers[[1]] <- NULL
 qc1 <- qc1 + geom_point(size = .1)
-qc2 <- qc1 + geom_point(size = .1)
+qc2 <- qc2 + geom_point(size = .1)
 
 plot_grid(qc1, qc2, nrow = 2)
 ```
@@ -234,7 +234,7 @@ bcells_2_m2_qc <- subset(bcells_2_m2, cells = cells_keep_2) %>%
 
 ## Demultiplex cells based on HTO
 
-```{r, echo = FALSE, fig.width = 4, fig.height = 3}
+```{r, echo = FALSE, fig.width = 4, fig.height = 2.5}
 bcells_1_m1_qc_demux <- HTODemux(bcells_1_m1_qc, assay = "HTO", positive.quantile = 0.99)
 bcells_1_m2_qc_demux <- HTODemux(bcells_1_m2_qc, assay = "HTO", positive.quantile = 0.99)
 bcells_2_m1_qc_demux <- HTODemux(bcells_2_m1_qc, assay = "HTO", positive.quantile = 0.99)
@@ -375,10 +375,12 @@ pilot2_stim <- rownames(hashtags_2) %>%
     str_sort(numeric = TRUE) %>%
     fct_relevel("day0", after = 0) %>%
     fct_relevel("IL4 24hr", after = 1) %>%
+    fct_relevel("TLR7 24hr", after = 4) %>%
+    fct_relevel("TLR7 72hr", after = 5) %>%
     levels() %>%
     c("Doublet", .)
 
-pilot1_pal <- c("black", brewer.pal(n = nrow(hashtags_1), "Paired")) %>%
+pilot1_pal <- c("black", "grey", "slategrey", brewer.pal(n = 4, "Paired")) %>%
     setNames(pilot1_stim)
 
 pilot2_pal <- c("black", "grey", "slategrey", brewer.pal(n = 12, "Paired")) %>%
@@ -388,11 +390,12 @@ umap_p1 <- umap_dat %>%
     filter(grepl("Pilot 1", set)) %>%
     mutate(lab = ifelse(clas == "Doublet", clas, stim)) %>%
     ggplot(aes(UMAP_1, UMAP_2)) +
-    geom_point(aes(color = lab), size = .5) +
+    geom_point(aes(color = lab), size = .25) +
     scale_color_manual(values = pilot1_pal) +
     facet_wrap(~set, ncol = 2, scales = "free") +
     theme_minimal() +
-    theme(panel.grid = element_blank()) +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8)) +
     guides(color = guide_legend(override.aes = list(size = 4))) +
     labs(color = NULL)
 
@@ -400,14 +403,18 @@ umap_p2 <- umap_dat %>%
     filter(grepl("Pilot 2", set)) %>%
     mutate(lab = ifelse(clas == "Doublet", clas, stim)) %>%
     ggplot(aes(UMAP_1, UMAP_2)) +
-    geom_point(aes(color = lab), size = .5) +
+    geom_point(aes(color = lab), size = .25) +
     scale_color_manual(values = pilot2_pal) +
     facet_wrap(~set, ncol = 2, scales = "free") +
     theme_minimal() +
-    theme(panel.grid = element_blank()) +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8),
+	  legend.key.height = unit(.75, "lines")) +
     guides(color = guide_legend(override.aes = list(size = 4))) +
     labs(color = NULL)
 
-plot_grid(umap_p1, umap_p2, nrow = 2)
+plot_grid(plot_grid(umap_p1 + theme(legend.position = "none"), get_legend(umap_p1), nrow = 1, rel_widths = c(1, .25)),
+	  plot_grid(umap_p2 + theme(legend.position = "none"), get_legend(umap_p2), nrow = 1, rel_widths = c(1, .25)),
+	  ncol = 1)
 ```
 

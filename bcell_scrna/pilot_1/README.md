@@ -47,8 +47,6 @@ Cell Ranger data
         filter(grepl("^RPS\\d+|^RPL\\d+", gene_name)) %>%
       pull(gene_id)
 
-    sctype_gs_list <- read_rds("/home/ch229163/mouse10x/sctype_gs_list.rds")
-
     data10x <- Read10X(cellranger_dir, gene.column = 1)
 
 Create the Seurat object

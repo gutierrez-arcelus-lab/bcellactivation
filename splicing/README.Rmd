@@ -14,20 +14,23 @@ library(tidytext)
 library(ggsci)
 library(ggrepel)
 library(cowplot)
-library(ggbeeswarm)
 ```
 
 
 ```{r}
-cell_types <- c("rN", "aN", "T3", "SM", "DN") %>%
+cell_types_scharer <- c("rN", "aN", "T3", "SM", "DN") %>%
     setNames(., .)
 
-leaf_scharer_df <- read_tsv("./results/scharer/leafcutter_filtered.tsv")
+leaf_scharer_df <- read_tsv("./results/scharer/leafcutter_filtered.tsv") %>%
+    mutate(cell_type = factor(cell_type, levels = cell_types_scharer))
+
 leaf_barnas_df <- read_tsv("./results/barnas/leafcutter_filtered.tsv")
 
+leaf_and_df <- read_tsv("./results/andreoletti/leafcutter_filtered.tsv")
+
 dtu_scharer <- 
-    file.path("./results/scharer", cell_types, "dtu_perGene.tsv") %>%
-    setNames(cell_types) %>%
+    file.path("./results/scharer", cell_types_scharer, "dtu_perGene.tsv") %>%
+    setNames(cell_types_scharer) %>%
     map_df(~read_tsv(.) %>%
                select(gene_name, adj_pvalue),
            .id = "cell_type")
@@ -349,5 +352,66 @@ ggplot(coloc_df, aes(dataset, genes)) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
           panel.grid = element_line(color = "grey96")) +
     labs(x = NULL, y = NULL)
+```
+
+## Andreoletti et al. 
+
+```{r, fig.height=4, fig.width=5}
+labs_and_df <- leaf_and_df %>%
+    group_by(cell_type) %>%
+    filter(abs(deltapsi) >= quantile(abs(deltapsi), 0.995) |
+           p.adjust < 0.05) %>%
+    ungroup() %>%
+    mutate(gene_label = str_trunc(genes, 10),
+           gene_label = replace_na(gene_label, "N/A"))
+
+ggplot(leaf_and_df, aes(deltapsi, -log10(p.adjust))) +
+    geom_point(aes(color = p.adjust < .05), size = 1, show.legend = FALSE) +
+    geom_text_repel(data = labs_and_df, aes(label = gene_label),
+                    size = 2, segment.size = .1) +
+    scale_color_manual(values = c("FALSE" = "grey85", "TRUE" = "grey40")) +
+    facet_wrap(~cell_type) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    labs(x = "Delta PSI", 
+         y = "-log10(p-value)",
+         color = "Significant?")
+```
+
+```{r, echo = FALSE, fig.height = 3, fig.width = 6}
+get_stats <- function(dataset) {
+    file.path("./mapping", dataset) %>%
+    list.files(pattern =  "*_Log.final.out", full.names = TRUE) %>%
+    setNames(., str_remove(basename(.), "_Log.final.out")) %>%
+    map_df(. %>%
+	   read_lines() %>%
+	   keep(~grepl("(Uniquely mapped reads %)|(% of reads mapped to multiple)|(% of reads unmapped)", .)) %>%
+	   map_chr(trimws) %>%
+	   str_split("\t") %>%
+	   map_df(~tibble(stat = .[1], pct = .[2])) %>%
+	   mutate(pct = parse_number(pct),
+		  stat = case_when(grepl("^Uniquely", stat) ~ "uniq",
+				   grepl("multiple", stat) ~ "multimap",
+				   grepl("unmapped", stat) ~ "unmapped"),
+		  stat = factor(stat, levels = c("uniq", "multimap", "unmapped"))) %>%
+	   group_by(stat) %>%
+	   summarise(pct = sum(pct)/100L) %>%
+	   ungroup(), 
+       .id = "sampleid")
+}
+
+stats_df <- bind_rows("Scharer" = get_stats("scharer"),
+		      "Barnas" = get_stats("barnas"),
+		      "Andreoletti" = get_stats("andreoletti"),
+		      .id = "dataset")
+
+ggplot(stats_df, aes(x = stat, y = pct)) +
+    geom_violin(color = "black", fill = "black", size = .25) +
+    scale_y_continuous(labels = scales::percent) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_line(color = "grey96")) +
+    labs(x = NULL, y = NULL)
+
 ```
 

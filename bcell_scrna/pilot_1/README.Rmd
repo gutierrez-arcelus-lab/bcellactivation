@@ -60,71 +60,8 @@ ribo_genes <- genes_df %>%
     filter(grepl("^RPS\\d+|^RPL\\d+", gene_name)) %>%
   pull(gene_id)
 
-sctype_gs_list <- read_rds("/home/ch229163/mouse10x/sctype_gs_list.rds")
-
 data10x <- Read10X(cellranger_dir, gene.column = 1)
 ```
-
-
-
-```{r sctype, echo=FALSE, eval=FALSE}
-# Cell type annotation
-library(HGNChelper)
-
-# load gene set preparation function
-source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/gene_sets_prepare.R")
-# load cell type annotation function
-source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/sctype_score_.R")
-
-run_sctype <- function(seurat_obj, assay, gs_list) {
-  es.max <- sctype_score(scRNAseqData = seurat_obj[[assay]]@scale.data, 
-                         scaled = TRUE, 
-                         gs = gs_list$gs_positive, 
-                         gs2 = gs_list$gs_negative)
-  
-  # merge by cluster
-  cL_resutls <-
-    do.call("rbind", lapply(unique(seurat_obj@meta.data$seurat_clusters), function(cl){
-      es.max.cl = sort(rowSums(es.max[ ,rownames(seurat_obj@meta.data[seurat_obj@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
-      head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(seurat_obj@meta.data$seurat_clusters==cl)), 10)
-    }))
-  
-  sctype_scores <- cL_resutls %>%
-    group_by(cluster) %>% 
-    top_n(n = 1, wt = scores) %>%
-    ungroup()
-  
-  # set low-confident (low ScType score) clusters to "unknown"
-  sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/4] = "Unknown"
-  
-  sctype_scores
-}
-
-
-#DB
-db_ <- "https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/ScTypeDB_full.xlsx";
-tissue <- "Immune system"
-
-# prepare gene sets
-gs_list <- gene_sets_prepare(db_, tissue)
-
-gs_df <-
-  map_df(gs_list, . %>%
-           map_dfr(as.data.frame, .id = "cell_type") %>%
-           as_tibble() %>%
-           select(cell_type, gene_name = 2),
-         .id = "list_id") %>%
-  distinct() %>%
-  filter(grepl("B cells", cell_type))
-
-gs_list_updated <- inner_join(gs_df, genes_df) %>%
-    select(list_id, cell_type, gene_id) %>%
-    split(.$list_id) %>%
-    map(~split(., .$cell_type)) %>%
-    map(~map(., "gene_id"))
-```
-
-
 
 ## Create the Seurat object
 
@@ -258,7 +195,7 @@ ggplot(hto_global_df, aes(classif, n, fill = maxid)) +
 
 ### HTO relative levels in Singlet, Doublet, and Negative droplets
 
-```{r, echo=FALSE, fig.width=10, fig.height=8}
+```{r, echo=FALSE, fig.width=10, fig.height=5}
 stim_class_df <- tibble(barcode = colnames(bcells@assays$HTO@counts),
                         stim = bcells@meta.data$HTO_maxID,
                         classif = bcells@meta.data$HTO_classification.global)
@@ -305,12 +242,7 @@ admix_doublet <- hto_plot_df %>%
   plot_admix() +
   labs(title = "Doublets")
 
-admix_negative <- hto_plot_df %>%
-  filter(classif == "Negative") %>%
-  plot_admix() +
-  labs(title = "Negatives")
-
-plot_grid(admix_singlet, admix_doublet, admix_negative, ncol = 1)
+plot_grid(admix_singlet, admix_doublet, ncol = 1)
 ```
 
 

@@ -221,6 +221,57 @@ ggplot(hto_global_df, aes(classif, n, fill = stim)) +
   labs(x = NULL, y = "Number of droplets")
 ```
 
+### HTO relative levels in Singlets and Doublets
+
+```{r, echo=FALSE, fig.width=10, fig.height=5}
+stim_class_df <- tibble(barcode = colnames(bcells_sng@assays$HTO@counts),
+                        stim = bcells_sng@meta.data$HTO_maxID,
+                        classif = bcells_sng@meta.data$HTO_classification.global)
+
+hto_df <- bcells_sng@assays$HTO@counts %>%
+    as.data.frame() %>%
+    rownames_to_column("hto") %>%
+    as_tibble() %>%
+    pivot_longer(-hto, names_to = "barcode") %>%
+    left_join(stim_class_df)
+
+hto_top <- hto_df %>%
+    group_by(barcode, classif) %>%
+    slice_max(n = 1, order_by = value) %>%
+    select(barcode, classif, top_hto = hto)
+
+hto_plot_df <- hto_df %>%
+    left_join(hto_top, by = c("barcode", "classif")) %>%
+    mutate(top_hto = factor(top_hto, levels = stims),
+	   stim = factor(stim, stims))
+
+plot_admix <- function(plot_df) {
+    ggplot(plot_df, aes(reorder_within(barcode, by = value, within = stim), value)) +
+    geom_col(aes(fill = hto), position = "fill", width = 1.01, show.legend = FALSE) +
+    scale_fill_manual(values = stims_colors) +
+    facet_grid(~stim, scales = "free_x", space = "free") +
+    theme_bw() +
+    theme(axis.text.x = element_blank(),
+	  axis.ticks.x = element_blank(),
+	  axis.line = element_blank(),
+	  panel.grid = element_blank(),
+	  panel.border = element_blank(),
+	  strip.text = element_blank()) +
+    labs(x = NULL, y = "HTO proportion", fill = "Stim")
+}
+
+admix_singlet <- hto_plot_df %>%
+    filter(classif == "Singlet") %>%
+    plot_admix() +
+    labs(title = "Singlets")
+
+admix_doublet <- hto_plot_df %>%
+    filter(classif == "Doublet") %>%
+    plot_admix() +
+    labs(title = "Doublets")
+
+plot_grid(admix_singlet, admix_doublet, ncol = 1)
+```
 
 ## Extract Singlets
 

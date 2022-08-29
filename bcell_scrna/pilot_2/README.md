@@ -169,6 +169,10 @@ Demultiplex cells based on HTO
 
 ![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
+### HTO relative levels in Singlets and Doublets
+
+![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+
 Extract Singlets
 ----------------
 
@@ -185,7 +189,7 @@ Extract Singlets
 Feature quantifications
 -----------------------
 
-![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 PCA
 ---
@@ -195,13 +199,13 @@ PCA
         ScaleData(., features = rownames(.)) %>%
         RunPCA(., features = VariableFeatures(.))
 
-![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ### Number of genes and cells per individual
 
-![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
-
 ![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 UMAP and clustering
 -------------------
@@ -211,25 +215,25 @@ UMAP and clustering
       FindNeighbors(dims = 1:20, verbose = FALSE) %>%
       FindClusters(resolution = 0.5, verbose = FALSE)
 
-![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
-
 ![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
-
-### Hashtag staining
 
 ![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
-### Total of B and non-B cells
+### Hashtag staining
 
 ![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
-### Cell type annotation with MCP counter
+### Total of B and non-B cells
 
 ![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
-### Cell cycling
+### Cell type annotation with MCP counter
 
 ![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+
+### Cell cycling
+
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 Extract B cells
 ---------------
@@ -250,7 +254,7 @@ Extract B cells
         FindNeighbors(dims = 1:20, verbose = FALSE) %>%
         FindClusters(resolution = 0.5, verbose = FALSE)
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 ### Marker genes at 24 hours in respect to day 0
 
@@ -266,7 +270,7 @@ Extract B cells
       as_tibble() %>%
       filter(p_val_adj < 0.05)
 
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
     bcr_markers <- 
         FindMarkers(bcells_filt, 
@@ -318,15 +322,15 @@ Extract B cells
       filter(p_val_adj < 0.05) %>%
       select(-p_val, -p_val_adj)
 
-![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
-
 ![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 ### Gene ontology analysis of shared and exclusive genes
 
-![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
 
 ADTs
 ----
 
-![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
