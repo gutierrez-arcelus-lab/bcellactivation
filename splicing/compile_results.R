@@ -20,7 +20,10 @@ read_leaf <- function(cell_type, dataset) {
 cell_types_scharer <- c("rN", "aN", "T3", "SM", "DN") %>%
     setNames(., .)
 
-cell_types_barnas <- "DN"
+cell_types_barnas <- c("DN", "Naive") %>%
+    setNames(., .)
+
+cell_types_and <- setNames("B", "B")
 
 leaf_scharer_df <- map2_dfr(cell_types_scharer, "scharer", read_leaf, .id = "cell_type") %>%
     group_by(cell_type, cluster) %>%
@@ -28,6 +31,11 @@ leaf_scharer_df <- map2_dfr(cell_types_scharer, "scharer", read_leaf, .id = "cel
     ungroup()
 
 leaf_barnas_df <- map2_dfr(cell_types_barnas, "barnas", read_leaf, .id = "cell_type") %>%
+    group_by(cell_type, cluster) %>%
+    slice(which.max(abs(deltapsi))) %>%
+    ungroup()
+
+leaf_and_df <- map2_dfr(cell_types_and, "andreoletti", read_leaf, .id = "cell_type") %>%
     group_by(cell_type, cluster) %>%
     slice(which.max(abs(deltapsi))) %>%
     ungroup()
@@ -46,6 +54,14 @@ leaf_barnas_signif <- leaf_barnas_df %>%
     slice(which.max(abs(deltapsi))) %>%
     ungroup()
 
+leaf_and_signif <- leaf_and_df %>%
+    filter(p.adjust < 0.05, abs(deltapsi) > 0.1, !is.na(genes)) %>%
+    separate_rows(genes, sep = ",") %>%
+    group_by(genes) %>%
+    slice(which.max(abs(deltapsi))) %>%
+    ungroup()
+
+
 
 sqtl_df <- list.files("./mu2021_data", full.names = TRUE) %>%
     setNames(., sub("\\.txt\\.gz", "", basename(.))) %>%
@@ -63,6 +79,8 @@ write_tsv(leaf_scharer_df, "./results/scharer/leafcutter_filtered.tsv")
 write_tsv(leaf_scharer_signif, "./results/scharer/leafcutter_filtered_significant.tsv")
 write_tsv(leaf_barnas_df, "./results/barnas/leafcutter_filtered.tsv")
 write_tsv(leaf_barnas_signif, "./results/barnas/leafcutter_filtered_significant.tsv")
+write_tsv(leaf_and_df, "./results/andreoletti/leafcutter_filtered.tsv")
+write_tsv(leaf_and_signif, "./results/andreoletti/leafcutter_filtered_significant.tsv")
 
 
 write_tsv(sqtl_df, "./mu2021_data/filtered_sqtl.tsv")

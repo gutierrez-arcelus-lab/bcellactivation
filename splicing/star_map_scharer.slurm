@@ -2,9 +2,9 @@
 
 #SBATCH -N 1
 #SBATCH -c 4
-#SBATCH --mem=48gb
+#SBATCH --mem=32gb
 #SBATCH --time=24:00:00
-#SBATCH -p bch-compute-pe
+#SBATCH -p bch-compute
 #SBATCH --array=1-81
 #SBATCH --job-name=STAR
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
@@ -42,10 +42,12 @@ STAR --runMode alignReads \
     --outSAMtype BAM SortedByCoordinate \
     --outFileNamePrefix ${OUT}_
 
-rm -r ${OUT}__*
-
 # Extract junctions
 BAM=${OUT}_Aligned.sortedByCoord.out.bam
 samtools index -@ $SLURM_CPUS_PER_TASK $BAM
-regtools junctions extract -s 0 -a 8 -m 50 -M 500000 $BAM -o ${OUT}.junc
+samtools view -@ $SLURM_CPUS_PER_TASK -b -h -q 255 $BAM `(seq 1 22; echo X) | sed 's/^/chr/'` > ${OUT}.uniq.bam
+samtools index -@ $SLURM_CPUS_PER_TASK ${OUT}.uniq.bam
+regtools junctions extract -s 0 -a 8 -m 50 -M 500000 ${OUT}.uniq.bam -o ${OUT}.junc
 
+rm ${OUT}.uniq.bam
+rm -r ${OUT}__*
