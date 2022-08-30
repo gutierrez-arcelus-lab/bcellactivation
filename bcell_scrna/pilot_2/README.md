@@ -22,6 +22,7 @@ Packages
     library(UpSetR)
     library(ggridges)
     library(RColorBrewer)
+    library(scico)
     library(cowplot)
 
 Cell Ranger data
