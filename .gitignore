@@ -4,10 +4,11 @@ indices
 log
 *gz
 *gz.tbi
+*.html
 *.tsv
 *.txt
 *results
-.Rhistory
+*.Rhistory
 *vcf
 *vcf.idx
 geuvadis/VCF/
