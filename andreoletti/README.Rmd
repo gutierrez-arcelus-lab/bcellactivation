@@ -12,13 +12,18 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, dpi = 300)
 library(tidyverse)
 library(tidytext)
 library(cowplot)
+library(uwot)
 ```
 
 ```{r}
 quant_df <- read_tsv("./compiled_expression.tsv") %>%
     mutate(gene_id = str_remove(gene_id, "\\.\\d+$"))
 
-expressed_df <- quant_df %>%
+# remove samples that failed QC
+samples_fail <- paste0("SRR1338", c("7661", "7662", "7686", "7657"))
+quant_qc_df <- filter(quant_df, ! sampleid %in% samples_fail)
+
+expressed_df <- quant_qc_df %>%
     group_by(gene_id) %>%
     filter(mean(tpm > 1) > .5) %>%
     ungroup()
@@ -27,8 +32,8 @@ expressed_df <- quant_df %>%
 #    group_by(gene_id) %>%
 #    summarise(v = var(tpm)) %>%
 #    ungroup() %>%
-#    arrange(desc(v)) %>%
-#    slice(1:5000)
+#    top_n(2000, v) %>%
+#    arrange(desc(v))
 
 expressed_matrix <- expressed_df %>%
     #filter(gene_id %in% variable_genes$gene_id) %>%
@@ -83,7 +88,6 @@ ifn_davenp_scores <- ifn_expression %>%
 
 ifn_df <- left_join(ifn_a_scores, ifn_g_scores) %>%
     left_join(ifn_davenp_scores)
-
 ```
 
 
@@ -99,13 +103,13 @@ pca <- prcomp(expressed_matrix, center = TRUE, scale. = TRUE, rank. = 100)
 pc_scores <- as_tibble(pca$x, rownames = "sampleid")
 ```
 
-```{r, fig.height = 4, fig.width = 8}
+```{r, fig.height = 3, fig.width = 10}
 pc1.2 <- ggplot(pc_scores, aes(PC1, PC2)) +
-    geom_point(size = 2.5) +
+    geom_point(size = 2) +
     theme_minimal()
 
 pc3.4 <- ggplot(pc_scores, aes(PC3, PC4)) +
-    geom_point(size = 2.5) +
+    geom_point(size = 2) +
     theme_minimal()
 
 plot_grid(pc1.2, pc3.4, nrow = 1)
@@ -125,6 +129,23 @@ filter(PC %in% 1:50) %>%
 		       breaks = scales::pretty_breaks(6)) +
     theme_minimal() +
     labs(y = "% variance")
+```
+
+```{r, echo=FALSE, eval=FALSE}
+set.seed(1)
+umap_df <- pc_scores %>%
+    column_to_rownames("sampleid") %>%
+    select(PC1:PC20) %>%
+    umap() %>%
+    as_tibble(rownames = "sampleid")
+
+umap_df %>%
+    left_join(ifn_df, by = "sampleid") %>%
+    ggplot(aes(V1, V2)) +
+    geom_point(aes(fill = ifn_g), size = 2, shape = 21) +
+    scale_fill_viridis_c(option = "magma",
+			 guide = guide_colorbar(barwidth = .5)) +
+    theme_bw()
 ```
 
 
