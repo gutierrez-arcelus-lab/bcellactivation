@@ -13,7 +13,7 @@
 source /programs/biogrids.shrc
 export SALMON_X=1.5.1
 
-GENCODE= /lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens/gencode.v
+GENCODE=/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens/gencode.v38.primary_assembly.transcripts.fa
 INDEX=$HOME/lupus/indices
 
 mkdir -p $INDEX
