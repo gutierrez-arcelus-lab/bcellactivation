@@ -7,17 +7,16 @@ output: github_document
 unix::rlimit_as(1e12)
 
 library(knitr)
-opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, comment = "#",
+opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, comment = "#",
                dpi = 300)
 options(width = 999)
 ```
 
-```{r, echo=FALSE}
+```{r}
 # single-cell data analysis
 library(Seurat)
 library(miQC)
 library(scater)
-library(cluster)
 
 # Data wrangling
 library(tidyverse)
@@ -33,7 +32,7 @@ library(cowplot)
 ```
 
 
-```{r, echo = FALSE}
+```{r}
 cellranger_dir_1 <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/CITEseq_pilot", 
               "SN0231064/KW9100_Maria/210726_10X_KW9100-2_bcl/cellranger-6.0.1",
@@ -66,7 +65,7 @@ data10x_1 <- Read10X(cellranger_dir_1, gene.column = 1)
 data10x_2 <- Read10X(cellranger_dir_2, gene.column = 1)
 ```
 
-```{r, echo = FALSE}
+```{r}
 antibody_1 <- data10x_1[["Antibody Capture"]] %>%
     .[!grepl("^Hashtag", rownames(.)), ] 
 
@@ -166,9 +165,17 @@ bcells_2_m2 <- bcells_2 %>%
   NormalizeData(assay = "ADT", normalization.method = "CLR", margin = 2)
 ```
 
+```{r}
+demuxlet_df <- read_tsv("./pilot_2/demuxlet/demuxlet_allsnps.best") %>%
+    select(barcode = BARCODE, best = BEST) %>%
+    extract(best, c("status", "sample"), "([^-]+)-(.+)")
+```
+
+
+
 ## Raw counts
 
-```{r, echo = FALSE, fig.width = 6, fig.height = 3}
+```{r, fig.width = 6, fig.height = 3}
 counts_df <- 
     bind_rows(bcells_1_m1@meta.data %>%
 	      rownames_to_column("barcode") %>%
@@ -191,11 +198,49 @@ ggplot(counts_df, aes(x = pilot, y = count)) +
     labs(x = NULL)
 ```
 
+## Distribution of HTO counts
+
+
+### Pilot 1
+
+```{r, fig.width = 6, fig.height = 4}
+hto_p1 <- as_tibble(t(bcells_1_m2@assays$HTO@counts), rownames = "barcode") %>%
+    pivot_longer(-barcode, names_to = "stim") %>%
+    group_by(barcode) %>%
+    mutate(hto_max = stim[which.max(value)]) %>%
+    ungroup() %>%
+    mutate_at(vars(stim, hto_max), ~factor(., levels = names(pilot1_pal)))
+
+ggplot(hto_p1, aes(x = log10(value+1))) +
+    geom_density(aes(fill = stim), size = .25, alpha = .5) +
+    scale_fill_manual(values = pilot1_pal[-1]) +
+    facet_wrap(~hto_max, nrow = 2) +
+    theme_bw() +
+    theme(panel.grid = element_blank())
+```
+
+```{r, fig.width = 8, fig.height = 6}
+hto_p2 <- as_tibble(t(bcells_2_m2@assays$HTO@counts), rownames = "barcode") %>%
+    pivot_longer(-barcode, names_to = "stim") %>%
+    group_by(barcode) %>%
+    mutate(hto_max = stim[which.max(value)]) %>%
+    ungroup() %>%
+    mutate_at(vars(stim, hto_max), ~factor(., levels = names(pilot2_pal)))
+
+ggplot(hto_p2, aes(x = log10(value+1))) +
+    geom_density(aes(fill = stim), size = .25, alpha = .5) +
+    scale_fill_manual(values = pilot2_pal[-1]) +
+    facet_wrap(~hto_max, nrow = 3) +
+    theme_bw() +
+    theme(panel.grid = element_blank())
+```
+
+
 ## QC
 
 Here we use the miQC package to model the percentage of mitochondrial reads and number of genes, in order to identify and remove compromised cells.
 
-```{r, echo=FALSE, fig.height=4, fig.width=4, echo = FALSE}
+```{r, fig.height=4, fig.width=4, echo = FALSE}
 bcells_sce_1 <- bcells_1_m1 %>%
     as.SingleCellExperiment() %>%
     addPerCellQC(subsets = list(mito = mt_genes))
@@ -234,7 +279,7 @@ qc2 <- qc2 + geom_point(size = .1)
 plot_grid(qc1, qc2, nrow = 2)
 ```
 
-```{r, echo = FALSE}
+```{r}
 bcells_sce_1_filt <- filterCells(bcells_sce_1, model_1)
 bcells_sce_2_filt <- filterCells(bcells_sce_2, model_2)
 
@@ -256,7 +301,7 @@ bcells_2_m2_qc <- subset(bcells_2_m2, cells = cells_keep_2) %>%
 
 ## Demultiplex cells based on HTO
 
-```{r, echo = FALSE, fig.width = 4, fig.height = 2.5}
+```{r, fig.width = 4, fig.height = 2.5}
 bcells_1_m1_qc_demux <- HTODemux(bcells_1_m1_qc, assay = "HTO", positive.quantile = 0.99)
 bcells_1_m2_qc_demux <- HTODemux(bcells_1_m2_qc, assay = "HTO", positive.quantile = 0.99)
 bcells_2_m1_qc_demux <- HTODemux(bcells_2_m1_qc, assay = "HTO", positive.quantile = 0.99)
@@ -286,7 +331,7 @@ class_df %>%
 	labs(x = NULL, y = "Frequency", fill = NULL)
 ```
 
-```{r, echo=FALSE, fig.height = 3, fig.width = 6}
+```{r, fig.height = 3, fig.width = 6}
 class_df2 <- class_df %>%
     select(1:3) %>%
     separate(id, c("pilot", "margin"), sep = "\n") %>%
@@ -310,7 +355,7 @@ class_df2 %>%
     theme(panel.grid = element_blank())
 ```
 
-```{r, echo=FALSE, fig.width=10, fig.height=3}
+```{r, fig.width=10, fig.height=3}
 class_df %>%
     pivot_longer(RNA:HTO) %>%
     mutate_at(vars(classification), ~factor(., levels = c("Negative", "Singlet", "Doublet"))) %>%
@@ -409,7 +454,7 @@ plot_grid(admix_1, admix_2, admix_3, admix_4, admix_5, admix_6, admix_7, admix_8
 ```
 
 
-```{r, echo=FALSE, fig.height = 6, fig.width = 8}
+```{r, fig.height = 6, fig.width = 8}
 bcells_1_m1_noneg <- subset(bcells_1_m1_qc_demux, idents = "Negative", invert = TRUE)
 bcells_1_m2_noneg <- subset(bcells_1_m2_qc_demux, idents = "Negative", invert = TRUE)
 bcells_2_m1_noneg <- subset(bcells_2_m1_qc_demux, idents = "Negative", invert = TRUE)
@@ -423,47 +468,46 @@ DefaultAssay(bcells_2_m2_noneg) <- "HTO"
 bcells_1_m1_noneg <- bcells_1_m1_noneg %>%
     ScaleData(., features = rownames(.), verbose = FALSE) %>%
     RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
-    RunUMAP(., dims = 1:length(rownames(.)), verbose = FALSE)
+    RunTSNE(., dims = 1:length(rownames(.)), perplexity = 100, verbose = FALSE)
 
 bcells_1_m2_noneg <- bcells_1_m2_noneg %>%
     ScaleData(., features = rownames(.), verbose = FALSE) %>%
     RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
-    RunUMAP(., dims = 1:length(rownames(.)), verbose = FALSE)
+    RunTSNE(., dims = 1:length(rownames(.)), perplexity = 100, verbose = FALSE)
 
 bcells_2_m1_noneg <- bcells_2_m1_noneg %>%
     ScaleData(., features = rownames(.), verbose = FALSE) %>%
     RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
-    RunUMAP(., dims = 1:length(rownames(.)), verbose = FALSE)
+    RunTSNE(., dims = 1:length(rownames(.)), perplexity = 100, verbose = FALSE)
 
 bcells_2_m2_noneg <- bcells_2_m2_noneg %>%
     ScaleData(., features = rownames(.), verbose = FALSE) %>%
     RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
-    RunUMAP(., dims = 1:length(rownames(.)), verbose = FALSE)
+    RunTSNE(., dims = 1:length(rownames(.)), perplexity = 100, verbose = FALSE)
 
-
-make_umap_df <- function(x) {
-    umap_df <- x@reductions$umap@cell.embeddings %>%
+make_tsne_df <- function(x) {
+    tsne_df <- x@reductions$tsne@cell.embeddings %>%
 	as_tibble(rownames = "barcode")
 
     meta_df <- as_tibble(x@meta.data, rownames = "barcode") %>% 
 	select(barcode, clas = HTO_classification.global, stim = HTO_maxID)
 
-    left_join(umap_df, meta_df, by = "barcode")
+    left_join(tsne_df, meta_df, by = "barcode")
 }
 
-umap_dat <- bind_rows(
-    "Pilot 1, Margin = 1" = make_umap_df(bcells_1_m1_noneg),
-    "Pilot 1, Margin = 2" = make_umap_df(bcells_1_m2_noneg),
-    "Pilot 2, Margin = 1" = make_umap_df(bcells_2_m1_noneg),
-    "Pilot 2, Margin = 2" = make_umap_df(bcells_2_m2_noneg),
+tsne_dat <- bind_rows(
+    "Pilot 1, Margin = 1" = make_tsne_df(bcells_1_m1_noneg),
+    "Pilot 1, Margin = 2" = make_tsne_df(bcells_1_m2_noneg),
+    "Pilot 2, Margin = 1" = make_tsne_df(bcells_2_m1_noneg),
+    "Pilot 2, Margin = 2" = make_tsne_df(bcells_2_m2_noneg),
     .id = "set"
 )
 
 
-umap_p1 <- umap_dat %>%
+tsne_p1 <- tsne_dat %>%
     filter(grepl("Pilot 1", set)) %>%
     mutate(lab = ifelse(clas == "Doublet", clas, stim)) %>%
-    ggplot(aes(UMAP_1, UMAP_2)) +
+    ggplot(aes(tSNE_1, tSNE_2)) +
     geom_point(aes(color = lab), size = .25) +
     scale_color_manual(values = pilot1_pal) +
     facet_wrap(~set, ncol = 2, scales = "free") +
@@ -473,10 +517,10 @@ umap_p1 <- umap_dat %>%
     guides(color = guide_legend(override.aes = list(size = 4))) +
     labs(color = NULL)
 
-umap_p2 <- umap_dat %>%
+tsne_p2 <- tsne_dat %>%
     filter(grepl("Pilot 2", set)) %>%
     mutate(lab = ifelse(clas == "Doublet", clas, stim)) %>%
-    ggplot(aes(UMAP_1, UMAP_2)) +
+    ggplot(aes(tSNE_1, tSNE_2)) +
     geom_point(aes(color = lab), size = .25) +
     scale_color_manual(values = pilot2_pal) +
     facet_wrap(~set, ncol = 2, scales = "free") +
@@ -487,153 +531,53 @@ umap_p2 <- umap_dat %>%
     guides(color = guide_legend(override.aes = list(size = 4))) +
     labs(color = NULL)
 
-plot_grid(plot_grid(umap_p1 + theme(legend.position = "none"), get_legend(umap_p1), nrow = 1, rel_widths = c(1, .25)),
-	  plot_grid(umap_p2 + theme(legend.position = "none"), get_legend(umap_p2), nrow = 1, rel_widths = c(1, .25)),
+plot_grid(plot_grid(tsne_p1 + theme(legend.position = "none"), get_legend(tsne_p1), nrow = 1, rel_widths = c(1, .25)),
+	  plot_grid(tsne_p2 + theme(legend.position = "none"), get_legend(tsne_p2), nrow = 1, rel_widths = c(1, .25)),
 	  ncol = 1)
 ```
 
-So, Seurat might be doing a good job in classifying Singlets. For exemple, see the plot below for Pilot 1, margin = 2.
+## Demultiplex by individuals' genotypes or GMM-demux in Pilot 2
 
-```{r, fig.width=6, fig.height=4}
-hto_counts <- bcells_1_m2_qc_demux@assays$HTO@counts %>%
-    as_tibble(rownames = "hto") %>%
-    pivot_longer(-hto, names_to = "barcode", values_to = "count") %>%
-    left_join(as_tibble(bcells_1_m2_qc_demux@meta.data, rownames = "barcode") %>%
-              select(barcode, hto_max = HTO_maxID, hto_class = HTO_classification.global)) %>%
-    mutate_at(vars(hto_max, hto), ~factor(., levels = pilot1_stim)) %>%
-    mutate(hto_class = factor(hto_class, levels = c("Singlet", "Doublet", "Negative"))) %>%
-    arrange(hto_class, hto, hto_max) %>%
-    mutate(logcount = ifelse(count > 0, log10(count), 0))
+```{r, fig.width = 8, fig.height = 4}
+ssd_2 <- read_lines("./pilot_2/SSD_mtx/barcodes.tsv.gz")
 
-hto_counts %>%
-    filter(hto_class == "Singlet") %>%
-    ggplot(aes(x = hto, y = logcount)) +
-    geom_violin(aes(fill = hto), size = .25) +
-    geom_quasirandom(data = filter(hto_counts, hto_class == "Negative"),
-                     method = "smiley", groupOnX = TRUE,
-                     shape = 21, fill = NA, size = .5, width = .25) +
-    scale_fill_manual(values = pilot1_pal) +
-    facet_wrap(~hto_max, nrow = 2) +
-    theme_bw() +
-    theme(axis.text.x = element_blank(),
-          axis.title.x = element_blank(),
-	  axis.ticks.x = element_blank(),
-          panel.grid.major.x = element_blank(),
-          panel.grid.minor.y = element_blank()) +
-    labs(y = "Log10(count)",
-         fill = "HTO", 
-         title = "Distribution of all HTO counts for singlets in each condition",
-         subtitle = "Points represent droplets classified as Negatives")
+tsne_genot <- tsne_dat %>%
+    filter(set == "Pilot 2, Margin = 2") %>%
+    left_join(demuxlet_df, by = "barcode") %>%
+    mutate(sample = ifelse(status == "SNG", sample, status)) %>%
+    select(set, barcode, tSNE_1, tSNE_2, sample) %>%
+    ggplot(aes(tSNE_1, tSNE_2)) +
+    geom_point(aes(color = sample), size = .25) +
+    scale_color_manual(values = c("AMB" = "salmon", "DBL" = "red", 
+				  "SAMPLE1" = "cornflowerblue", "SAMPLE2" = "midnightblue")) +
+    facet_wrap(~set) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8)) +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(color = NULL)
+
+tsne_gmm <- tsne_dat %>%
+    filter(set == "Pilot 2, Margin = 2") %>%
+    mutate(single_hto = barcode %in% ssd_2) %>% 
+    select(set, barcode, tSNE_1, tSNE_2, single_hto) %>%
+    ggplot(aes(tSNE_1, tSNE_2)) +
+    geom_point(aes(color = single_hto), size = .25, alpha = .5) +
+    facet_wrap(~set) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8)) +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(color = "Single HTO?")
+
+plot_grid(tsne_genot, tsne_gmm, nrow = 1)
+
 ```
 
 
-Let's take a look at the clustering performed by Seurat to classify cells.
 
 
-```{r, fig.width=8, fig.height= 10}
-plot_clusters <- function(seurat_obj, stim_colors) {
-    
-    DefaultAssay(seurat_obj) <- "HTO"
-    
-    seurat_obj <- seurat_obj %>%
-	ScaleData(., features = rownames(.), verbose = FALSE) %>%
-	RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE)
 
-    hto_k <- clara(t(seurat_obj@assays$HTO@data), nrow(seurat_obj) + 1, samples = 100)
-    kmeans_df <- tibble(barcode = names(hto_k$clustering),
-			cluster = hto_k$clustering)
-
-    p1 <- seurat_obj@reductions$pca@cell.embeddings %>%
-	as_tibble(rownames = "barcode") %>%
-	left_join(kmeans_df) %>%
-	ggplot(aes(PC_1, PC_2, color = factor(cluster))) +
-	geom_point(size = .75) +
-	scale_color_manual(values = pals::kelly(n = nrow(seurat_obj) + 1)) +
-	theme_bw() +
-	theme(panel.grid = element_blank()) +
-	guides(color = guide_legend(override.aes = list(size = 2))) +
-	labs(color = "Cluster")
-
-    p2 <- seurat_obj@reductions$pca@cell.embeddings %>%
-	as_tibble(rownames = "barcode") %>%
-	left_join(as_tibble(seurat_obj@meta.data, rownames = "barcode") %>%
-		  select(barcode, hto_class = HTO_classification) %>%
-		  mutate(hto_class = ifelse(grepl("_", hto_class), "Doublet", hto_class))) %>%
-	ggplot(aes(PC_1, PC_2, color = hto_class)) +
-	geom_point(size = .75) +
-	scale_color_manual(values = c(stim_colors, "Negative" = "red")) +
-	theme_bw() +
-	theme(panel.grid = element_blank()) +
-	guides(color = guide_legend(override.aes = list(size = 2))) +
-	labs(color = "HTO\nclassification")
-
-    plot_grid(p1, p2, nrow = 1)
-}
-
-plot_grid(plot_clusters(bcells_1_m1_qc_demux, pilot1_pal) +
-	  labs(title = "Pilot 1, margin = 1"),
-      plot_clusters(bcells_1_m2_qc_demux, pilot1_pal) +
-	  labs(title = "Pilot 1, margin = 2"),
-      plot_clusters(bcells_2_m1_qc_demux, pilot2_pal) +
-	  labs(title = "Pilot 2, margin = 1"),
-      plot_clusters(bcells_2_m2_qc_demux, pilot2_pal) +
-	  labs(title = "Pilot 2, margin = 2"),
-      ncol = 1)
-```
-
-
-## Alternative demultiplex algorithm
-
-- Cells with total HTO counts < 20 times the number of different hashtags = "Negatives";
-
-- Cells with a dominant hashtag (75% of total counts) = "Singlets";
-
-- Cells with a mixture = "Doublets"
-
-
-```{r}
-custom_class_pilot1 <- bcells_1_m1_qc_demux@assays$HTO@counts %>%
-    as_tibble(rownames = "hto") %>%
-    pivot_longer(-hto, names_to = "barcode", values_to = "count") %>%
-    group_by(barcode) %>%
-    mutate(pct = count/sum(count)) %>%
-    summarise(hto_class = case_when(sum(count) < n_distinct(hto) * 20 ~ "Negative",
-				    sum(count) >= n_distinct(hto) * 20 & any(pct >= .75) ~ "Singlet",
-				    sum(count) >= n_distinct(hto) * 20 & !any(pct >= .75) ~ "Doublet",
-				    TRUE ~ NA_character_)) %>%
-    ungroup()
-
-custom_class_pilot2 <- bcells_2_m1_qc_demux@assays$HTO@counts %>%
-    as_tibble(rownames = "hto") %>%
-    pivot_longer(-hto, names_to = "barcode", values_to = "count") %>%
-    group_by(barcode) %>%
-    mutate(pct = count/sum(count)) %>%
-    summarise(hto_class = case_when(sum(count) < n_distinct(hto) * 20 ~ "Negative",
-				    sum(count) >= n_distinct(hto) * 20 & any(pct >= .75) ~ "Singlet",
-				    sum(count) >= n_distinct(hto) * 20 & !any(pct >= .75) ~ "Doublet",
-				    TRUE ~ NA_character_)) %>%
-    ungroup()
-```
-
-```{r, eval=FALSE}
-write_tsv(custom_class_pilot1, "./custom_class_pilot1.tsv")
-write_tsv(custom_class_pilot2, "./custom_class_pilot2.tsv")
-```
-
-
-Comparison of the number of cells after QC:
-
-```{r}
-list(
-     "Pilot 1, margin=1" = count(meta_1_1, hto_class),
-     "Pilot 1, margin=2" = count(meta_1_2, hto_class),
-     "Pilot 2, margin=1" = count(meta_2_1, hto_class),
-     "Pilot 2, margin=2" = count(meta_2_2, hto_class),
-     "Pilot 1, Alternative" = count(custom_class_pilot1, hto_class),
-     "Pilot 2, Alternative" = count(custom_class_pilot2, hto_class)) %>%
-bind_rows(.id = "set") %>%
-pivot_wider(names_from = hto_class, values_from = n)
-```
 
 
 
