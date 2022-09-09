@@ -171,8 +171,8 @@ demuxlet_df <- read_tsv("./pilot_2/demuxlet/demuxlet_allsnps.best") %>%
     select(barcode = BARCODE, best = BEST) %>%
     extract(best, c("status", "sample"), "([^-]+)-(.+)")
 
-scrublet_1 <- read_tsv("./scrublet_calls_pilot1.tsv")
-scrublet_2 <- read_tsv("./scrublet_calls_pilot2.tsv")
+scrublet_1 <- read_tsv("./scrublet_calls_pilot1_QC.tsv")
+scrublet_2 <- read_tsv("./scrublet_calls_pilot2_QC.tsv")
 
 names(scrublet_1)[1] <- "barcode"
 names(scrublet_2)[1] <- "barcode"
