@@ -32,6 +32,7 @@ library(cowplot)
 ```
 
 
+
 ```{r}
 cellranger_dir_1 <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/CITEseq_pilot", 
@@ -169,6 +170,13 @@ bcells_2_m2 <- bcells_2 %>%
 demuxlet_df <- read_tsv("./pilot_2/demuxlet/demuxlet_allsnps.best") %>%
     select(barcode = BARCODE, best = BEST) %>%
     extract(best, c("status", "sample"), "([^-]+)-(.+)")
+
+scrublet_1 <- read_tsv("./scrublet_calls_pilot1.tsv")
+scrublet_2 <- read_tsv("./scrublet_calls_pilot2.tsv")
+
+names(scrublet_1)[1] <- "barcode"
+names(scrublet_2)[1] <- "barcode"
+
 ```
 
 
@@ -203,7 +211,7 @@ ggplot(counts_df, aes(x = pilot, y = count)) +
 
 ### Pilot 1
 
-```{r, fig.width = 6, fig.height = 4}
+```{r, fig.width = 6, fig.height = 3}
 hto_p1 <- as_tibble(t(bcells_1_m2@assays$HTO@counts), rownames = "barcode") %>%
     pivot_longer(-barcode, names_to = "stim") %>%
     group_by(barcode) %>%
@@ -219,7 +227,7 @@ ggplot(hto_p1, aes(x = log10(value+1))) +
     theme(panel.grid = element_blank())
 ```
 
-```{r, fig.width = 8, fig.height = 6}
+```{r, fig.width = 8, fig.height = 4}
 hto_p2 <- as_tibble(t(bcells_2_m2@assays$HTO@counts), rownames = "barcode") %>%
     pivot_longer(-barcode, names_to = "stim") %>%
     group_by(barcode) %>%
@@ -298,6 +306,8 @@ bcells_2_m1_qc <- subset(bcells_2_m1, cells = cells_keep_2) %>%
 bcells_2_m2_qc <- subset(bcells_2_m2, cells = cells_keep_2) %>%
   subset(nFeature_RNA > 500)
 ```
+
+
 
 ## Demultiplex cells based on HTO
 
@@ -451,8 +461,6 @@ admix_8 <- plot_admix(subset(bcells_2_m2_qc_demux, idents = "Doublet"), pilot2_p
 
 plot_grid(admix_1, admix_2, admix_3, admix_4, admix_5, admix_6, admix_7, admix_8, ncol = 1)
 
-```
-
 
 ```{r, fig.height = 6, fig.width = 8}
 bcells_1_m1_noneg <- subset(bcells_1_m1_qc_demux, idents = "Negative", invert = TRUE)
@@ -538,7 +546,7 @@ plot_grid(plot_grid(tsne_p1 + theme(legend.position = "none"), get_legend(tsne_p
 
 ## Demultiplex by individuals' genotypes or GMM-demux in Pilot 2
 
-```{r, fig.width = 8, fig.height = 4}
+```{r, fig.width = 8, fig.height = 3}
 ssd_2 <- read_lines("./pilot_2/SSD_mtx/barcodes.tsv.gz")
 
 tsne_genot <- tsne_dat %>%
@@ -574,10 +582,37 @@ plot_grid(tsne_genot, tsne_gmm, nrow = 1)
 
 ```
 
+## Scrublet
 
+```{r, fig.width = 8, fig.height = 3}
+tsne_scr1 <- tsne_dat %>%
+    filter(set == "Pilot 1, Margin = 2") %>%
+    left_join(scrublet_1, by = "barcode") %>%
+    select(set, barcode, tSNE_1, tSNE_2, doublet_score) %>%
+    ggplot(aes(tSNE_1, tSNE_2)) +
+    geom_point(aes(color = doublet_score), size = .25) +
+    scale_color_gradient(low = "white", high = "tomato4",
+			 guide = guide_colorbar(barwidth = .5)) +
+    facet_wrap(~set) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8)) +
+    labs(color = "Doublet\n score")
 
+tsne_scr2 <- tsne_dat %>%
+    filter(set == "Pilot 2, Margin = 2") %>%
+    left_join(scrublet_2, by = "barcode") %>%
+    select(set, barcode, tSNE_1, tSNE_2, doublet_score) %>%
+    ggplot(aes(tSNE_1, tSNE_2)) +
+    geom_point(aes(color = doublet_score), size = .25) +
+    scale_color_gradient(low = "white", high = "tomato4",
+			 guide = guide_colorbar(barwidth = .5)) +
+    facet_wrap(~set) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8)) +
+    labs(color = "Doublet\n score")
 
+plot_grid(tsne_scr1, tsne_scr2, nrow = 1)
 
-
-
-
+```

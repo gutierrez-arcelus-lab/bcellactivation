@@ -53,10 +53,14 @@ a profile resembling singlets in respect to the mixture of HTO, as we
 can see in the plots below.
 
 ![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
-
 ![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 Demultiplex by individuals’ genotypes or GMM-demux in Pilot 2
 -------------------------------------------------------------
 
 ![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+Scrublet
+--------
+
+![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
