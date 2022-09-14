@@ -9,7 +9,6 @@ unix::rlimit_as(1e12)
 library(knitr)
 opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, comment = "#",
                dpi = 300)
-options(width = 999)
 ```
 
 ```{r}
@@ -27,10 +26,126 @@ library(ggridges)
 library(RColorBrewer)
 library(scico)
 library(ggsci)
-library(ggbeeswarm)
 library(cowplot)
 ```
 
+```{r, functions}
+plot_admix <- function(seurat_obj, stim_colors) {
+
+    meta_df <- seurat_obj@meta.data %>%
+	as_tibble(rownames = "barcode") %>%
+	select(barcode, stim = HTO_maxID, hto_class = HTO_classification.global)
+  
+    hto_df <- seurat_obj@assays$HTO@counts %>%
+	as_tibble(rownames = "hto") %>%
+	pivot_longer(-hto, names_to = "barcode") %>%
+	left_join(meta_df)
+
+    hto_top <- hto_df %>%
+	group_by(barcode, hto_class) %>%
+	slice_max(n = 1, order_by = value) %>%
+	select(barcode, hto_class, top_hto = hto) %>%
+	ungroup()
+
+    hto_plot_df <- hto_df %>%
+	left_join(hto_top, by = c("barcode", "hto_class")) %>%
+	mutate_at(vars(top_hto, stim), ~factor(., levels = names(stim_colors)))
+
+    ggplot(hto_plot_df, aes(reorder_within(barcode, by = value, within = stim), value)) +
+    geom_col(aes(fill = hto), position = "fill", width = 1.01, show.legend = FALSE) +
+    scale_fill_manual(values = stim_colors) +
+    facet_grid(~stim, scales = "free_x", space = "free") +
+    theme_bw() +
+    theme(axis.text.x = element_blank(),
+	  axis.ticks.x = element_blank(),
+	  axis.line = element_blank(),
+	  panel.grid = element_blank(),
+	  panel.border = element_blank(),
+	  strip.text = element_blank()) +
+    labs(x = NULL, y = NULL)
+}
+
+
+
+make_tsne_df <- function(x) {
+    tsne_df <- x@reductions$tsne@cell.embeddings %>%
+	as_tibble(rownames = "barcode")
+
+    meta_df <- as_tibble(x@meta.data, rownames = "barcode") %>% 
+	select(barcode, clas = HTO_classification.global, stim = HTO_maxID)
+
+    left_join(tsne_df, meta_df, by = "barcode")
+}
+
+run_demultiplex <- function(seurat_obj, top_second_r = 0.2) {
+
+    hto_df <- t(seurat_obj@assays$HTO@counts) %>%
+	as_tibble(rownames = "barcode") %>%
+	pivot_longer(-barcode, names_to = "stim") %>%
+	group_by(barcode) %>%
+	mutate(hto_max = stim[which.max(value)]) %>%
+	ungroup()
+
+    th_df <- distinct(hto_df, stim) %>%
+	mutate(th = map_dbl(stim, function(HTOID) {
+	    top_df <- hto_df %>%
+		filter(hto_max == HTOID, stim == hto_max) %>%
+		mutate(value = log10(value+1)) %>%
+		select(barcode, value)
+
+	    noise_df <- hto_df %>%
+		filter(hto_max == HTOID, stim != hto_max) %>%
+		mutate(value = log10(value+1)) %>%
+		select(barcode, stim, value)
+	      
+	    dens_top <- 
+		density(top_df$value, 
+			from = min(top_df$value, noise_df$value), 
+			to = max(top_df$value, noise_df$value)) %>%
+		.[c("x", "y")] %>% 
+		as_tibble()
+
+	    noise_df %>%
+		split(.$stim) %>%
+		map("value") %>%
+		map(~density(., from = min(top_df$value, .), to = max(top_df$value, .))[c("x", "y")]) %>%
+		map(as_tibble) %>%
+		map(~mutate(., its = dens_top$y > y)) %>%
+		map(~filter(., row_number() > which.max(y), its == TRUE)) %>%
+		map(~slice(., 1)) %>%
+		map_dbl("x") %>%
+		max()
+	    }))
+
+    classification_df <- hto_df %>%
+	left_join(th_df, by = c("hto_max" = "stim")) %>%
+	mutate(logvalue = log10(value+1)) %>%
+	group_by(barcode) %>%
+	mutate(scd_pct = sort(value, decreasing = TRUE)[2]/sort(value, decreasing = TRUE)[1],
+	       top_pct = value[stim == hto_max]/sum(value)) %>%
+	filter(stim == hto_max) %>%
+	mutate(cls = case_when(logvalue < th ~ "Negative",
+			       logvalue >= th & scd_pct <= top_second_r ~ "Singlet",
+			       logvalue >= th & scd_pct > top_second_r ~ "Doublet",
+			       TRUE ~ NA_character_)) %>%
+	ungroup() %>% 
+	select(barcode, hto_max, cls)
+
+    meta_df <- seurat_obj@meta.data %>%
+	as_tibble(rownames = "barcode") %>%
+	select(barcode) %>%
+	left_join(classification_df, by = "barcode") %>%
+	select(barcode, HTO_maxID = hto_max, HTO_classification.global = cls) %>%
+	column_to_rownames("barcode") %>%
+	as.data.frame()
+
+    seurat_obj <- AddMetaData(seurat_obj, metadata = meta_df)
+
+    seurat_obj
+}
+
+
+```
 
 
 ```{r}
@@ -243,7 +358,6 @@ ggplot(hto_p2, aes(x = log10(value+1))) +
     theme(panel.grid = element_blank())
 ```
 
-
 ## QC
 
 Here we use the miQC package to model the percentage of mitochondrial reads and number of genes, in order to identify and remove compromised cells.
@@ -394,41 +508,6 @@ Regarding the last point, doublets don't necessarily have higher counts, but a m
 However, a lot of droplets being classified as doublets in pilot 2 have a profile resembling singlets in respect to the mixture of HTO, as we can see in the plots below.
 
 ```{r, fig.width = 10, fig.height = 20}
-plot_admix <- function(seurat_obj, stim_colors) {
-
-    meta_df <- seurat_obj@meta.data %>%
-	as_tibble(rownames = "barcode") %>%
-	select(barcode, stim = HTO_maxID, hto_class = HTO_classification.global)
-  
-    hto_df <- seurat_obj@assays$HTO@counts %>%
-	as_tibble(rownames = "hto") %>%
-	pivot_longer(-hto, names_to = "barcode") %>%
-	left_join(meta_df)
-
-    hto_top <- hto_df %>%
-	group_by(barcode, hto_class) %>%
-	slice_max(n = 1, order_by = value) %>%
-	select(barcode, hto_class, top_hto = hto) %>%
-	ungroup()
-
-    hto_plot_df <- hto_df %>%
-	left_join(hto_top, by = c("barcode", "hto_class")) %>%
-	mutate_at(vars(top_hto, stim), ~factor(., levels = names(stim_colors)))
-
-    ggplot(hto_plot_df, aes(reorder_within(barcode, by = value, within = stim), value)) +
-    geom_col(aes(fill = hto), position = "fill", width = 1.01, show.legend = FALSE) +
-    scale_fill_manual(values = stim_colors) +
-    facet_grid(~stim, scales = "free_x", space = "free") +
-    theme_bw() +
-    theme(axis.text.x = element_blank(),
-	  axis.ticks.x = element_blank(),
-	  axis.line = element_blank(),
-	  panel.grid = element_blank(),
-	  panel.border = element_blank(),
-	  strip.text = element_blank()) +
-    labs(x = NULL, y = NULL)
-}
-
 Idents(bcells_1_m1_qc_demux) <- "HTO_classification.global"
 Idents(bcells_1_m2_qc_demux) <- "HTO_classification.global"
 Idents(bcells_2_m1_qc_demux) <- "HTO_classification.global"
@@ -493,15 +572,6 @@ bcells_2_m2_noneg <- bcells_2_m2_noneg %>%
     RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
     RunTSNE(., dims = 1:length(rownames(.)), perplexity = 100, verbose = FALSE)
 
-make_tsne_df <- function(x) {
-    tsne_df <- x@reductions$tsne@cell.embeddings %>%
-	as_tibble(rownames = "barcode")
-
-    meta_df <- as_tibble(x@meta.data, rownames = "barcode") %>% 
-	select(barcode, clas = HTO_classification.global, stim = HTO_maxID)
-
-    left_join(tsne_df, meta_df, by = "barcode")
-}
 
 tsne_dat <- bind_rows(
     "Pilot 1, Margin = 1" = make_tsne_df(bcells_1_m1_noneg),
@@ -616,3 +686,173 @@ tsne_scr2 <- tsne_dat %>%
 plot_grid(tsne_scr1, tsne_scr2, nrow = 1)
 
 ```
+
+## Custom demultiplexing based on HTO
+
+```{r}
+bcells_1_qc_customdx <-  run_demultiplex(bcells_1_m1_qc)
+bcells_2_qc_customdx <-  run_demultiplex(bcells_2_m1_qc)
+```
+
+## Number of cells for custom vs Seurat demultiplex method
+
+```{r, fig.width = 8, fig.height = 2.5}
+class_tmp_1 <- class_df %>% 
+    count(id, classification) %>%
+    separate(id, c("pilot", "id"), sep = "\n") %>%
+    mutate(id = paste0("Seurat-", id))
+
+class_tmp_2 <- 
+    bind_rows("Pilot1-custom" = count(bcells_1_qc_customdx@meta.data, HTO_classification.global),
+	      "Pilot2-custom" = count(bcells_2_qc_customdx@meta.data, HTO_classification.global),
+	      .id = "id") %>%
+    separate(id, c("pilot", "id"), sep = "-") %>%
+    select(pilot, id, classification = 3, n)
+
+bind_rows(class_tmp_1, class_tmp_2) %>%
+    mutate(classification = factor(classification, levels = c("Negative", "Singlet", "Doublet"))) %>%
+    ggplot(aes(id, n, fill = classification)) +
+    geom_col(position = "dodge", color = "black") +
+    scale_fill_manual(values = c("Negative" = "white", "Singlet" = "grey", "Doublet" = "black")) +
+    scale_x_discrete(labels = function(x) sub("-", "\n", x)) +
+    facet_wrap(~pilot, nrow = 1) +
+    theme_minimal() +
+    theme(panel.grid.major.x = element_blank()) +
+    labs(x = NULL, y = "Number of droplets")
+```
+
+## Profile of Singlets and Doublets in custom demultiplexing
+
+```{r, fig.width = 10, fig.height = 10}
+Idents(bcells_1_qc_customdx) <- "HTO_classification.global"
+Idents(bcells_2_qc_customdx) <- "HTO_classification.global"
+
+admix_custom_1 <- plot_admix(subset(bcells_1_qc_customdx, idents = "Singlet"), pilot1_pal) +
+    labs(title = "Pilot 1: Singlets")
+
+admix_custom_2 <- plot_admix(subset(bcells_1_qc_customdx, idents = "Doublet"), pilot1_pal) +
+    labs(title = "Pilot 1: Doublets")
+
+admix_custom_3 <- plot_admix(subset(bcells_2_qc_customdx, idents = "Singlet"), pilot2_pal) +
+    labs(title = "Pilot 2: Singlets")
+
+admix_custom_4 <- plot_admix(subset(bcells_2_qc_customdx, idents = "Doublet"), pilot2_pal) +
+    labs(title = "Pilot 2: Doublets")
+
+plot_grid(admix_custom_1, admix_custom_2, admix_custom_3, admix_custom_4, ncol = 1)
+```
+
+```{r}
+bcells_1_qc_customdx_noneg <- subset(bcells_1_qc_customdx, idents = "Negative", invert = TRUE)
+bcells_2_qc_customdx_noneg <- subset(bcells_2_qc_customdx, idents = "Negative", invert = TRUE)
+
+DefaultAssay(bcells_1_qc_customdx_noneg) <- "HTO"
+DefaultAssay(bcells_2_qc_customdx_noneg) <- "HTO"
+
+bcells_1_qc_customdx_noneg <- bcells_1_qc_customdx_noneg %>%
+    ScaleData(., features = rownames(.), verbose = FALSE) %>%
+    RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
+    RunTSNE(., dims = 1:length(rownames(.)), perplexity = 100, verbose = FALSE)
+
+bcells_2_qc_customdx_noneg <- bcells_2_qc_customdx_noneg %>%
+    ScaleData(., features = rownames(.), verbose = FALSE) %>%
+    RunPCA(., features = rownames(.), approx = FALSE, verbose = FALSE) %>%
+    RunTSNE(., dims = 1:length(rownames(.)), perplexity = 100, verbose = FALSE)
+
+tsne_dat_custom <- bind_rows(
+    "Pilot 1" = make_tsne_df(bcells_1_qc_customdx_noneg),
+    "Pilot 2" = make_tsne_df(bcells_2_qc_customdx_noneg),
+    .id = "set"
+)
+```
+
+```{r, fig.width = 8, fig.height = 3}
+tsne_custom_p1 <- tsne_dat_custom %>%
+    filter(set == "Pilot 1") %>%
+    mutate(lab = ifelse(clas == "Doublet", clas, stim)) %>%
+    ggplot(aes(tSNE_1, tSNE_2)) +
+    geom_point(aes(color = lab), size = .25) +
+    scale_color_manual(values = pilot1_pal) +
+    facet_wrap(~set, ncol = 2, scales = "free") +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8)) +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(color = NULL)
+
+tsne_custom_p2 <- tsne_dat_custom %>%
+    filter(grepl("Pilot 2", set)) %>%
+    mutate(lab = ifelse(clas == "Doublet", clas, stim)) %>%
+    ggplot(aes(tSNE_1, tSNE_2)) +
+    geom_point(aes(color = lab), size = .25) +
+    scale_color_manual(values = pilot2_pal) +
+    facet_wrap(~set, ncol = 2, scales = "free") +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8),
+	  legend.key.height = unit(.75, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(color = NULL)
+
+plot_grid(plot_grid(tsne_custom_p1 + theme(legend.position = "none"), 
+		    get_legend(tsne_custom_p1), nrow = 1, rel_widths = c(1, .25)),
+	  plot_grid(tsne_custom_p2 + theme(legend.position = "none"), 
+		    get_legend(tsne_custom_p2), nrow = 1, rel_widths = c(1, .25)),
+	  nrow = 1)
+```
+
+```{r, fig.width = 8, fig.height = 3}
+tsne_custom_scr1 <- tsne_dat_custom %>%
+    filter(set == "Pilot 1") %>%
+    left_join(scrublet_1, by = "barcode") %>%
+    select(set, barcode, tSNE_1, tSNE_2, doublet_score) %>%
+    ggplot(aes(tSNE_1, tSNE_2)) +
+    geom_point(aes(color = doublet_score), size = .25) +
+    scale_color_gradient(low = "white", high = "tomato4",
+			 guide = guide_colorbar(barwidth = .5)) +
+    facet_wrap(~set) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8)) +
+    labs(color = "Doublet\n score")
+
+tsne_custom_scr2 <- tsne_dat_custom %>%
+    filter(set == "Pilot 2") %>%
+    left_join(scrublet_2, by = "barcode") %>%
+    select(set, barcode, tSNE_1, tSNE_2, doublet_score) %>%
+    ggplot(aes(tSNE_1, tSNE_2)) +
+    geom_point(aes(color = doublet_score), size = .25) +
+    scale_color_gradient(low = "white", high = "tomato4",
+			 guide = guide_colorbar(barwidth = .5)) +
+    facet_wrap(~set) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8)) +
+    labs(color = "Doublet\n score")
+
+plot_grid(tsne_custom_scr1, tsne_custom_scr2, nrow = 1)
+
+```
+
+```{r, include=FALSE, eval=FALSE}
+finalcells_1 <- bcells_1_qc_customdx@meta.data %>%
+    as_tibble(rownames = "barcode") %>%
+    left_join(scrublet_1, by = "barcode") %>%
+    filter(HTO_classification.global == "Singlet", predicted_doublets == FALSE) %>%
+    pull(barcode)
+
+finalcells_2 <- bcells_2_qc_customdx@meta.data %>%
+    as_tibble(rownames = "barcode") %>%
+    left_join(scrublet_2, by = "barcode") %>%
+    left_join(demuxlet_df, by = "barcode") %>%
+    filter(HTO_classification.global == "Singlet", predicted_doublets == FALSE, status == "SNG") %>%
+    pull(barcode)
+
+bcells_1_final <- subset(bcells_1_qc_customdx, cells = finalcells_1)
+bcells_2_final <- subset(bcells_2_qc_customdx, cells = finalcells_2)
+
+saveRDS(bcells_1_final, file = "data/pilot1.Rdata")
+saveRDS(bcells_2_final, file = "data/pilot2.Rdata")
+```
+
+

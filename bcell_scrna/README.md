@@ -64,3 +64,20 @@ Scrublet
 --------
 
 ![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+
+Custom demultiplexing based on HTO
+----------------------------------
+
+Number of cells for custom vs Seurat demultiplex method
+-------------------------------------------------------
+
+![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+
+Profile of Singlets and Doublets in custom demultiplexing
+---------------------------------------------------------
+
+![](README_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
