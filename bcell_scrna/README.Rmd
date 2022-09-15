@@ -110,9 +110,16 @@ run_demultiplex <- function(seurat_obj, top_second_r = 0.2) {
 		map("value") %>%
 		map(~density(., from = min(top_df$value, .), to = max(top_df$value, .))[c("x", "y")]) %>%
 		map(as_tibble) %>%
-		map(~mutate(., its = dens_top$y > y)) %>%
-		map(~filter(., row_number() > which.max(y), its == TRUE)) %>%
-		map(~slice(., 1)) %>%
+		map(~mutate(., 
+			    d = c(0, diff(y)), 
+			    its = y > dens_top$y)) %>%
+		map(rowid_to_column) %>%
+		map(~filter(., row_number() > which.max(y))) %>%
+		map(~filter(., d < 0)) %>%
+		map(~mutate(., i = c(0, diff(rowid)))) %>%
+		map(~filter(., rowid < min(rowid[which(i>1)]))) %>%
+		map(~filter(., its == TRUE)) %>%
+		map(~filter(., x == max(x))) %>%
 		map_dbl("x") %>%
 		max()
 	    }))
@@ -834,7 +841,7 @@ plot_grid(tsne_custom_scr1, tsne_custom_scr2, nrow = 1)
 
 ```
 
-```{r, include=FALSE, eval=FALSE}
+```{r, include=FALSE, eval=TRUE}
 finalcells_1 <- bcells_1_qc_customdx@meta.data %>%
     as_tibble(rownames = "barcode") %>%
     left_join(scrublet_1, by = "barcode") %>%
