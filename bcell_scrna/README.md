@@ -24,7 +24,7 @@ cells.
 
 ![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
-    # Removing 4100 out of 13946 cells.
+    # Removing 4104 out of 13946 cells.
 
     # Removing 723 out of 10562 cells.
 
