@@ -461,7 +461,7 @@ umap_filt_df <- as.data.frame(bcells_filt@reductions$umap@cell.embeddings) %>%
 
 pca_filt_plot <- ggplot(pca_emb_filt, aes(PC_1, PC_2)) +
   geom_point(aes(fill = stim), size = 1.5, shape = 21, color = "grey80") +
-  scale_fill_manual(values = stims_colors) +
+  scale_fill_manual(values = stims_colors[stims_24]) +
   theme_minimal() +
   theme(panel.grid = element_blank(),
         legend.key.height = unit(.75, "lines")) +
@@ -469,7 +469,7 @@ pca_filt_plot <- ggplot(pca_emb_filt, aes(PC_1, PC_2)) +
 
 umap_filt_plot <- ggplot(umap_filt_df, aes(UMAP_1, UMAP_2, fill = stim)) +
     geom_point(size = 1.5, shape = 21, color = "grey80") +
-    scale_fill_manual(values = stims_colors) +
+    scale_fill_manual(values = stims_colors[stims_24]) +
     theme_minimal() +
     theme(panel.grid = element_blank(),
           axis.line = element_blank(),
@@ -629,7 +629,7 @@ markers_df <-
 ```
 
 
-```{r, echo = FALSE, fig.height=5}
+```{r, echo = FALSE, fig.height=5, fig.width=6.5}
 top30_markers <- markers_df %>%
   group_by(stim) %>%
   top_n(30, avg_log2FC) %>%
@@ -665,13 +665,13 @@ markers_plot_df <- top30_markers %>%
 ggplot(markers_plot_df, aes(x = condition, y = reorder_within(gene_name, avg_log2FC, stim))) +
     geom_point(aes(size = perc, fill = value), 
                color = "black", shape = 21) +
-    scale_size(range = c(0.1, 4), labels = scales::percent) +
+    scale_size(range = c(0.1, 3.5), labels = scales::percent) +
     scale_fill_viridis_c(option = "magma") +
     scale_y_discrete(labels = function(x) sub("^([^_]+).*$", "\\1", x)) +
     facet_wrap(~stim, scales = "free", nrow = 1) +
     theme_bw() +
     theme(axis.line = element_blank(),
-          axis.text = element_text(size = 8),
+          axis.text = element_text(size = 7),
           panel.grid = element_line(color = "grey96"),
           panel.border = element_blank(),
           legend.position = "top") +
