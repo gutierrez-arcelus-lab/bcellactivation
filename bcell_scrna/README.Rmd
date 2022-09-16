@@ -83,66 +83,34 @@ run_demultiplex <- function(seurat_obj, top_second_r = 0.2) {
 	as_tibble(rownames = "barcode") %>%
 	pivot_longer(-barcode, names_to = "stim") %>%
 	group_by(barcode) %>%
-	mutate(hto_max = stim[which.max(value)]) %>%
+	mutate(hto_max = stim[which.max(value)],
+	       prop = value/sum(value)) %>%
 	ungroup()
 
-    th_df <- distinct(hto_df, stim) %>%
-	mutate(th = map_dbl(stim, function(HTOID) {
-	    top_df <- hto_df %>%
-		filter(hto_max == HTOID, stim == hto_max) %>%
-		mutate(value = log10(value+1)) %>%
-		select(barcode, value)
-
-	    noise_df <- hto_df %>%
-		filter(hto_max == HTOID, stim != hto_max) %>%
-		mutate(value = log10(value+1)) %>%
-		select(barcode, stim, value)
-	      
-	    dens_top <- 
-		density(top_df$value, 
-			from = min(top_df$value, noise_df$value), 
-			to = max(top_df$value, noise_df$value)) %>%
-		.[c("x", "y")] %>% 
-		as_tibble()
-
-	    noise_df %>%
-		split(.$stim) %>%
-		map("value") %>%
-		map(~density(., from = min(top_df$value, .), to = max(top_df$value, .))[c("x", "y")]) %>%
-		map(as_tibble) %>%
-		map(~mutate(., 
-			    d = c(0, diff(y)), 
-			    its = y > dens_top$y)) %>%
-		map(rowid_to_column) %>%
-		map(~filter(., row_number() > which.max(y))) %>%
-		map(~filter(., d < 0)) %>%
-		map(~mutate(., i = c(0, diff(rowid)))) %>%
-		map(~filter(., rowid < min(rowid[which(i>1)]))) %>%
-		map(~filter(., its == TRUE)) %>%
-		map(~filter(., x == max(x))) %>%
-		map_dbl("x") %>%
-		max()
-	    }))
-
-    classification_df <- hto_df %>%
-	left_join(th_df, by = c("hto_max" = "stim")) %>%
-	mutate(logvalue = log10(value+1)) %>%
-	group_by(barcode) %>%
-	mutate(scd_pct = sort(value, decreasing = TRUE)[2]/sort(value, decreasing = TRUE)[1],
-	       top_pct = value[stim == hto_max]/sum(value)) %>%
+    top_df <- hto_df %>%
 	filter(stim == hto_max) %>%
-	mutate(cls = case_when(logvalue < th ~ "Negative",
-			       logvalue >= th & scd_pct <= top_second_r ~ "Singlet",
-			       logvalue >= th & scd_pct > top_second_r ~ "Doublet",
-			       TRUE ~ NA_character_)) %>%
-	ungroup() %>% 
-	select(barcode, hto_max, cls)
+	mutate(value = log10(value+1)) %>%
+	group_by(stim) %>%
+	mutate(z = (value - mean(value)) / sd(value)) %>%
+	ungroup() %>%
+	mutate(positive = between(z, -3L, 3L)) %>%
+	select(barcode, stim, positive, prop)
+   
+    classification_df <- hto_df %>%
+	filter(stim != hto_max) %>%
+	select(barcode, stim, prop) %>%
+	left_join(top_df, ., by = "barcode") %>%
+	group_by(barcode, stim = stim.x) %>%
+	summarise(status = case_when(all(positive == TRUE) & all(prop.y < top_second_r) ~ "Singlet",
+				     all(positive == TRUE) & any(prop.y >= top_second_r) ~ "Doublet",
+				     all(positive == FALSE) ~ "Negative")) %>%
+	ungroup()
 
     meta_df <- seurat_obj@meta.data %>%
 	as_tibble(rownames = "barcode") %>%
 	select(barcode) %>%
 	left_join(classification_df, by = "barcode") %>%
-	select(barcode, HTO_maxID = hto_max, HTO_classification.global = cls) %>%
+	select(barcode, HTO_maxID = stim, HTO_classification.global = status) %>%
 	column_to_rownames("barcode") %>%
 	as.data.frame()
 
@@ -861,5 +829,4 @@ bcells_2_final <- subset(bcells_2_qc_customdx, cells = finalcells_2)
 saveRDS(bcells_1_final, file = "data/pilot1.Rdata")
 saveRDS(bcells_2_final, file = "data/pilot2.Rdata")
 ```
-
 

@@ -69,11 +69,11 @@ UMAP and clustering
 
 ![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
-### Total of B and non-B cells
+### Cell type annotation with MCP counter
 
 ![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
-### Cell type annotation with MCP counter
+### Total of B and non-B cells
 
 ![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
@@ -84,10 +84,10 @@ UMAP and clustering
 Extract B cells
 ---------------
 
-    stims_24 <- c("day0", "BCR 24hr", "TLR7 24hr", "BCR+TLR7 24hr", "DN2 24hr")
+    stims_24 <- c("day0", "IL4 24hr", "BCR 24hr", "TLR7 24hr", "BCR+TLR7 24hr", "DN2 24hr")
 
-    filtered_bcells <- umap_df %>%
-      filter(stim %in% stims_24, UMAP_1 < 0)
+    filtered_bcells <- cell_type_class %>%
+      filter(stim %in% stims_24, cell_type_cluster == "B cell")
 
     bcells_filt <- bcells_singlet %>%
       subset(cells = filtered_bcells$barcode)
@@ -117,6 +117,16 @@ Extract B cells
       filter(p_val_adj < 0.05)
 
 ![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+
+    il4_markers <- 
+        FindMarkers(bcells_filt, 
+                       ident.1 = "IL4 24hr",
+                       ident.2 = "day0",
+                       only.pos = TRUE,
+                       min.pct = 0.1,
+                       logfc.threshold = 0.5) %>%
+        rownames_to_column("gene") %>%
+        as_tibble()
 
     bcr_markers <- 
         FindMarkers(bcells_filt, 
@@ -160,7 +170,8 @@ Extract B cells
         as_tibble()
 
     markers_df <-
-      bind_rows("BCR" = bcr_markers,
+      bind_rows("IL4" = il4_markers,
+            "BCR" = bcr_markers,
                 "TLR7" = tlr_markers,
                 "BCR+TLR7" = bcrtlr_markers,
                 "DN2" = dn2_markers,
