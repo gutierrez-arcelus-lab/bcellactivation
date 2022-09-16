@@ -683,7 +683,7 @@ ggplot(markers_plot_df, aes(x = condition, y = reorder_within(gene_name, avg_log
 ```
 
 
-```{r, echo=FALSE, fig.width=6, fig.height=4}
+```{r, echo=FALSE, fig.width=6.5, fig.height=5}
 input_list <- markers_df %>%
   split(.$stim) %>%
   map("gene")
