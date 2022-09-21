@@ -81,3 +81,8 @@ Profile of Singlets and Doublets in custom demultiplexing
 ![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
 ![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+
+Integrate Pilot 1 and Pilot 2
+-----------------------------
+
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->

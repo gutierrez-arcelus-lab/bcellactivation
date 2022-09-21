@@ -811,6 +811,9 @@ plot_grid(tsne_custom_scr1, tsne_custom_scr2, nrow = 1)
 
 ```
 
+
+## Integrate Pilot 1 and Pilot 2
+
 ```{r, include=FALSE, eval=TRUE}
 finalcells_1 <- bcells_1_qc_customdx@meta.data %>%
     as_tibble(rownames = "barcode") %>%
@@ -830,5 +833,107 @@ bcells_2_final <- subset(bcells_2_qc_customdx, cells = finalcells_2)
 
 saveRDS(bcells_1_final, file = "data/pilot1.Rdata")
 saveRDS(bcells_2_final, file = "data/pilot2.Rdata")
+```
+
+```{r}
+pilot1 <- bcells_1_final
+pilot2 <- bcells_2_final
+
+# Integrate data
+pilot_list <- list("pilot 1" = pilot1, "pilot 2" = pilot2)
+  
+features <- SelectIntegrationFeatures(object.list = pilot_list)
+
+pilot_anchors <- FindIntegrationAnchors(object.list = pilot_list,
+					anchor.features = features,
+                                        reduction = "cca",
+                                        k.anchor = 20,
+                                        dims = 1:20)
+
+pilots_integrated <- 
+    IntegrateData(anchorset = pilot_anchors, 
+		  dims = 1:20,
+		  features.to.integrate = rownames(pilot1@assays$RNA@counts))
+
+pilots_integrated <- pilots_integrated %>%
+    ScaleData(., features = rownames(.), verbose = FALSE) %>%
+    RunPCA(., features = VariableFeatures(.), verbose = FALSE) %>%
+    RunUMAP(dims = 1:20, verbose = FALSE, seed.use = 1) %>%
+    FindNeighbors(dims = 1:20, verbose = FALSE) %>%
+    FindClusters(resolution = 0.5, verbose = FALSE)
+
+meta_df <- pilots_integrated@meta.data %>% 
+    as_tibble(rownames = "barcode") %>%
+    select(barcode, pilot = orig.ident, stim = HTO_maxID) %>%
+    mutate(stim = ifelse(pilot == "pilot2" &
+			 ! stim %in% c("day0", "IL4 24hr", "DN2 24hr", "DN2 72hr"),
+			 sub("\\s", "+IL4 ", stim),
+			 stim),
+	   stim = ifelse(pilot == "pilot1" & stim == "Res 0hr", "day0", stim))
+
+umap_int <- pilots_integrated@reductions$umap@cell.embeddings %>%
+    as_tibble(rownames = "barcode") %>%
+    left_join(meta_df)
+
+stims_order <-
+    c("day0", "Res 24hr", "IL4 24hr", 
+      "sCD40L+IL4 24hr", "sCD40L+IL4 72hr",
+      "BCR 24hr", "BCR+IL4 24hr", "BCR 72hr", "BCR+IL4 72hr",
+      "TLR7 24hr", "TLR7+IL4 24hr", "TLR7 72hr", "TLR7+IL4 72hr",
+      "BCR+TLR7+IL4 24hr", "BCR+TLR4+IL4 72hr",
+      "CpG+IL4 24hr", "CpG+IL4 72hr",
+      "DN2 24hr", "DN2 72hr")
+
+stim_colors <- c(brewer.pal(n = 4, "Greys")[-1],
+		 "goldenrod1", "goldenrod4",
+		 brewer.pal(n = 5, "Blues")[-1],
+		 brewer.pal(n = 5, "Greens")[-1],
+		 "lightpink", "lightpink3",
+		 "mediumpurple", "mediumpurple4",
+		 "tomato1", "tomato3")
+
+names(stim_colors) <- stims_order
+```
+
+```{r, fig.width = 8, fig.height = 8}
+p1_plot1 <- ggplot(filter(umap_int, pilot == "pilot1"),
+		   aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = stim), size = .5, show.legend = FALSE) +
+    scale_color_manual(values = stim_colors) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.text = element_blank(),
+	  axis.title = element_blank(),
+	  plot.title = element_text(hjust = .5))  +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(title = "Pilot 1")
+
+p2_plot2 <- ggplot(filter(umap_int, pilot == "pilot2"),
+		   aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = stim), size = .5, show.legend = FALSE) +
+    scale_color_manual(values = stim_colors) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.text = element_blank(),
+	  axis.title = element_blank(),
+	  plot.title = element_text(hjust = .5))  +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(title = "Pilot 2")
+
+int_plot <- ggplot(umap_int, aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = stim), size = .5) +
+    scale_color_manual(values = stim_colors) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.text = element_blank(),
+	  axis.title = element_blank(),
+	  legend.key.height = unit(.1, "cm"),
+	  plot.title = element_text(hjust = .5))  +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(title = "Pilots 1 + 2")
+
+plot_grid(plot_grid(p1_plot1, p2_plot2, nrow = 1),
+	  int_plot,
+	  ncol = 1, rel_heights = c(.6, 1))
 ```
 
