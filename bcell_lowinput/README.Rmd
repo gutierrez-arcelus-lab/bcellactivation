@@ -1,0 +1,46 @@
+---
+title: "Low-input RNA-seq"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+unix::rlimit_as(1e12)
+library(knitr)
+opts_chunk$set(echo = FALSE, 
+	       message = FALSE, 
+	       warning = FALSE, 
+	       comment = "#",
+               dpi = 300)
+```
+
+## QC
+
+### Total of unique and duplicate reads in each fastq file
+
+```{r}
+include_graphics("./plots/seqdepth.png")
+```
+
+### Total number of reads per individual and condition
+
+```{r}
+include_graphics("./plots/seqdepth_conditions.png")
+```
+
+```{r}
+include_graphics("./plots/seqdepth_stimvstime.png")
+```
+
+### Plates colored by total number of reads
+
+```{r}
+include_graphics("./plots/seqdepth_plate.png")
+```
+
+
+## PCA
+
+```{r}
+include_graphics("./plots/pca.png")
+```
+
