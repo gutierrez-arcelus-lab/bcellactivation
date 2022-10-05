@@ -249,4 +249,4 @@ fastqc_df %>%
 	      plot.background = element_rect(fill = "white", color = "white")) +
     labs(fill = "Total\nreads")
 
-
+ggsave("seqdepth_plate.png"
