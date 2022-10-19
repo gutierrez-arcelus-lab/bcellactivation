@@ -17,6 +17,77 @@ library(cowplot)
 ```
 
 
+```{r, fig.width=10, fig.height=3}
+mapping_stats <- 
+    c("/lab-share/IM-Gutierrez-e2/Public/External_datasets/Andreoletti/qc/multiqc_data/multiqc_fastqc.txt",
+      "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Barnas/qc/multiqc_data/multiqc_fastqc.txt",
+      "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Scharer/RNAseq/qc/multiqc_data/multiqc_fastqc.txt") %>%
+    setNames(c("Andreoletti", "Barnas", "Scharer")) %>%
+    map_df(~read_tsv(.) %>%
+               select(Sample, "Total Sequences", total_deduplicated_percentage) %>%
+               mutate(unique = `Total Sequences` * total_deduplicated_percentage / 100,
+                      duplicate = `Total Sequences` - unique) %>%
+               select(Sample, unique, duplicate), .id = "dataset") %>%
+    pivot_longer(unique:duplicate, names_to = "type", values_to = "n")
+    
+mapping_stats %>%
+    group_by(dataset, Sample) %>%
+    mutate(total = sum(n)) %>%
+    ungroup() %>%
+    arrange(dataset, total) %>%
+    mutate(Sample = fct_inorder(Sample)) %>%
+    ggplot(aes(Sample, n, fill = type)) +
+    geom_col(width = 1.05) +
+    scale_y_continuous(labels = scales::comma) +
+    scale_fill_manual(values = c("unique" = "lightskyblue", "duplicate" = "grey30")) +
+    facet_grid(.~dataset, space = "free", scales = "free_x") +
+    theme_bw() +
+    theme(axis.text.x = element_blank(),
+          panel.grid = element_blank()) +
+    labs(x = NULL, y = "Total reads", fill = NULL)
+
+
+
+```
+
+
+```{r, fig.height = 3, fig.width = 6}
+get_stats <- function(dataset) {
+    file.path("../read_mapping", dataset, "mapping") %>%
+    list.files(pattern =  "*_Log.final.out", full.names = TRUE) %>%
+    setNames(., str_remove(basename(.), "_Log.final.out")) %>%
+    map_df(. %>%
+	   read_lines() %>%
+	   keep(~grepl("(Uniquely mapped reads %)|(% of reads mapped to multiple)|(% of reads unmapped)", .)) %>%
+	   map_chr(trimws) %>%
+	   str_split("\t") %>%
+	   map_df(~tibble(stat = .[1], pct = .[2])) %>%
+	   mutate(pct = parse_number(pct),
+	          stat = case_when(grepl("^Uniquely", stat) ~ "uniq",
+	                           grepl("multiple", stat) ~ "multi",
+	                           grepl("unmapped", stat) ~ "unmap"),
+	          stat = factor(stat, levels = c("uniq", "multi", "unmap"))) %>%
+	   group_by(stat) %>%
+	   summarise(pct = sum(pct)/100L) %>%
+	   ungroup(), 
+       .id = "sampleid")
+}
+
+stats_df <- bind_rows("Scharer" = get_stats("scharer"),
+                      "Barnas" = get_stats("barnas"),
+                      "Andreoletti" = get_stats("andreoletti"),
+                      .id = "dataset")
+
+ggplot(stats_df, aes(x = stat, y = pct)) +
+    geom_violin(color = "black", fill = "black", size = .25) +
+    scale_y_continuous(labels = scales::percent) +
+    facet_wrap(~dataset) +
+    theme_bw() +
+    theme(panel.grid = element_line(color = "grey96")) +
+    labs(x = NULL, y = NULL)
+```
+
+
 ```{r}
 cell_types_scharer <- c("rN", "aN", "T3", "SM", "DN") %>%
     setNames(., .)
@@ -376,42 +447,5 @@ ggplot(leaf_and_df, aes(deltapsi, -log10(p.adjust))) +
     labs(x = "Delta PSI", 
          y = "-log10(p-value)",
          color = "Significant?")
-```
-
-```{r, echo = FALSE, fig.height = 3, fig.width = 6}
-get_stats <- function(dataset) {
-    file.path("./mapping", dataset) %>%
-    list.files(pattern =  "*_Log.final.out", full.names = TRUE) %>%
-    setNames(., str_remove(basename(.), "_Log.final.out")) %>%
-    map_df(. %>%
-	   read_lines() %>%
-	   keep(~grepl("(Uniquely mapped reads %)|(% of reads mapped to multiple)|(% of reads unmapped)", .)) %>%
-	   map_chr(trimws) %>%
-	   str_split("\t") %>%
-	   map_df(~tibble(stat = .[1], pct = .[2])) %>%
-	   mutate(pct = parse_number(pct),
-		  stat = case_when(grepl("^Uniquely", stat) ~ "uniq",
-				   grepl("multiple", stat) ~ "multimap",
-				   grepl("unmapped", stat) ~ "unmapped"),
-		  stat = factor(stat, levels = c("uniq", "multimap", "unmapped"))) %>%
-	   group_by(stat) %>%
-	   summarise(pct = sum(pct)/100L) %>%
-	   ungroup(), 
-       .id = "sampleid")
-}
-
-stats_df <- bind_rows("Scharer" = get_stats("scharer"),
-		      "Barnas" = get_stats("barnas"),
-		      "Andreoletti" = get_stats("andreoletti"),
-		      .id = "dataset")
-
-ggplot(stats_df, aes(x = stat, y = pct)) +
-    geom_violin(color = "black", fill = "black", size = .25) +
-    scale_y_continuous(labels = scales::percent) +
-    facet_wrap(~dataset) +
-    theme_bw() +
-    theme(panel.grid = element_line(color = "grey96")) +
-    labs(x = NULL, y = NULL)
-
 ```
 

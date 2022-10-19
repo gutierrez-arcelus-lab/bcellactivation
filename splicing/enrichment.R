@@ -49,3 +49,25 @@ go_res <- leaf_genes %>%
     map_df(run_enrichment, .id = "cell_type")
 
 write_tsv(go_res, "./results/scharer/enrichment.tsv")
+
+
+# Andreoletti
+leaf_and_df <- "./results/andreoletti/leafcutter_filtered_significant.tsv" %>%
+    read_tsv() %>%
+    group_by(cell_type, cluster) %>%
+    slice(which.min(p.adjust)) %>%
+    ungroup() %>%
+    filter(abs(deltapsi) >= 0.1)
+
+leaf_genes_and <- leaf_and_df %>%
+    select(cell_type, genes) %>%
+    filter(!is.na(genes)) %>%
+    separate_rows(genes, sep = ",") %>%
+    distinct(cell_type, genes) %>%
+    left_join(gene_id_df, by = c("genes" = "gene_name"))
+
+go_res_and <- leaf_genes_and %>%
+    split(.$cell_type) %>%
+    map("gene_id") %>%
+    map_df(run_enrichment, .id = "cell_type")
+

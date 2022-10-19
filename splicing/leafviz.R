@@ -1,11 +1,12 @@
 library(leafviz)
 
-leafviz("./results/rN/rN.Rdata")
-leafviz("./results/aN/aN.Rdata")
-leafviz("./results/SM/SM.Rdata")
-leafviz("./results/T3/T3.Rdata")
-leafviz("./results/DN/DN.Rdata")
+options(browser="firefox")
+
+leafviz("./results/scharer/rN/rN.Rdata")
+leafviz("./results/scharer/aN/aN.Rdata")
+leafviz("./results/scharer/SM/SM.Rdata")
+leafviz("./results/scharer/T3/T3.Rdata")
+leafviz("./results/scharer/DN/DN.Rdata")
 
 leafviz("./results/barnas/DN/DN.Rdata")
-
 leafviz("./results/andreoletti/B/B.Rdata")
