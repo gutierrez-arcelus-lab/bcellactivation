@@ -26,19 +26,28 @@ cell_types_barnas <- c("DN", "Naive") %>%
 cell_types_and <- setNames("B", "B")
 
 leaf_scharer_df <- map2_dfr(cell_types_scharer, "scharer", read_leaf, .id = "cell_type") %>%
+    mutate(absdpsi = abs(deltapsi)) %>%
     group_by(cell_type, cluster) %>%
-    slice(which.max(abs(deltapsi))) %>%
-    ungroup()
+    slice(which.max(absdpsi)) %>%
+    ungroup() %>%
+    select(cell_type, cluster, p, p.adjust, genes, logef, absdpsi) %>%
+    arrange(cell_type, p)
 
 leaf_barnas_df <- map2_dfr(cell_types_barnas, "barnas", read_leaf, .id = "cell_type") %>%
+    mutate(absdpsi = abs(deltapsi)) %>%
     group_by(cell_type, cluster) %>%
-    slice(which.max(abs(deltapsi))) %>%
-    ungroup()
+    slice(which.max(absdpsi)) %>%
+    ungroup() %>%
+    select(cell_type, cluster, p, p.adjust, genes, logef, absdpsi) %>%
+    arrange(cell_type, p)
 
 leaf_and_df <- map2_dfr(cell_types_and, "andreoletti", read_leaf, .id = "cell_type") %>%
+    mutate(absdpsi = abs(deltapsi)) %>%
     group_by(cell_type, cluster) %>%
-    slice(which.max(abs(deltapsi))) %>%
-    ungroup()
+    slice(which.max(absdpsi)) %>%
+    ungroup() %>%
+    select(cell_type, cluster, p, p.adjust, genes, logef, absdpsi) %>%
+    arrange(cell_type, p)
 
 leaf_scharer_signif <- leaf_scharer_df %>%
     filter(p.adjust < 0.05, abs(deltapsi) > 0.1, !is.na(genes)) %>%

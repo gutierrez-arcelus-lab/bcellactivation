@@ -17,6 +17,9 @@ library(cowplot)
 ```
 
 
+## QC
+
+
 ```{r, fig.width=10, fig.height=3}
 mapping_stats <- 
     c("/lab-share/IM-Gutierrez-e2/Public/External_datasets/Andreoletti/qc/multiqc_data/multiqc_fastqc.txt",
@@ -29,7 +32,7 @@ mapping_stats <-
                       duplicate = `Total Sequences` - unique) %>%
                select(Sample, unique, duplicate), .id = "dataset") %>%
     pivot_longer(unique:duplicate, names_to = "type", values_to = "n")
-    
+
 mapping_stats %>%
     group_by(dataset, Sample) %>%
     mutate(total = sum(n)) %>%
@@ -43,11 +46,9 @@ mapping_stats %>%
     facet_grid(.~dataset, space = "free", scales = "free_x") +
     theme_bw() +
     theme(axis.text.x = element_blank(),
-          panel.grid = element_blank()) +
+          panel.grid = element_blank(),
+          legend.position = "botto") +
     labs(x = NULL, y = "Total reads", fill = NULL)
-
-
-
 ```
 
 
@@ -97,67 +98,88 @@ leaf_scharer_df <- read_tsv("./results/scharer/leafcutter_filtered.tsv") %>%
 
 leaf_barnas_df <- read_tsv("./results/barnas/leafcutter_filtered.tsv")
 
-leaf_and_df <- read_tsv("./results/andreoletti/leafcutter_filtered.tsv")
+leaf_andre_df <- read_tsv("./results/andreoletti/leafcutter_filtered.tsv")
 
-dtu_scharer <- 
-    file.path("./results/scharer", cell_types_scharer, "dtu_perGene.tsv") %>%
-    setNames(cell_types_scharer) %>%
-    map_df(~read_tsv(.) %>%
-               select(gene_name, adj_pvalue),
-           .id = "cell_type")
+#dtu_scharer <- 
+#    file.path("./results/scharer", cell_types_scharer, "dtu_perGene.tsv") %>%
+#    setNames(cell_types_scharer) %>%
+#    map_df(~read_tsv(.) %>%
+#               select(gene_name, adj_pvalue),
+#           .id = "cell_type")
+```
+
+## Number of splicing junctions passing the thresholds and tested by leafcutter
+
+```{r}
+bind_rows("Scharer" = leaf_scharer_df,
+          "Barnas" = leaf_barnas_df,
+          "Andreoletti" = leaf_andre_df,
+          .id = "dataset") %>%
+    count(dataset, cell_type) %>%
+    ggplot(aes(cell_type, n)) +
+    geom_col() +
+    facet_grid(.~dataset, scales = "free_x", space = "free")
 ```
 
 
-## Differential splicing events between patients and controls in Scharer dataset
 
-```{r, fig.height=8, fig.width=8}
-labs_df <- leaf_scharer_df %>%
-    filter(p.adjust < 0.05) %>%
-    group_by(cell_type) %>%
-    filter(abs(deltapsi) >= quantile(abs(deltapsi), 0.98) |
-           -log10(p.adjust) >= quantile(-log10(p.adjust), 0.98)) %>%
-    ungroup() %>%
-    mutate(gene_label = str_trunc(genes, 10),
-           gene_label = replace_na(gene_label, "N/A"))
+## Differential splicing events between patients and controls
 
-ggplot(leaf_scharer_df, aes(deltapsi, -log10(p.adjust))) +
-    geom_point(aes(color = p.adjust < .05), size = .7, show.legend = FALSE) +
-    geom_text_repel(data = labs_df, aes(label = gene_label),
-                    size = 2, segment.size = .2) +
-    scale_color_manual(values = c("FALSE" = "grey85", "TRUE" = "grey60")) +
-    scale_x_continuous(limits = c(-.75, .75)) +
-    facet_wrap(~cell_type, ncol = 2, scales = "free") +
-    theme_bw() +
-    theme(panel.grid = element_blank()) +
-    labs(x = "Delta PSI", 
-         y = "-log10(p-value)",
-         color = "Significant?")
+```{r, fig.height=6, fig.width=10}
+plot_volcano <- function(df) {
+
+    dat <- unite(df, lab, c(dataset, cell_type), sep = " ")
+
+    labs_df <- dat %>%
+        filter(!is.na(genes)) %>%
+        group_by(lab) %>%
+        top_n(20, absdpsi * -log10(p.adjust)) %>%
+        ungroup() %>%
+        mutate(gene_label = str_trunc(genes, 10))
+
+
+    ggplot(dat, aes(absdpsi, -log10(p))) +
+        geom_point(aes(color = p.adjust < .05), size = .7, show.legend = FALSE) +
+        geom_text_repel(data = labs_df, aes(label = gene_label),
+                        size = 2, segment.size = .1, min.segment.length = 0) +
+        scale_color_manual(values = c("FALSE" = "grey85", "TRUE" = "tomato3")) +
+        facet_wrap(~lab, ncol = 3) +
+        theme_bw() +
+        theme(
+            panel.grid.minor = element_blank(),
+            panel.grid.major = element_line(color = "grey96")
+        ) +
+        labs(x = "Absolute Delta PSI", y = "-log10(p-value)")
+}
+
+bind_rows("Scharer" = leaf_scharer_df,
+          "Barnas" = leaf_barnas_df,
+          "Andreoletti" = leaf_andre_df,
+          .id = "dataset") %>%
+    plot_volcano()
 ```
+
 
 
 ## Comparison between Scharer et al and Barnas et al 
 
-```{r, fig.height=4, fig.width=8}
+```{r, fig.height=3, fig.width=6}
 naive_dn <- 
-    bind_rows(scharer = filter(leaf_scharer_df, cell_type %in% c("rN", "DN")),
-	      barnas = filter(leaf_barnas_df, cell_type %in% c("Naive", "DN")),
-	      .id = "dataset") %>%
-    mutate(cell_type = recode(cell_type, "rN" = "Naive"),
-	   abs_deltapsi = abs(deltapsi)) %>%
-    select(dataset, cell_type, genes, abs_deltapsi) %>%
-    separate_rows(genes, sep = ",") %>%
-    group_by(dataset, cell_type, genes) %>%
-    slice(which.max(abs_deltapsi)) %>%
-    ungroup() %>%
-    pivot_wider(names_from = dataset, values_from = abs_deltapsi) %>%
-    mutate_at(vars(barnas:scharer), ~replace_na(., 0)) %>%
-    filter(!is.na(genes))
+    bind_rows(
+        scharer = filter(leaf_scharer_df, cell_type %in% c("rN", "DN")),
+        barnas = filter(leaf_barnas_df, cell_type %in% c("Naive", "DN")),
+        .id = "dataset") %>%
+    mutate(cell_type = recode(cell_type, "rN" = "Naive")) %>%
+    select(dataset, cell_type, cluster, genes, absdpsi) %>%
+    pivot_wider(names_from = dataset, values_from = absdpsi) %>%
+    mutate_at(vars(barnas:scharer), ~replace_na(., 0))
 
 labs_naivedn <- naive_dn %>%
     group_by(cell_type) %>%
-    filter(barnas >= quantile(barnas, 0.995) |
+    filter(
+        barnas >= quantile(barnas, 0.995) |
            scharer >= quantile(scharer, 0.995) |
-	   barnas * scharer >= quantile(barnas * scharer, 0.995)) %>%
+           barnas * scharer >= quantile(barnas * scharer, 0.995)) %>%
     ungroup() %>%
     mutate(gene_label = str_trunc(genes, 10),
            gene_label = replace_na(gene_label, "N/A"))
@@ -170,12 +192,42 @@ ggplot(naive_dn, aes(x = scharer, y = barnas)) +
     theme_bw()
 ```
 
+## GO enrichment
+
+GO enrichment analysis for genes with at least one cluster with adjusted p-value < 0.1 in the Scharer dataset.
 
 
+```{r, fig.width = 8, fig.height = 7}
+go <- read_tsv("./results/scharer/go.txt") %>%
+    select(cell_type, pathway = Description, qvalue, gene_id = geneID, n_genes = Count) %>%
+    filter(qvalue <= 0.05)
+    
+go %>%
+    group_by(cell_type) %>%
+    slice_max(n = 20, -log10(qvalue)) %>%
+    ungroup() %>%
+    arrange(cell_type, desc(n_genes), pathway) %>%
+    ggplot(aes(x = n_genes, y = reorder_within(pathway, by = n_genes, within = cell_type))) +
+    geom_col(aes(fill = -log10(qvalue)), color = "black", size = .1) +
+    scale_fill_gradient(low = "white", high = "tomato3") +
+    scale_y_reordered(labels = function(x) str_trunc(sub("^([^_]+).*$", "\\1", x), width = 25)) +
+    facet_wrap(~cell_type, scales = "free") +
+    theme_minimal() +
+    theme(panel.grid.major.y = element_blank(),
+	  panel.grid.minor.x = element_blank(),
+	  panel.grid.major.x = element_line(linetype = 2, color = "grey90"),
+	  strip.text = element_text(size = 12)) +
+    labs(x = "Number of genes", y = NULL)
+
+```
+
+
+
+
+
+
+```{r, eval=FALSE, fig.height=8, fig.width=8}
 ## Comparison with differential transcript usage obtained with the DEXSeq pipeline
-
-
-```{r, fig.height=8, fig.width=8}
 leaf_uniq <- leaf_scharer_df %>%
     separate_rows(genes, sep = ",") %>%
     group_by(cell_type, genes) %>%
@@ -218,12 +270,12 @@ ggplot(leaf_dtu, aes(-log10(adj_pvalue_leaf), -log10(adj_pvalue_dtu))) +
     labs(x = "-log10(p) [Leafcutter]", y = "-log10(p) [DTU]")
 ```
 
+
+```{r, eval = FALSE, fig.height=8}
 ## Exploring why AS sometimes does not lead to DTU
 
 
 ### AS in HMGB1, EIF4A2, and RPL15
-
-```{r, fig.height=8}
 annots <- read_rds("./plot_data/transcripts_annot.rds") %>%
     mutate(transcript_id = str_remove(transcript_id, "\\.\\d+$"))
 
@@ -290,9 +342,9 @@ plot_df %>%
 ```
 
 
-### Expression levels for the AS isoforms in HMGB1 and EIF4A2
 
-```{r, fig.height=3, fig.width=10}
+```{r, eval=FALSE, fig.height=3, fig.width=10}
+### Expression levels for the AS isoforms in HMGB1 and EIF4A2
 sample_annot <- 
     "../../../External_datasets/Scharer/RNAseq/metadata/file_description.tsv" %>%
     read_tsv() %>%
@@ -339,51 +391,11 @@ scharer_plot_df %>%
 
 
 
-## GO enrichment
-
-GO enrichment analysis on genes with at least one cluster with absolute delta PSI > 0.1.
 
 
-```{r}
-go <- read_tsv("./results/scharer/enrichment.tsv") %>%
-    arrange(Description)
-```
 
-
-```{r, fig.height=7, fig.width=8}
-go_top15 <- go %>%
-    group_by(cell_type) %>%
-    top_n(15, -log10(qvalue)) %>%
-    ungroup() %>%
-    mutate(cell_type = factor(cell_type, levels = c("rN", "aN", "T3", "SM", "DN"))) %>%
-    arrange(cell_type, qvalue)
-
-goterms <- distinct(go_top15, Description) %>%
-    pull(Description)
-
-go_plot <- go_top15 %>%
-    mutate(Description = factor(Description, levels = rev(goterms))) %>%
-    ggplot(aes(cell_type, Description)) +
-        geom_point(aes(size = Count, fill = -log10(qvalue)), shape = 21) +
-        scale_fill_viridis_c(option = "magma") +
-        theme_minimal() +
-        theme(axis.title = element_blank(),
-              legend.position = "top") +
-        labs(size = "# Genes:") +
-        guides(fill = guide_colorbar(direction = "horizontal", barheight = 0.5),
-               size = guide_legend(direction = "horizontal"))
-
-plot_grid(get_legend(go_plot), 
-          go_plot + theme(legend.position = "none"),
-          ncol = 1,
-          rel_heights = c(0.1, 1))
-             
-```
-
-
+```{r, eval=FALSE, fig.width=6, fig.height=4}
 ## Differentially spliced genes that are also GWAS genes
-
-```{r, fig.width=6, fig.height=4}
 gwas <- read_tsv("../bcell_scrna/reported_genes.tsv") %>%
     separate_rows(author, snp, p, sep = ",")
     
@@ -403,8 +415,8 @@ inner_join(leaf_filtered, gwas, by = c("genes" = "gene")) %>%
     labs(x = NULL, y = NULL)
 ```
 
+```{r, eval=FALSE, fig.height=3}
 ## Differentially spliced genes with sQTL-GWAS co-localizations in Mu et al. (2021)
-```{r, fig.height=3}
 sqtl_coloc <- read_tsv("./plot_data/coloc_sqtl.tsv") %>%
     unite("dataset", c("study", "cell"), sep = "-") %>%
     select(dataset, intron, gene)
@@ -423,29 +435,5 @@ ggplot(coloc_df, aes(dataset, genes)) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
           panel.grid = element_line(color = "grey96")) +
     labs(x = NULL, y = NULL)
-```
-
-## Andreoletti et al. 
-
-```{r, fig.height=4, fig.width=5}
-labs_and_df <- leaf_and_df %>%
-    group_by(cell_type) %>%
-    filter(abs(deltapsi) >= quantile(abs(deltapsi), 0.995) |
-           p.adjust < 0.05) %>%
-    ungroup() %>%
-    mutate(gene_label = str_trunc(genes, 10),
-           gene_label = replace_na(gene_label, "N/A"))
-
-ggplot(leaf_and_df, aes(deltapsi, -log10(p.adjust))) +
-    geom_point(aes(color = p.adjust < .05), size = 1, show.legend = FALSE) +
-    geom_text_repel(data = labs_and_df, aes(label = gene_label),
-                    size = 2, segment.size = .1) +
-    scale_color_manual(values = c("FALSE" = "grey85", "TRUE" = "grey40")) +
-    facet_wrap(~cell_type) +
-    theme_bw() +
-    theme(panel.grid = element_blank()) +
-    labs(x = "Delta PSI", 
-         y = "-log10(p-value)",
-         color = "Significant?")
 ```
 

@@ -1,10 +1,7 @@
-library(tidyverse)
+library(fgsea)
 library(clusterProfiler)
 library(org.Hs.eg.db)
-
-# Functions
-select <- dplyr::select
-slice <- dplyr::slice
+library(tidyverse)
 
 run_enrichment <- function(gene_list) {
 
@@ -13,8 +10,8 @@ run_enrichment <- function(gene_list) {
 	ont = "BP",
 	keyType = "ENSEMBL",
 	pAdjustMethod = "fdr",
-	pvalueCutoff = 0.05,
-	qvalueCutoff = 0.05,
+	pvalueCutoff = 0.1,
+	qvalueCutoff = 0.1,
 	readable = TRUE) %>%
     as.data.frame() %>%
     as_tibble()
@@ -26,48 +23,65 @@ gene_id_df <-
     read_tsv() %>%
     distinct(gene_id, gene_name) %>%
     filter(!grepl("PAR_Y$", gene_id)) %>%
-    mutate(gene_id = str_remove(gene_id, "\\.\\d+$"))
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) %>%
+    add_count(gene_name) %>%
+    filter(n == 1) %>%
+    select(-n)
 
 cell_types <- c("aN", "DN", "rN", "T3", "SM")
 
-leaf_df <- read_tsv("results/scharer/leafcutter_filtered_significant.tsv") %>%
-    group_by(cell_type, cluster) %>%
-    slice(which.min(p.adjust)) %>%
-    ungroup() %>%
-    filter(abs(deltapsi) >= 0.1)
-
-leaf_genes <- leaf_df %>%
-    select(cell_type, genes) %>%
+leaf_df <- 
+    read_tsv("results/scharer/leafcutter_filtered.tsv") %>%
     filter(!is.na(genes)) %>%
     separate_rows(genes, sep = ",") %>%
-    distinct(cell_type, genes) %>%
-    left_join(gene_id_df, by = c("genes" = "gene_name"))
+    group_by(cell_type, genes) %>%
+    slice(which.max(absdpsi)) %>%
+    ungroup() %>%
+    inner_join(gene_id_df, by = c("genes" = "gene_name"))
 
-go_res <- leaf_genes %>%
+go_res <- leaf_df %>%
+    filter(p.adjust < .1) %>%
     split(.$cell_type) %>%
     map("gene_id") %>%
     map_df(run_enrichment, .id = "cell_type")
 
-write_tsv(go_res, "./results/scharer/enrichment.tsv")
+write_tsv(go_res, "./results/scharer/go.txt")
 
+# GSEA
+hallmark <- gmtPathways("/lab-share/IM-Gutierrez-e2/Public/References/msigdb/h.all.v2022.1.Hs.symbols.gmt.txt")
+pathwaysgo <- gmtPathways("/lab-share/IM-Gutierrez-e2/Public/References/msigdb/c5.all.v2022.1.Hs.symbols.gmt.txt")
+gobp <- keep(pathwaysgo, grepl("^GOBP", names(pathwaysgo)))
+humanphenos <- keep(pathwaysgo, grepl("^HP", names(pathwaysgo)))
 
-# Andreoletti
-leaf_and_df <- "./results/andreoletti/leafcutter_filtered_significant.tsv" %>%
-    read_tsv() %>%
-    group_by(cell_type, cluster) %>%
-    slice(which.min(p.adjust)) %>%
-    ungroup() %>%
-    filter(abs(deltapsi) >= 0.1)
+all_genes <- unlist(c(pathwaysgo, hallmark))
 
-leaf_genes_and <- leaf_and_df %>%
-    select(cell_type, genes) %>%
-    filter(!is.na(genes)) %>%
-    separate_rows(genes, sep = ",") %>%
-    distinct(cell_type, genes) %>%
-    left_join(gene_id_df, by = c("genes" = "gene_name"))
-
-go_res_and <- leaf_genes_and %>%
+gsea_list <- leaf_df %>%
+    filter(genes %in% all_genes) %>%
+    select(cell_type, SYMBOL = genes, stat = absdpsi) %>%
+    arrange(cell_type, stat) %>%
     split(.$cell_type) %>%
-    map("gene_id") %>%
-    map_df(run_enrichment, .id = "cell_type")
+    map(~select(., -cell_type)) %>%
+    map(deframe)
 
+scharer_gsea_hallmark_res <- 
+    map(gsea_list, ~fgsea(pathways = hallmark, stats = ., scoreType = "pos"))
+
+bind_rows(scharer_gsea_hallmark_res, .id = "cell_type") %>%
+    as_tibble() %>%
+    filter(padj < 0.2)
+
+scharer_gsea_gobp_res <- 
+    map(gsea_list, ~fgsea(pathways = gobp, stats = ., scoreType = "pos"))
+
+bind_rows(scharer_gsea_gobp_res, .id = "cell_type") %>%
+    as_tibble() %>%
+    group_by(cell_type) %>%
+    slice_max(n = 5, abs(NES)) %>%
+    ungroup() %>% print(n = Inf)
+
+scharer_gsea_phenos_res <- 
+    map(gsea_list, ~fgsea(pathways = humanphenos, stats = ., scoreType = "pos"))
+
+bind_rows(scharer_gsea_phenos_res, .id = "cell_type") %>%
+    as_tibble() %>%
+    arrange(pval)
