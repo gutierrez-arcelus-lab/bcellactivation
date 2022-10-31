@@ -1,11 +1,15 @@
 library(tidyverse)
 
+labshr <- "/lab-share/IM-Gutierrez-e2/Public/External_datasets"
+datasets <- c("Andreoletti", "Barnas", "Scharer")
+
 # Check sequence depth and remove samples with very low 
 mapping_stats <- 
-    c("/lab-share/IM-Gutierrez-e2/Public/External_datasets/Andreoletti/qc/multiqc_data/multiqc_fastqc.txt",
-      "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Barnas/qc/multiqc_data/multiqc_fastqc.txt",
-      "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Scharer/RNAseq/qc/multiqc_data/multiqc_fastqc.txt") %>%
-    setNames(c("Andreoletti", "Barnas", "Scharer")) %>%
+    file.path(labshr, 
+	      c("Andreoletti/qc/multiqc_data/multiqc_fastqc.txt",
+		"Barnas/qc/multiqc_data/multiqc_fastqc.txt",
+		"Scharer/RNAseq/qc/multiqc_data/multiqc_fastqc.txt")) %>%
+    setNames(datasets) %>%
     map_df(~read_tsv(.) %>%
                select(Sample, "Total Sequences", total_deduplicated_percentage) %>%
                mutate(unique = `Total Sequences` * total_deduplicated_percentage / 100,
@@ -22,10 +26,12 @@ samples_rm1 <- mapping_stats %>%
     distinct(dataset, sampleid = Sample)
     
 # Remove samples that fail at many stats
-samples_rm2 <- c(
-    "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Andreoletti/qc/multiqc_data/multiqc_fastqc.txt",
-    "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Barnas/qc/multiqc_data/multiqc_fastqc.txt",
-    "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Scharer/RNAseq/qc/multiqc_data/multiqc_fastqc.txt") %>%
+samples_rm2 <- 
+    file.path(labshr, 
+	      c(
+		"Andreoletti/qc/multiqc_data/multiqc_fastqc.txt",
+		"Barnas/qc/multiqc_data/multiqc_fastqc.txt",
+		"Scharer/RNAseq/qc/multiqc_data/multiqc_fastqc.txt")) %>%
     map_df(~read_tsv(., col_types = c(.default = "c"))) %>% 
     select(Sample, basic_statistics:adapter_content) %>%
     pivot_longer(-Sample, names_to = "stat") %>%
@@ -41,7 +47,7 @@ samples_rm <- c(samples_rm1$sampleid, samples_rm2$Sample)
 # Metadata for the datasets
 ## Scharer
 metadata_scharer <- 
-    "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Scharer/RNAseq/metadata/file_description.tsv" %>%
+    file.path(labshr, "Scharer/RNAseq/metadata/file_description.tsv") %>%
     read_tsv() %>%
     separate(id, c("status", "dummy", "cellid"), sep = "\\.") %>%
     select(cellid, run, status) %>%
@@ -50,7 +56,7 @@ metadata_scharer <-
 
 ## Barnas
 metadata_barnas <- 
-    "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Barnas/SraRunTable.txt" %>%
+    file.path(labshr, "Barnas/SraRunTable.txt") %>%
     read_csv() %>%
     mutate(cellid = case_when(flow_sort_selection == "CD19+ CD3- CD20+ IgD- CD27-" ~ "DN",
 			      flow_sort_selection == "CD19+ CD3- CD20+ IgD+ CD27-" ~ "Naive",
@@ -60,7 +66,7 @@ metadata_barnas <-
     filter(!run %in% samples_rm) 
 
 ## Andreoletti
-metadata_andre <- "../read_mapping/andreoletti/clusters_IFNg.tsv" %>%
+metadata_andre <- "../../read_mapping/andreoletti/clusters_IFNg.tsv" %>%
     read_tsv() %>%
     mutate(cluster = recode(cluster, "1" = "H", "2" = "L"),
            cluster = factor(cluster, levels = c("L", "H"))) %>%

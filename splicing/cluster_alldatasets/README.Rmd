@@ -1,0 +1,241 @@
+---
+title: "Splicing"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, dpi = 300)
+```
+
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(ggsci)
+library(ggrepel)
+library(cowplot)
+```
+
+
+```{r}
+cell_types_scharer <- c("rN", "aN", "T3", "SM", "DN") %>%
+    setNames(., .)
+
+leaf_scharer_df <- read_tsv("./results/scharer/leafcutter_filtered.tsv") %>%
+    mutate(cell_type = factor(cell_type, levels = cell_types_scharer))
+
+leaf_barnas_df <- read_tsv("./results/barnas/leafcutter_filtered.tsv")
+
+leaf_andre_df <- read_tsv("./results/andreoletti/leafcutter_filtered.tsv")
+```
+
+## Number of splicing junctions passing the thresholds and tested by leafcutter
+
+```{r, fig.height=3, fig.width=6}
+bind_rows("Scharer" = leaf_scharer_df,
+          "Barnas" = leaf_barnas_df,
+          "Andreoletti" = leaf_andre_df,
+          .id = "dataset") %>%
+    count(dataset, cell_type) %>%
+    ggplot(aes(cell_type, n)) +
+    geom_col() +
+    facet_grid(.~dataset, scales = "free_x", space = "free")
+```
+
+
+
+## Differential splicing events between patients and controls
+
+```{r, fig.height=8, fig.width=10}
+plot_volcano <- function(df) {
+
+    dat <- unite(df, lab, c(dataset, cell_type), sep = " ")
+
+    labs_df <- dat %>%
+        filter(!is.na(genes)) %>%
+        group_by(lab) %>%
+        top_n(20, absdpsi * -log10(p.adjust)) %>%
+        ungroup() %>%
+        mutate(gene_label = str_trunc(genes, 10))
+
+
+    ggplot(dat, aes(absdpsi, -log10(p))) +
+        geom_point(aes(color = p.adjust < .05), size = .7, show.legend = FALSE) +
+        geom_text_repel(data = labs_df, aes(label = gene_label),
+                        fontface = "bold",
+                        size = 2.5, segment.size = .1, min.segment.length = 0) +
+        scale_color_manual(values = c("FALSE" = "grey85", "TRUE" = "tomato3")) +
+        facet_wrap(~lab, ncol = 3) +
+        theme_bw() +
+        theme(
+            panel.grid.minor = element_blank(),
+            panel.grid.major = element_line(color = "grey96")
+        ) +
+        labs(x = "Absolute Delta PSI", y = "-log10(p-value)")
+}
+
+
+bind_rows("Scharer" = leaf_scharer_df,
+          "Barnas" = leaf_barnas_df,
+          "Andreoletti" = leaf_andre_df,
+          .id = "dataset") %>%
+    plot_volcano()
+```
+
+
+
+## Comparison between Scharer et al and Barnas et al 
+
+### Highest absolute PSI per gene
+
+```{r, fig.height=3, fig.width=6}
+naive_dn <- 
+    bind_rows(
+        scharer = filter(leaf_scharer_df, cell_type %in% c("rN", "DN")),
+        barnas = filter(leaf_barnas_df, cell_type %in% c("Naive", "DN")),
+        .id = "dataset") %>%
+    mutate(cell_type = recode(cell_type, "rN" = "Naive")) %>%
+    select(dataset, cell_type, cluster, genes, absdpsi) %>%
+    group_by(dataset, cell_type, genes) %>%
+    summarise(absdpsi = max(absdpsi)) %>%
+    ungroup() %>%
+    pivot_wider(names_from = dataset, values_from = absdpsi) %>%
+    mutate_at(vars(barnas:scharer), ~replace_na(., 0))
+
+labs_naivedn <- naive_dn %>%
+    group_by(cell_type) %>%
+    filter(
+        barnas >= quantile(barnas, 0.995) |
+           scharer >= quantile(scharer, 0.995) |
+           barnas * scharer >= quantile(barnas * scharer, 0.995)) %>%
+    ungroup() %>%
+    mutate(gene_label = str_trunc(genes, 10),
+           gene_label = replace_na(gene_label, "N/A"))
+
+ggplot(naive_dn, aes(x = scharer, y = barnas)) +
+    geom_point(size = .5, alpha = .5, color = "grey70") +
+    geom_text_repel(data = labs_naivedn, aes(label = gene_label),
+                    size = 1.5, segment.size = .1, min.segment.length = 0,
+                    fontface = "bold") +
+    facet_wrap(~cell_type) +
+    theme_bw()
+```
+
+### Smallest nominal p-value per gene
+
+\* dashed line corresponds to -log10(0.05)
+
+```{r, fig.height=3, fig.width=6}
+naive_dn_p <- 
+    bind_rows(
+        scharer = filter(leaf_scharer_df, cell_type %in% c("rN", "DN")),
+        barnas = filter(leaf_barnas_df, cell_type %in% c("Naive", "DN")),
+        .id = "dataset") %>%
+    mutate(cell_type = recode(cell_type, "rN" = "Naive"),
+	   cell_type = factor(cell_type, levels = c("Naive", "DN"))) %>%
+    select(dataset, cell_type, cluster, genes, p) %>%
+    group_by(dataset, cell_type, genes) %>%
+    summarise(p = min(p)) %>%
+    ungroup() %>%
+    pivot_wider(names_from = dataset, values_from = p) %>%
+    mutate_at(vars(barnas:scharer), ~replace_na(., 1)) %>%
+    mutate_at(vars(barnas:scharer), function(x) -log10(x))
+
+labs_naivedn_p <- naive_dn_p %>%
+    filter(barnas > -log10(0.05), scharer > -log10(0.05)) %>%
+    group_by(cell_type) %>%
+    top_n(30, barnas * scharer) %>%
+    ungroup() %>%
+    mutate(gene_label = str_trunc(genes, 10),
+           gene_label = replace_na(gene_label, "N/A"))
+
+ggplot(naive_dn_p, aes(x = scharer, y = barnas)) +
+    geom_vline(xintercept = -log10(0.05), linetype = 2) +
+    geom_hline(yintercept = -log10(0.05), linetype = 2) +
+    geom_point(size = .5, alpha = .5, color = "grey70") +
+    geom_text_repel(data = labs_naivedn_p, aes(label = gene_label),
+                    fontface = "bold",
+                    size = 1.5, segment.size = .1, min.segment.length = 0) +
+    facet_wrap(~cell_type) +
+    theme_bw()
+```
+
+## GO enrichment
+
+GO enrichment analysis for genes with at least one cluster with adjusted p-value < 0.1 in the Scharer dataset.
+
+
+```{r, fig.width = 8, fig.height = 7}
+go <- read_tsv("./results/scharer/go.txt") %>%
+    select(cell_type, pathway = Description, qvalue, gene_id = geneID, n_genes = Count) %>%
+    filter(qvalue <= 0.05)
+    
+go %>%
+    group_by(cell_type) %>%
+    slice_max(n = 20, -log10(qvalue)) %>%
+    ungroup() %>%
+    arrange(cell_type, desc(n_genes), pathway) %>%
+    ggplot(aes(x = n_genes, y = reorder_within(pathway, by = n_genes, within = cell_type))) +
+    geom_col(aes(fill = -log10(qvalue)), color = "black", size = .1) +
+    scale_fill_gradient(low = "white", high = "tomato3",
+			guide = guide_colorbar(barheight = .5)) +
+    scale_y_reordered(labels = function(x) str_trunc(sub("^([^_]+).*$", "\\1", x), width = 30)) +
+    facet_wrap(~cell_type, scales = "free_y", ncol = 2) +
+    theme_minimal() +
+    theme(panel.grid.major.y = element_blank(),
+	  panel.grid.minor.x = element_blank(),
+	  panel.grid.major.x = element_line(linetype = 2, color = "grey90"),
+	  strip.text = element_text(size = 12),
+	  legend.position = "top") +
+    labs(x = "Number of genes", y = NULL)
+
+```
+
+# Differentially spliced genes in Scharer et al. data that are also GWAS genes
+
+```{r, fig.width=6, fig.height=4}
+gwas <- read_tsv("../../bcell_scrna/reported_genes.tsv") %>%
+    separate_rows(author, snp, p, sep = ",")
+    
+leaf_scharer_df %>%
+    select(cluster, genes, p.adjust, absdpsi) %>%
+    filter(p.adjust < 0.05, absdpsi > 0.1) %>%
+    separate_rows(genes, sep = ",") %>%
+    mutate(genes = trimws(genes)) %>%
+    inner_join(gwas, by = c("genes" = "gene")) %>%
+    arrange(desc(genes), author) %>%
+    mutate_at(vars(genes, author), fct_inorder) %>%
+    ggplot(aes(author, genes)) +
+    geom_point(aes(fill = absdpsi), size = 3, stroke = .25, shape = 21) +
+    scale_fill_gradient(low = "white", high = "red", guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+          axis.text.y = element_text(size = 7),
+          panel.grid = element_line(color = "grey96")) +
+    labs(x = NULL, y = NULL)
+```
+
+## Differentially spliced genes in Scharer et al. data with sQTL-GWAS co-localizations in Mu et al. (2021)
+```{r, fig.height=3}
+sqtl_coloc <- read_tsv("../plot_data/coloc_sqtl.tsv") %>%
+    unite("dataset", c("study", "cell"), sep = "-") %>%
+    select(dataset, intron, gene)
+
+coloc_df <- leaf_scharer_df %>%
+    filter(genes == "PXK") %>%
+    select(cluster, cell_type, genes, p.adjust, absdpsi) %>%
+    filter(p.adjust < 0.05, absdpsi > 0.1) %>%
+    group_by(genes) %>%
+    slice(which.max(absdpsi)) %>%
+    separate_rows(genes, sep = ",") %>%
+    mutate(genes = trimws(genes)) %>%
+    inner_join(sqtl_coloc, by = c("genes" = "gene"))
+
+ggplot(coloc_df, aes(dataset, genes)) +
+    geom_point(aes(fill = absdpsi), size = 3, stroke = .25, shape = 21) +
+    scale_fill_gradient(low = "white", high = "red", guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+          panel.grid = element_line(color = "grey96")) +
+    labs(x = NULL, y = NULL)
+```
