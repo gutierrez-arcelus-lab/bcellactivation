@@ -1,24 +1,31 @@
 Low-input RNA-seq
 ================
 
-QC
---
+## QC
 
 ### Total of unique and duplicate reads in each fastq file
 
-<img src="./plots/seqdepth.png" width="1920" />
+![](README_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
 
 ### Total number of reads per individual and condition
 
-<img src="./plots/seqdepth_conditions.png" width="960" />
-
-<img src="./plots/seqdepth_stimvstime.png" width="1034" />
+![](README_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
 
 ### Plates colored by total number of reads
 
-<img src="./plots/seqdepth_plate.png" width="1147" />
+![](README_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
 
-PCA
----
+## PCA
 
-<img src="./plots/pca.png" width="960" />
+![](README_files/figure-gfm/unnamed-chunk-4-1.png)<!-- --> \## Time
+course analysis
+
+![](README_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+
+## GWAS genes
+
+![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+## Sharing of significant genes among conditions
+
+![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->

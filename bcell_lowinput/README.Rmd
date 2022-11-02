@@ -4,43 +4,285 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-unix::rlimit_as(1e12)
 library(knitr)
 opts_chunk$set(echo = FALSE, 
 	       message = FALSE, 
 	       warning = FALSE, 
 	       comment = "#",
-               dpi = 300)
+	       dpi = 300)
+```
+
+
+```{r pkgs}
+library(tidyverse)
+library(RColorBrewer)
+library(cowplot)
+library(ggsci)
+library(ggbeeswarm)
+library(UpSetR)
 ```
 
 ## QC
 
 ### Total of unique and duplicate reads in each fastq file
 
-```{r}
-include_graphics("./plots/seqdepth.png")
+```{r, fig.width=10}
+meta_long <- 
+    "/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_lowinput/metadata/description_hsapiens_longformat.tsv" %>%
+    read_tsv() %>%
+    pivot_longer(fq1:fq2, names_to = "dummy", values_to = "fastq") %>%
+    mutate(fastq = basename(fastq),
+	   fastq = sub("\\.fastq\\.gz", "", fastq)) %>%
+    select(-barcode_seq, -dummy)
+
+fastqc_1 <- 
+    "/home/ch229163/labshr/Lab_datasets/B_cells_lowinput/SK-56QR/get.broadinstitute.org/pkgs/SN0263576/multiqc_data/mqc_fastqc_sequence_counts_plot_1.txt" %>%
+    read_tsv()
+
+fastqc_2 <- 
+    "/home/ch229163/labshr/Lab_datasets/B_cells_lowinput/SK-56QS/get.broadinstitute.org/pkgs/SN0263542/multiqc_data/mqc_fastqc_sequence_counts_plot_1.txt" %>%
+    read_tsv()
+
+fastqc_df <- bind_rows(fastqc_1, fastqc_2) %>%
+    left_join(meta_long, ., c("fastq" = "Sample")) %>%
+    pivot_longer(`Unique Reads`:`Duplicate Reads`, names_to = "read_type", values_to = "n") %>%
+    mutate(read_type = sub("\\sReads$", "", read_type),
+	   fastq = sub("^.+([12])$", "\\1", fastq),
+	   id = paste(sample_id, stim, time, paste0("L", lane), paste0("fq", fastq), sep = "_"))
+
+fastqc_df %>%
+    group_by(sample_id, stim, time) %>%
+    mutate(mn = min(n[read_type == "Unique"])) %>%
+    ungroup() %>%
+    arrange(plate, mn) %>%
+    mutate(id = fct_inorder(id)) %>%
+    ggplot(aes(id, n, fill = read_type)) +
+    geom_col(width = 1.05, show.legend = FALSE) +
+    ggsci::scale_fill_npg() +
+    facet_wrap(~plate, ncol = 1, scales = "free_x") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 2.5, hjust = 1, vjust = 1, angle = 90),
+	  panel.grid = element_blank()) +
+    labs(x = NULL, y = "Total reads")
 ```
 
 ### Total number of reads per individual and condition
 
-```{r}
-include_graphics("./plots/seqdepth_conditions.png")
-```
 
-```{r}
-include_graphics("./plots/seqdepth_stimvstime.png")
+```{r, fig.width=8}
+stims_order <-
+    c("Unstim_0hrs", "Unstim_4hrs", "Unstim_24hrs", 
+      "IL4_4hrs", "IL4_24hrs",
+      paste("CD40L", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      paste("BCR", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      paste("TLR7", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      paste("BCR-TLR7", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      paste("TLR9", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      paste("DN2", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      "NA_NA")
+      
+stim_colors <- c(brewer.pal(n = 6, "Greys")[-1],
+		 brewer.pal(n = 9, "YlOrRd")[c(1, 3, 4, 5)],
+		 brewer.pal(n = 9, "Blues")[c(2, 4, 6, 8)],
+		 brewer.pal(n = 9, "Greens")[c(2, 4, 6, 8)],
+		 grep("cyan", colors(), value = TRUE)[c(8, 2, 4, 6)],
+		 grep("pink", colors(), value = TRUE)[c(16, 7, 1, 4)],
+		 paste0("tomato", c("", 2:4)),
+		 "white")
+
+names(stim_colors) <- stims_order
+
+order2 <- stims_order %>%
+    grep("NA", ., invert = TRUE, value = TRUE) %>%
+    sub("^([^_]+)_.+$", "\\1", .) %>%
+    unique()
+
+plot_df <- fastqc_df %>%
+    filter(fastq == 1, !grepl("rep", sample_id), sample_id != "BLANK") %>%
+    group_by(sample_id, stim, time) %>%
+    summarise(n = sum(n)) %>%
+    ungroup() %>%
+    unite("stim_", c("stim", "time"), sep = "_", remove = FALSE) %>%
+    mutate(stim = factor(stim, levels = order2),
+	   stim_ = factor(stim_, levels = stims_order[-length(stims_order)]),
+	   time = factor(time, levels = str_sort(unique(time), numeric = TRUE)))
+   
+ggplot(plot_df, aes(sample_id, n)) +
+    geom_col(aes(fill = stim_), position = "dodge", color = "black", size = .1) +
+    scale_fill_manual(values = stim_colors[-length(stim_colors)]) +
+    scale_y_continuous(labels = scales::comma) +
+    facet_grid(time~stim) +
+    theme_minimal() +
+    theme(panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(color = "grey96", size = .5),
+          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
+          plot.background = element_rect(fill = "white", color = "white"),
+          legend.position = "none") +
+    labs(x = NULL, y = "Total reads", fill = "Stim")
 ```
 
 ### Plates colored by total number of reads
 
-```{r}
-include_graphics("./plots/seqdepth_plate.png")
+```{r, fig.width=10, fig.height=8}
+fastqc_df %>%
+    filter(fastq == 1) %>%
+    group_by(plate, well, sample_id, stim, time) %>%
+    summarise(n = sum(n)) %>%
+    ungroup() %>%
+    extract(well, c("row", "column"), "([A-H])(\\d+)", convert = TRUE) %>%
+    arrange(plate, row, column) %>%
+    unite(id, c(sample_id, stim, time), sep = "\n") %>%
+    mutate(row = factor(row, levels = LETTERS[8:1]),
+           column = factor(column)) %>%
+    ggplot(data = ., aes(column, row)) +
+	geom_tile(aes(fill = n), color = "black") +
+	geom_text(aes(label = id), size = 2.5, lineheight = .8) +
+	scale_fill_gradient(low = "white", high = "tomato4",
+	                    labels = scales::comma,
+	                    guide = guide_colorbar(barheight = .5, barwidth = 16)) +
+	facet_wrap(~plate, ncol = 1) +
+	theme_minimal() +
+	theme(axis.title = element_blank(),
+	      plot.margin = margin(t = 1, b = 1, r = 1, l = 1, unit = "cm"),
+	      plot.background = element_rect(fill = "white", color = "white"),
+	      panel.grid = element_blank(),
+	      legend.position = "top") +
+    labs(fill = "Total\nreads")
 ```
 
 
 ## PCA
 
-```{r}
-include_graphics("./plots/pca.png")
+```{r, fig.width=8, fig.height=6}
+meta_df <- 
+    "/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_lowinput/metadata/description_hsapiens.tsv" %>%
+    read_tsv() %>%
+    select(plate:time)
+
+gene_quant <- read_rds("./data/expression.rds")
+
+variable_genes <- gene_quant %>%
+    group_by(gene_id) %>%
+    summarise(v = var(tpm)) %>%
+    ungroup() %>%
+    top_n(2000, v) %>%
+    arrange(desc(v))
+
+variable_matrix <- gene_quant %>%
+    filter(gene_id %in% variable_genes$gene_id) %>%
+    select(-gene_name) %>%
+    select(-count) %>%
+    pivot_wider(names_from = gene_id, values_from = tpm) %>%
+    column_to_rownames("id") %>%
+    as.matrix()
+
+pca <- prcomp(variable_matrix, center = TRUE, scale. = TRUE, rank. = 10)
+
+pc_scores <- as_tibble(pca$x, rownames = "id")
+
+pc_eigenvals <- pca$sdev^2
+
+pc_varexp <- tibble(PC = paste0("PC", 1:length(pc_eigenvals)),
+                    variance = pc_eigenvals) %>%
+    mutate(pct = round(variance/sum(variance) * 100, 1),
+           pct = paste0("(", pct, "%)")) %>%
+    select(PC, pct) %>%
+    unite("lab", c(PC, pct), sep = " ", remove = FALSE)
+
+pca_df <- pc_scores %>%
+    select(id, PC1:PC8) %>%
+    separate(id, c("plate", "well"), sep = "_") %>%
+    left_join(meta_df, by = c("plate", "well")) %>%
+    unite(stim, c("stim", "time"), sep = "_") %>%
+    mutate(stim = factor(stim, levels = stims_order))
+
+ggplot(pca_df, aes(PC1, PC2)) +
+    geom_point(aes(fill = stim), size = 4, shape = 21) +
+    scale_fill_manual(values = stim_colors[-length(stim_colors)]) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          legend.key.height = unit(.25, "cm")) +
+    guides(fill = guide_legend(ncol = 1)) +
+    labs(x = pc_varexp$lab[1], y = pc_varexp$lab[2])
+
 ```
+## Time course analysis
+
+```{r}
+cpm_df <- read_tsv("./data/edger_cpm_fit.tsv")
+edger_results <- read_tsv("./data/edger_de_genes.tsv")
+```
+
+```{r, fig.width=8, fig.height=3}
+edger_results %>%
+    group_by(stim) %>%
+    summarise(yes = sum(FDR < 0.05),
+              no = sum(FDR >= 0.05)) %>%
+    ungroup() %>%
+    mutate(stim = factor(stim, levels = c("CD40L", "BCR", "TLR7", "TLR9", "BCR-TLR7", "DN2"))) %>%
+    pivot_longer(-stim, names_to = "signif") %>%
+    mutate(signif = factor(signif, levels = c("no", "yes"))) %>%
+    ggplot(aes(stim, value, fill = signif)) +
+    geom_col(color = "black", position = "dodge") +
+    scale_fill_npg() +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = "white"),
+          panel.grid.major.x = element_blank()) +
+    labs(x = NULL, y = "Number of genes")
+```
+
+## GWAS genes
+
+```{r}
+gwas <- read_tsv("../bcell_scrna/reported_genes.tsv")
+```
+
+```{r, fig.width=10, fig.height=10}
+select_genes <- edger_results %>%
+    filter(FDR < 0.05, gene_name %in% gwas$gene) %>%
+    group_by(stim) %>%
+    top_n(5, -log10(FDR)) %>%
+    ungroup() %>%
+    select(stim, gene_id, gene_name)
+
+cpm_plot_df <- inner_join(select_genes, cpm_df) %>%
+    mutate(hours = parse_number(time),
+           hours = factor(hours, levels = sort(unique(hours))),
+           condition = paste(stim, time, sep = "_"))
+
+ylimit <- range(cpm_plot_df$cpm)
+
+cpm_plot_df %>%
+    split(.$stim) %>%
+    map(~ggplot(., aes(x = hours, y = cpm, fill = condition)) +
+            geom_quasirandom(method = "smiley", width = .2, 
+                             shape = 21, stroke = .2, size = 3) +
+            scale_y_continuous(limits = ylimit) +
+            scale_fill_manual(values = stim_colors) + 
+            facet_grid(stim~gene_name) +
+            theme_bw() +
+            theme(panel.grid.minor = element_blank(),
+                  panel.grid.major.x = element_blank(),
+                  legend.position = "none") +
+            labs(x = NULL)) %>%
+    plot_grid(plotlist = ., ncol = 1)
+```
+
+## Sharing of significant genes among conditions
+
+```{r, fig.width=7, fig.height=4}
+edger_list <- edger_results %>%
+    filter(FDR < 0.05) %>%
+    split(.$stim) %>%
+    map("gene_name")
+
+upset(fromList(edger_list), nsets = 6, nintersects = 20, order.by = "freq")
+```
+
+
+
+
+
+
 
