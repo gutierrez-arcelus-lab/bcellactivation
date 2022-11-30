@@ -47,8 +47,16 @@ quant_df <- file.path("./results/salmon", meta_df$id, "quant.sf") %>%
     setNames(meta_df$id) %>%
     map_df(read_tsv, .id = "id")
 
-quant_gene <- quant_df %>%
+quant_tx <- quant_df %>%
     left_join(gene_tx, by = c("Name" = "transcript_id")) %>%
+    select(id, gene_id, gene_name, tx_id = Name, count = NumReads, tpm = TPM) %>%
+    group_by(tx_id) %>%
+    filter(!all(tpm == 0)) %>%
+    ungroup()
+
+write_rds(quant_tx, "./data/expression_transcripts.rds")
+
+quant_gene <- quant_tx %>%
     group_by(id, gene_id, gene_name) %>%
     summarise(tpm = sum(TPM),
               count = sum(NumReads)) %>%
