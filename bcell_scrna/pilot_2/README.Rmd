@@ -484,6 +484,156 @@ plot_grid(pca_filt_plot + theme(legend.position = "none"),
           rel_widths = c(1, 1, .25))
 ```
 
+```{r, eval=FALSE, include=FALSE}
+
+b_genes <- c("FCER2" = "CD23", 
+	     "CD27" = "CD27", 
+	     "CD69" = "CD69", 
+	     "CD83" = "CD83", 
+	     "CD86" = "CD86",
+	     "TNFRSF13B" = "CD267.or.TACI",
+	     "IGHM" = "IgM",
+	     "IGHD" = "IgD")
+
+b_genes_ids <- filter(gene_ids, gene_name %in% names(b_genes))
+
+b_genes_prot <- bcells_filt@assays$ADT@data[b_genes, ] %>%
+    as_tibble(rownames = "gene_name") %>%
+    pivot_longer(-gene_name, names_to = "barcode", values_to = "protein")
+
+b_genes_df <- bcells_filt@assays$RNA@data[b_genes_ids$gene_id, ] %>%
+    as_tibble(rownames = "gene_id") %>%
+    pivot_longer(-gene_id, names_to = "barcode", values_to = "rna") %>%
+    left_join(b_genes_ids) %>%
+    mutate(gene_name = recode(gene_name, !!!b_genes)) %>%
+    left_join(umap_filt_df) %>%
+    select(barcode, stim, UMAP_1, UMAP_2, gene_name, rna) %>%
+    left_join(b_genes_prot)
+
+stim_colors <- c("day0" = "grey60",
+		 "IL4 24hr" = "grey30",
+		 "BCR 24hr" = brewer.pal(n = 9, "Blues")[6],
+		 "TLR7 24hr" = brewer.pal(n = 9, "Greens")[6],
+		 "BCR+TLR7 24hr" = "goldenrod3",
+		 "DN2 24hr" = "tomato4")
+
+b_stim_umap <- ggplot(b_genes_df, aes(UMAP_1, UMAP_2, color = stim)) +
+    geom_point(size = .8) +
+    scale_color_manual(values = stim_colors) +
+    theme_bw() +
+    theme(text = element_text(size = 12),
+	  panel.grid = element_blank()) +
+    labs(x = "UMAP 1", y = "UMAP 2", color = "Stim") +
+    guides(color = guide_legend(override.aes = list(size = 2.5)))
+
+ggsave("./stims_plot_grant.png", b_stim_umap, height = 4, width = 6)
+
+
+plot_umap <- function(dataset) {
+
+    gene <- unique(dataset$gene_name)
+
+    rna_plot <- ggplot(dataset, aes(UMAP_1, UMAP_2, fill = rna)) +
+	geom_point(shape = 21, stroke = .1, size = 1.5) +
+	scale_fill_viridis_c(option = "magma",
+			     direction = -1,
+			     guide = guide_colorbar(barheight = .25)) +
+	theme_minimal() +
+	theme(text = element_text(size = 12),
+	      panel.grid = element_blank(),
+	      legend.position = "top",
+	      axis.text = element_blank()) +
+	labs(x = "UMAP 1", y = "UMAP 2", fill = "RNA:\n")
+
+    protein_plot <- ggplot(dataset, aes(UMAP_1, UMAP_2, fill = protein)) +
+	geom_point(shape = 21, stroke = .1, size = 1.5) +
+	scale_fill_scico(palette = "lajolla",
+			  guide = guide_colorbar(barheight = .25)) +
+	theme_minimal() +
+	theme(text = element_text(size = 12),
+	      panel.grid = element_blank(),
+	      legend.position = "top",
+	      axis.text = element_blank()) +
+	labs(x = "UMAP 1", y = "UMAP 2", fill = "Protein:\n")
+
+    titl <- ggdraw() +
+	draw_label(gene, fontface = "bold", x = 0.5)
+
+    plot_grid(titl, 
+	      plot_grid(rna_plot, protein_plot, nrow = 1),
+	      ncol = 1, rel_heights = c(0.1, 1)) +
+	theme(panel.background = element_rect(fill = "white", color = "black"))
+}
+
+out <- b_genes_df %>%
+    split(.$gene_name) %>%
+    map(plot_umap) %>%
+    plot_grid(plotlist = ., ncol = 2)
+
+ggsave("./stims_plot_grant_genes.png", out, dpi = 600, width = 12, height = 12)
+
+
+new_meta <- bcells_filt@meta.data %>%
+    mutate(activ = ifelse(HTO_maxID %in% c("day0", "IL4 24hr"), "Naive", "Activated"))
+
+
+bcells_filt <- AddMetaData(bcells_filt, metadata = new_meta)
+
+Idents(bcells_filt) <- "activ"
+
+markers_activ <- 
+  FindMarkers(bcells_filt,
+	      ident.1 = "Activated",
+	      ident.2 = "Naive",
+	      only.pos = TRUE,
+	      min.pct = 0.4,
+	      logfc.threshold = 1.5) %>%
+  as_tibble(rownames = "gene") %>%
+  filter(p_val_adj < 0.05)
+
+markers_df <- markers_activ %>%
+    select(gene_id = gene) %>%
+    left_join(gene_ids)
+
+b_markers_df <- bcells_filt@assays$RNA@data[markers_df$gene_id, ] %>%
+    as_tibble(rownames = "gene_id") %>%
+    pivot_longer(-gene_id, names_to = "barcode", values_to = "rna") %>%
+    left_join(markers_df) %>%
+    left_join(umap_filt_df) %>%
+    select(barcode, stim, UMAP_1, UMAP_2, gene_name, rna)
+
+plot_umap_rna <- function(dataset) {
+
+    rna_plot <- ggplot(dataset, aes(UMAP_1, UMAP_2, fill = rna)) +
+	geom_point(shape = 21, stroke = .01, size = .75) +
+	scale_fill_viridis_c(option = "magma",
+			     direction = -1,
+			     guide = guide_colorbar(barwidth = .25)) +
+	facet_wrap(~gene_name) +
+	theme_bw() +
+	theme(text = element_text(size = 8),
+	      panel.grid = element_blank(),
+	      axis.text = element_blank(),
+	      panel.border = element_rect(colour = NA, fill = NA)) +
+	labs(x = "UMAP 1", y = "UMAP 2", fill = "RNA:\n")
+}
+
+
+out2 <- b_markers_df %>%
+    split(.$gene_name) %>%
+    map(plot_umap_rna) %>%
+    plot_grid(plotlist = ., ncol = 4) +
+    theme(panel.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./stims_plot_grant_activation.png", out2, height = 8, width = 12, dpi = 600)
+
+
+
+```
+
+
+
+
 ### Marker genes at 24 hours in respect to day 0
 
 ```{r, echo = FALSE}
@@ -626,6 +776,8 @@ markers_df <-
             .id = "stim") %>%
   filter(p_val_adj < 0.05) %>%
   select(-p_val, -p_val_adj)
+
+write_tsv(markers_df, "../data/markers_against0hr_pilot2.tsv")
 ```
 
 
@@ -792,4 +944,3 @@ bcell_prots_plot_list <- umap_df %>%
 
 plot_grid(plotlist = bcell_prots_plot_list, ncol = 3)
 ```
-
