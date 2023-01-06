@@ -109,3 +109,32 @@ gwas_min_df <- bentham_top_pos |>
     select(region, chr, pos, rsid, gwas_beta = beta, gwas_varbeta)
 
 write_tsv(gwas_min_df, "./data/coloc_input/gwas_data.tsv")
+
+
+# Select genes 
+annotations <- 
+    file.path("/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens", 
+              "gencode.v30.primary_assembly.annotation.gtf.gz") |>
+    read_tsv(comment = "#", col_types = "c-cii-c-c",
+             col_names = c("chr", "feature", "start", "end", "strand", "info"))
+
+eqtl_regions <- bentham_top_pos |>
+    mutate(left = pos - 2.5e5, right = pos + 2.5e5)
+
+bed <- annotations |>
+    filter(feature == "gene") |>
+    mutate(tss = case_when(strand == "+" ~ start, 
+			   strand == "-" ~ end, 
+			   TRUE ~ NA_integer_)) |>
+    inner_join(eqtl_regions, join_by(chr, between(tss, left, right))) |>
+    mutate(gene_id = str_extract(info, "(?<=gene_id\\s\")[^\"]+"),
+	   gene_name = str_extract(info, "(?<=gene_name\\s\")[^\"]+"),
+	   gene_id = sub("^(ENSG\\d+)\\.\\d+((_PAR_Y)?)$", "\\1\\2", gene_id)) |>
+    select(chr, start, end, gene_id, gene_name)
+
+gene_ids <- select(bed, gene_id, gene_name)
+
+# Save gene IDs for eQTL catalogue filtering
+write_tsv(gene_ids, "./data/coloc_input/gene_annots.tsv")
+
+
