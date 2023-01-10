@@ -85,8 +85,10 @@ main <- function(ftp, region, gwas_sum, genes, header) {
 	split(.$id) %>% 
 	map(run_coloc)
 
+    if (length(coloc_results) == 0) return(tibble())
+
     coloc_results_summary <- map(coloc_results, "summary") |>
-	map_dfr({\(x) as_tibble(x, rownames = "stat")}, .id = "id") |>
+	map_dfr(function(x) as_tibble(x, rownames = "stat"), .id = "id") |>
 	pivot_wider(names_from = stat, values_from = value) |>
 	select(id, nsnps, h0 = PP.H0.abf, h1 = PP.H1.abf, h2 = PP.H2.abf, h3 = PP.H3.abf, h4 = PP.H4.abf) |>
 	separate(id, c("gene_id", "molecular_trait_id"), sep = ",") |>
@@ -99,33 +101,33 @@ main <- function(ftp, region, gwas_sum, genes, header) {
 # Directoy
 rundir <- "/lab-share/IM-Gutierrez-e2/Public/vitor/lupus/colocalization"
 
-# Region to query
-#region_query <- commandArgs(TRUE)[1]
-#procs <- commandArgs(TRUE)[2]
-procs <- 12
+# Cmd arguments
+pargs <- commandArgs(TRUE)[1:2]
+array_id <- pargs[1]
+procs <- pargs[2]
 
+# eQTL Catalogue column names
+column_names <- read_lines(file.path(rundir, "eqtl_column_names.txt"))
 
 # GWAS summ stats
 gwas_data <- file.path(rundir, "data/coloc_input/gwas_data.tsv") |>
     read_tsv() |>
     group_nest(region, .key = "gwas_sum")
 
-# eQTL catalogue paths
-paths_df <- file.path(rundir, "data/coloc_input/eqtl_catalogue_paths.tsv") |>
-    read_tsv() |>
-    filter(study != "GTEx_V8")
-
-column_names <- read_tsv(paths_df$ftp_path[1], n_max = 1) |>
-    colnames()
-
-# region data
-regions <- file.path(rundir, "data/coloc_input/region.txt") |>
+# eQTL catalogue URLs
+ftps <- file.path(rundir, "data/coloc_input/ftp_urls.txt") |>
     read_lines()
 
-region_df <- tibble(coord = regions) |>
-    rowid_to_column("region") |>
-    #filter(region == region_query) |>
-    left_join(gwas_data)
+study_ids <- basename(ftps) |> 
+    sub("\\.all\\.tsv\\.gz", "", x = _)
+
+names(ftps) <- study_ids
+
+# regions
+region_df <- file.path(rundir, "data/coloc_input/region.tsv") |>
+    read_tsv() |>
+    filter(region == array_id) |>
+    left_join(gwas_data, by = "region")
 
 # genes to consider (TSS 250kb from GWAS hit)
 genes_df <- file.path(rundir, "data/coloc_input/gene_annots.tsv") |>
@@ -134,17 +136,15 @@ genes_df <- file.path(rundir, "data/coloc_input/gene_annots.tsv") |>
 # Run analysis
 plan(multisession, workers = procs)
 
-coloc_df <- paths_df |>
-    expand_grid(region_df) |>
-    mutate(res = future_pmap(list("ftp" = ftp_path, "region" = coord, "gwas_sum" = gwas_sum),
-			     main,
-			     genes = genes_df$gene_id, header = column_names))
+coloc_df <- 
+    future_map_dfr(ftps, 
+		   function(x) main(ftp = x, 
+				    region = region_df$coord, 
+				    gwas_sum = region_df$gwas_sum[[1]],
+				    genes = genes_df$gene_id,
+				    header = column_names),
+		   .id = "study")
 
-# save results
-out <- coloc_df |>
-    select(study:quant_method, region, res) |>
-    unnest(cols = res)
+out_name <- file.path(rundir, "results", paste0("bentham_region", array_id, ".tsv"))
 
-out_name <- file.path(rundir, "results", paste0("region", region_query, ".tsv"))
-
-write_tsv(out, out_name)
+write_tsv(coloc_df, out_name)

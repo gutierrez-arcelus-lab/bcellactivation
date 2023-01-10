@@ -26,15 +26,38 @@ paths_df |>
     select(study, tissue_label, condition_label, qtl_group, quant_method, ftp_path) |>
     write_tsv("./data/coloc_input/eqtl_catalogue_paths.tsv")
 
+paths_df |>
+    filter(study != "GTEx_V8") |>
+    pull(ftp_path) |>
+    write_lines("./data/coloc_input/ftp_urls.txt")
+
+# save column names
+read_tsv(paths_df$ftp_path[1], n_max = 1) |>
+    colnames() |>
+    write_lines("./eqtl_column_names.txt")
+
+
 # download index files
 #walk(paths_df$ftp_path, download_tbi)
 
 
 # GWAS summ stats
+# in both the GWAS catalog and OpenGWAS data there are variant with same rsid and different stats 
 # From OpenGWAS
 gwas_stats <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/ebi-a-GCST003156.vcf.gz" |>
     read_tsv(comment = "##") |>
-    mutate(`#CHROM` = paste0("chr", `#CHROM`))
+    mutate(`#CHROM` = paste0("chr", `#CHROM`)) |>
+    add_count(`#CHROM`, ID) |>
+    filter(n == 1) |>
+    select(-n)
+
+#gwas_stats <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/bentham_GRCh38.tsv.gz" |>
+#    read_tsv() |>
+#    drop_na(hm_odds_ratio) |>
+#    select(chr = hm_chrom, rsid = hm_rsid, pos = hm_pos, 
+#	   eff_allele = hm_effect_allele, other_allele = hm_other_allele,
+#	   odds_ratio, beta, se = standard_error, p = p_value) |>
+#    mutate(chr = paste0("chr", chr))
 
 # liftOver
 chain <- "/reference_databases/ReferenceGenome/liftover_chain/hg19/hg19ToHg38.over.chain.gz"
@@ -60,14 +83,6 @@ gwas_stats_38 <- bed38 |>
     left_join(gwas_stats, by = c("chr" = "#CHROM", "rsid" = "ID")) |>
     select(chr, pos, rsid, ref = REF, alt = ALT, stats_info = FORMAT, stats = `EBI-a-GCST003156`)
 
-#gwas_stats <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/bentham_GRCh38.tsv.gz" |>
-#    read_tsv() |>
-#    drop_na(hm_odds_ratio) |>
-#    select(chr = hm_chrom, rsid = hm_rsid, pos = hm_pos, 
-#	   eff_allele = hm_effect_allele, other_allele = hm_other_allele,
-#	   odds_ratio, beta, se = standard_error, p = p_value) |>
-#    mutate(chr = paste0("chr", chr))
-
 # Top variants
 bentham_top <- "https://www.nature.com/articles/ng.3434/tables/1" |>
     read_html() |>
@@ -87,20 +102,21 @@ bentham_top <- "https://www.nature.com/articles/ng.3434/tables/1" |>
 bentham_top_pos <- bentham_top |>
     select(chr, rsid) |>
     inner_join(gwas_stats_38) |>
-    select(chr, pos)
+    select(chr, pos) |>
+    mutate(chr = factor(chr, levels = c(unique(chr), numeric = TRUE))) |>
+    arrange(chr, pos) |>
+    rowid_to_column("region")
 
 coords <- bentham_top_pos |>
     mutate(start = pos - 5e5, end = pos + 5e5,
 	   chr = sub("chr", "", chr),
-	   region = sprintf("%s:%d-%d", chr, start, end))
+	   coord = sprintf("%s:%d-%d", chr, start, end))
 
 # Save region for eQTL catalogue query
-write_lines(coords$region, "./data/coloc_input/region.txt")
-
+write_tsv(select(coords, region, coord), "./data/coloc_input/region.tsv")
 
 # Write minimum GWAS dataset for coloc
 gwas_min_df <- bentham_top_pos |>
-    rowid_to_column("region") |>
     mutate(data = map2(chr, pos, ~filter(gwas_stats_38, chr == .x, between(pos, .y - 5e5, .y + 5e5)))) |>
     select(region, data) |>
     unnest(cols = data) |>
