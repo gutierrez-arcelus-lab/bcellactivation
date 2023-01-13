@@ -36,13 +36,12 @@ read_tsv(paths_df$ftp_path[1], n_max = 1) |>
     colnames() |>
     write_lines("./eqtl_column_names.txt")
 
-
 # download index files
+# instead of downloading again, I used soft links
 #walk(paths_df$ftp_path, download_tbi)
 
-
 # GWAS summ stats
-# in both the GWAS catalog and OpenGWAS data there are variant with same rsid and different stats 
+# in both the GWAS catalog and OpenGWAS data there are variants with same rsid and different stats 
 # From OpenGWAS
 gwas_stats <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/ebi-a-GCST003156.vcf.gz" |>
     read_tsv(comment = "##") |>
@@ -51,6 +50,7 @@ gwas_stats <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/ebi-a-GCST0031
     filter(n == 1) |>
     select(-n)
 
+# Harmonized data from GWAS Catalog
 #gwas_stats <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/bentham_GRCh38.tsv.gz" |>
 #    read_tsv() |>
 #    drop_na(hm_odds_ratio) |>
@@ -88,7 +88,7 @@ bentham_top <- "https://www.nature.com/articles/ng.3434/tables/1" |>
     read_html() |>
     html_node("table") |>
     html_table(header = TRUE, fill = TRUE) |>
-    select(rsid = 1, chr = 2, pos = 3, locus = 4, p = 11, or = 12) |>
+    select(rsid = 1, chr = 2, pos = 3, locus = 4, p = 5, or = 6) |>
     slice(-1) |>
     as_tibble() |>
     mutate(rsid = gsub("\\s|[a-zA-Z,]+$", "", rsid),
@@ -100,6 +100,7 @@ bentham_top <- "https://www.nature.com/articles/ng.3434/tables/1" |>
 	   chr = paste0("chr", chr))
 
 bentham_top_pos <- bentham_top |>
+    filter(p < 1e-5) |>
     select(chr, rsid) |>
     inner_join(gwas_stats_38) |>
     select(chr, pos) |>
@@ -113,7 +114,9 @@ coords <- bentham_top_pos |>
 	   coord = sprintf("%s:%d-%d", chr, start, end))
 
 # Save region for eQTL catalogue query
-write_tsv(select(coords, region, coord), "./data/coloc_input/region.tsv")
+coords |>
+   select(region, coord) |>
+    write_tsv("./data/coloc_input/regions_bentham.tsv")
 
 # Write minimum GWAS dataset for coloc
 gwas_min_df <- bentham_top_pos |>
@@ -124,7 +127,7 @@ gwas_min_df <- bentham_top_pos |>
     mutate(gwas_varbeta = se^2) |>
     select(region, chr, pos, rsid, gwas_beta = beta, gwas_varbeta)
 
-write_tsv(gwas_min_df, "./data/coloc_input/gwas_data.tsv")
+write_tsv(gwas_min_df, "./data/coloc_input/gwas_data_bentham.tsv")
 
 
 # Select genes 
@@ -151,6 +154,106 @@ bed <- annotations |>
 gene_ids <- select(bed, gene_id, gene_name)
 
 # Save gene IDs for eQTL catalogue filtering
-write_tsv(gene_ids, "./data/coloc_input/gene_annots.tsv")
+write_tsv(gene_ids, "./data/coloc_input/gene_annots_bentham.tsv")
 
+
+# Langefeld
+langefeld_tier1 <- "../sle_variants/paper_data/langefeld_tableS2.xlxs" |>
+    readxl::read_excel(1, skip = 2) |>
+    select(snp_id = 1, 
+           chr = 2, 
+           pos = 3, 
+           gene_region = 4, 
+           region_rank = 5, 
+           ref_allele = 6, 
+           p = `P-value`,
+           or = `OR (95% CI)`) |>
+    filter(!is.na(pos)) |>
+    mutate(snp_id = gsub("\\s|[a-zA-Z,]+$", "", snp_id),  
+           p = gsub("\\s", "", p),
+	   p = sub("^([0-9.]+)[^0-9.]10[^0-9.](\\d+)$", "\\1e-\\2", p),
+	   p = parse_number(p),
+           or = parse_number(or)) |>
+    select(snp_id, chr, pos, gene_region, region_rank, ref_allele, p, or)
+
+make_lange_min_df <- function(dat, chrom) {
+
+    dat |>
+    filter(grepl("^rs", rsid)) |>
+    extract(rsid, "rsid", "(rs\\d+)") |>
+    select(rsid, position, beta = `frequentist_add_beta_1:add/sle=1`, 
+	   se = frequentist_add_se_1) |>
+    drop_na() |>
+    add_count(rsid) |>
+    filter(n == 1) |>
+    mutate(varbeta = se^2) |>
+    select(rsid, position, beta, varbeta) |>
+    inner_join(filter(langefeld_top_pos, chr == chrom), join_by(between(position, left, right))) |>
+    select(region, chr, pos = position, rsid, gwas_beta = beta, gwas_varbeta = varbeta) |> 
+    left_join(snp_ids_map, by = c("chr", "rsid" = "rsid")) |>
+    left_join(snp_ids_map, by = c("chr", "rsid" = "rsid_new")) |>
+    filter(!is.na(pos_hg38.x) | !is.na(pos_hg38.y)) |>
+    mutate(final_rsid = case_when(!is.na(rsid_new) & rsid == rsid_new ~ rsid,
+				  !is.na(rsid_new) & rsid != rsid_new ~ rsid_new,
+				  is.na(rsid_new) ~ rsid.y,
+				  TRUE ~ NA_character_),
+	   pos_hg38 = case_when(!is.na(pos_hg38.x) ~ pos_hg38.y,
+				!is.na(pos_hg38.y) ~ pos_hg38.x,
+				TRUE ~ NA_integer_)) |>
+    select(region, chr, pos = pos_hg38, rsid = final_rsid, gwas_beta, gwas_varbeta)
+}
+
+langefeld_top_pos <- langefeld_tier1 |>
+    filter(grepl("IL10|IKZF1", gene_region)) |>
+    mutate(chr = sub("^(\\d+)[pq]\\d+$", "\\1", chr)) |>
+    select(region = region_rank, chr, pos) |>
+    mutate(left = pos - 5e5, right = pos + 5e5)
+
+snp_ids_map <- "./data/snpout.txt.result.txt" |>
+    read_tsv(col_names = c("chr", "rsid", "pos_hg38", "rsid_new"), col_types = "ccic")
+
+
+langefeld_1 <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Langefeld/ea.imputed.chr1.out" |>
+    read_delim(delim = " ", comment = "#")
+
+langefeld_7 <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Langefeld/ea.imputed.chr7.out" |>
+    read_delim(delim = " ", comment = "#")
+
+min_df_lange_1 <- make_lange_min_df(langefeld_1, chrom = 1)
+min_df_lange_7 <- make_lange_min_df(langefeld_7, chrom = 7)
+
+min_df_lange <- bind_rows(min_df_lange_1, min_df_lange_7)
+
+write_tsv(min_df_lange, "./data/coloc_input/gwas_data_langefeld.tsv")
+
+langefeld_top_pos_hg38 <- langefeld_tier1 |>
+    filter(grepl("IL10|IKZF1", gene_region)) |>
+    mutate(chr = sub("^(\\d+)[pq]\\d+$", "\\1", chr)) |>
+    select(region = region_rank, chr, rsid = snp_id) |>
+    left_join(snp_ids_map, by = c("chr", "rsid")) |>
+    select(region, chr, rsid, pos = pos_hg38) |> 
+    mutate(left = pos - 5e5, 
+	   right = pos + 5e5)
+
+langefeld_top_pos_hg38 |>
+    mutate(coord = paste0(chr, ":", left, "-", right)) |>
+    select(region, coord) |>
+    write_tsv("./data/coloc_input/regions_langefeld.tsv")
+
+# Save gene IDs for eQTL catalogue filtering
+bed_langefeld <- annotations |>
+    filter(feature == "gene") |>
+    mutate(tss = case_when(strand == "+" ~ start, 
+			   strand == "-" ~ end, 
+			   TRUE ~ NA_integer_)) |>
+    inner_join(langefeld_top_pos_hg38 |> mutate(chr = paste0("chr", chr)), 
+	       join_by(chr, between(tss, left, right))) |>
+    mutate(gene_id = str_extract(info, "(?<=gene_id\\s\")[^\"]+"),
+	   gene_name = str_extract(info, "(?<=gene_name\\s\")[^\"]+"),
+	   gene_id = sub("^(ENSG\\d+)\\.\\d+((_PAR_Y)?)$", "\\1\\2", gene_id)) |>
+    select(chr, start, end, gene_id, gene_name)
+
+bed_langefeld |>
+    select(gene_id, gene_name) |>
+    write_tsv("./data/coloc_input/gene_annots_langefeld.tsv")
 
