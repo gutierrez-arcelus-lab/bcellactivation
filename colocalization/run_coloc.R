@@ -5,32 +5,10 @@ library(tidyverse)
 library(furrr)
 
 # functions
-import_eqtl <- function(ftp_path, region, header, genes) {
- 
-    fetch <- safely(function(f, r) {
-	tabix.read.table(tabixFile = f, 
-			 tabixRange = r) |>
-	as_tibble()
-    })
-
-    fetch_table <- fetch(f = ftp_path, r = region) 
-    error <- fetch_table$error
-	
-    i <- 1
-    while ( !is.null(error) & i < 30 ) {
-	Sys.sleep(10)
-	fetch_table <- fetch(f = ftp_path, r = region) 
-	error <- fetch_table$error
-	cat("Retrying...\n")
-	i <- i + 1
-    }
-    
-    if ( !is.null(fetch_table$error) ) stop("Can't retrieve dataset")
-
-    out <- as_tibble(fetch_table$result)
-    colnames(out) <- header
-
-    filter(out, gene_id %in% genes)
+fetch <- function(f, r) {
+    tabix.read.table(tabixFile = f, 
+		     tabixRange = r) |>
+    as_tibble()
 }
 
 run_coloc <- function(min_df) {
@@ -53,9 +31,12 @@ run_coloc <- function(min_df) {
     coloc_res
 }
 
-main <- function(ftp, region, gwas_sum, genes_dat, header) {
+main <- function(ftp, region, gwas_sum, genes, header) {
     
-    eqtl <- import_eqtl(ftp, region, header, genes_dat$gene_id)
+    eqtl <- fetch(f = ftp, r = region) |>
+	as_tibble() |>
+	setNames(header) |>
+	filter(gene_id %in% genes)
 
     eqtl_filtered <- eqtl |>
 	mutate(rsid = sub("\\\r$", "", rsid)) |>
@@ -69,6 +50,11 @@ main <- function(ftp, region, gwas_sum, genes_dat, header) {
 	add_count(molecular_trait_id, gene_id, type, position) |>
 	filter(n == 1) |>
 	select(-n)
+
+    if ( nrow(eqtl_filtered) == 0 ) {
+	return(tibble(gene_id = NA, molecular_trait_id = NA, nsnps = NA, 
+		      h0 = NA, h1 = NA, h2 = NA, h3 = NA, h4 = NA))
+    }
 
     eqtl_cat_df <- eqtl_filtered |>
 	mutate(eqtl_sample_size = an/2L,
@@ -85,36 +71,27 @@ main <- function(ftp, region, gwas_sum, genes_dat, header) {
 	(\(x) split(x, x$id))() |>
 	map(run_coloc)
 
-    if (length(coloc_results) == 0) return(tibble())
-
     coloc_results_summary <- map(coloc_results, "summary") |>
 	map_dfr(function(x) as_tibble(x, rownames = "stat"), .id = "id") |>
 	pivot_wider(names_from = stat, values_from = value) |>
 	select(id, nsnps, h0 = PP.H0.abf, h1 = PP.H1.abf, h2 = PP.H2.abf, h3 = PP.H3.abf, h4 = PP.H4.abf) |>
 	separate(id, c("gene_id", "molecular_trait_id"), sep = ",") |>
-	left_join(genes_dat) |>
-	select(gene_id, gene_name, molecular_trait_id, everything())
+	select(gene_id, molecular_trait_id, everything())
 
     coloc_results_summary
 }
 
-# Directoy
-rundir <- "/lab-share/IM-Gutierrez-e2/Public/vitor/lupus/colocalization"
 
 # Cmd arguments
-#pargs <- commandArgs(TRUE)[1:3]
-#dataset <- pargs[1]
-#array_id <- pargs[2]
-#procs <- pargs[3]
-
-dataset <- "bentham"
-procs <- 8
+pargs <- commandArgs(TRUE)[1:2]
+dataset <- pargs[1]
+region_id <- pargs[2]
 
 # eQTL Catalogue column names
-column_names <- read_lines(file.path(rundir, "eqtl_column_names.txt"))
+column_names <- read_lines("eqtl_column_names.txt")
 
 # eQTL catalogue URLs
-ftps <- file.path(rundir, "data/coloc_input/ftp_urls.txt") |>
+ftps <- "data/coloc_input/ftp_urls.txt" |>
     read_lines()
 
 study_ids <- basename(ftps) |> 
@@ -122,80 +99,73 @@ study_ids <- basename(ftps) |>
 
 names(ftps) <- study_ids
 
+# GWAS summ stats
+gwas_data <- "data/coloc_input/gwas_data_%s.tsv" |>
+    sprintf(dataset) |>
+    read_tsv() |>
+    group_nest(region, .key = "gwas_sum")
 
-# Define input
-if (dataset == "bentham") {
+# regions
+region_df <- "data/coloc_input/regions_%s.tsv" |>
+    sprintf(dataset) |>
+    read_tsv()
 
-    # GWAS summ stats
-    gwas_data <- file.path(rundir, "data/coloc_input/gwas_data_bentham.tsv") |>
-	read_tsv() |>
-	group_nest(region, .key = "gwas_sum")
+region_df_i <- region_df |>
+    filter(region == region_id) |>
+    left_join(gwas_data, by = "region")
 
-    # regions
-    region_df <- file.path(rundir, "data/coloc_input/regions_bentham.tsv") |>
-	read_tsv()
-
-    regions <- pull(region_df, region)
-
-    # genes to consider (TSS 300kb from GWAS hit)
-    genes_df <- file.path(rundir, "data/coloc_input/gene_annots_bentham.tsv") |>
-	read_tsv()
-
-} else if (dataset == "langefeld") {
-
-    # GWAS summ stats
-    gwas_data <- file.path(rundir, "data/coloc_input/gwas_data_langefeld.tsv") |>
-	read_tsv() |>
-	group_nest(region, .key = "gwas_sum")
-
-    # regions
-    region_df <- file.path(rundir, "data/coloc_input/region_langefeld.tsv") |>
-	read_tsv()
-    
-    regions <- pull(region_df, region)
-    
-    # genes to consider (TSS 500kb from GWAS hit)
-    genes_df <- file.path(rundir, "data/coloc_input/gene_annots_langefeld.tsv") |>
-	read_tsv()
-}
+# genes to consider (TSS 250kb from GWAS hit)
+genes_dat <- "data/coloc_input/gene_annots_%s.tsv" |>
+    sprintf(dataset) |>
+    read_tsv() |>
+    filter(region == region_id) |>
+    select(gene_id, gene_name)
 
 # Set up parallel architecture
-plan(multisession, workers = procs)
+plan(cluster, workers = length(availableWorkers()))
 
-for (array_id in regions) {
+# Run analysis
+analysis_df <- enframe(ftps) |>
+    setNames(c("study", "ftp"))
 
-    region_df_i <- region_df |>
-	filter(region == array_id) |>
-	left_join(gwas_data, by = "region")
+coloc_res_list <- list()
+error_i <- seq_len(nrow(analysis_df))
+i <- 1
 
-    # Run analysis
-    coloc_results <- list()
-    i = 1L
-    failed <- ftps == ftps
+while ( length(error_i) > 0 && i <= 30) {
 
-    while ( any(failed) ) {
+    coloc_res_list[[i]] <- analysis_df |>
+	slice(error_i) |>
+	mutate(res = future_map(ftp,  
+				safely(function(x) main(ftp = x, 
+							region = region_df_i$coord, 
+							gwas_sum = region_df_i$gwas_sum[[1]],
+							genes = genes_dat$gene_id,
+							header = column_names))))
 
-	coloc_results[[i]] <- 
-	    future_map(ftps[failed], 
-		       safely(function(x) main(ftp = x, 
-					       region = region_df_i$coord, 
-					       gwas_sum = region_df_i$gwas_sum[[1]],
-					       genes_dat = genes_df,
-					       header = column_names)))
+    errors <- coloc_res_list[[i]] |>
+	mutate(err = map(res, "error")) |>
+	pull(err)
 
-	failed <- map(coloc_results[[i]], "error") |>
-	    map(function(x) !is.null(x)) |>
-	    unlist()
+    error_i <- errors |>
+	map(~!is.null(.)) |>
+	unlist() |>
+	which()
 
-	i <- i + 1L
-    }
-
-    coloc_res_all <- coloc_results |>
-	flatten() |>
-	map_dfr(1, .id = "study")
-
-    out_name <- file.path(rundir, "results", 
-			  sprintf("%s_region%s.tsv", dataset, array_id))
-
-    write_tsv(coloc_res_all, out_name)
+    i <- i + 1
 }
+
+if ( length(error_i) > 0) stop("Could not retrieve or process eQTL catalogue data.")
+
+results <- coloc_res_list |>
+    bind_rows() |>
+    mutate(dat = map(res, "result")) |>
+    select(study, dat) |>
+    unnest(cols = dat) |>
+    left_join(genes_dat, by = "gene_id") |>
+    select(study, gene_id, gene_name, everything())
+
+out_name <- file.path("results", 
+		      sprintf("%s_region%s.tsv", dataset, region_id))
+
+write_tsv(results, out_name)

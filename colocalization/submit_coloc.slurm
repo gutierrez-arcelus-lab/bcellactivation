@@ -2,10 +2,10 @@
 
 #SBATCH -N 1
 #SBATCH -c 8
-#SBATCH --mem=32gb
+#SBATCH --mem=128gb
 #SBATCH --time=24:00:00
-#SBATCH -p bch-compute
-#SBATCH --array=1
+#SBATCH -p bch-largemem
+#SBATCH --array=6-33%1
 #SBATCH --job-name=coloc
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
@@ -17,8 +17,7 @@ export R_X=4.2.0
 cd $SLURM_SUBMIT_DIR
 
 DATASET=bentham
-ARRAYID=$SLURM_ARRAY_TASK_ID 
-CPUS=$SLURM_CPUS_PER_TASK 
+REGIONID=$SLURM_ARRAY_TASK_ID 
 
-Rscript run_coloc.R $DATASET $ARRAYID $CPUS 
+Rscript run_coloc.R $DATASET $REGIONID
   

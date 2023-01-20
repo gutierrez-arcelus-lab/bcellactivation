@@ -99,6 +99,18 @@ bentham_top <- "https://www.nature.com/articles/ng.3434/tables/1" |>
            or = parse_number(or),
 	   chr = paste0("chr", chr))
 
+# Save a description of the region
+bentham_top |>
+    filter(p < 1e-5) |>
+    select(chr, rsid, locus) |>
+    inner_join(gwas_stats_38) |>
+    select(chr, pos, locus) |>
+    mutate(chr = factor(chr, levels = c(unique(chr), numeric = TRUE))) |>
+    arrange(chr, pos) |>
+    rowid_to_column("region") |>
+    write_tsv("./data/bentham_top_hits.tsv")
+#
+
 bentham_top_pos <- bentham_top |>
     filter(p < 1e-5) |>
     select(chr, rsid) |>
@@ -149,9 +161,9 @@ bed <- annotations |>
     mutate(gene_id = str_extract(info, "(?<=gene_id\\s\")[^\"]+"),
 	   gene_name = str_extract(info, "(?<=gene_name\\s\")[^\"]+"),
 	   gene_id = sub("^(ENSG\\d+)\\.\\d+((_PAR_Y)?)$", "\\1\\2", gene_id)) |>
-    select(chr, start, end, gene_id, gene_name)
+    select(region, chr, start, end, gene_id, gene_name)
 
-gene_ids <- select(bed, gene_id, gene_name)
+gene_ids <- select(bed, region, gene_id, gene_name)
 
 # Save gene IDs for eQTL catalogue filtering
 write_tsv(gene_ids, "./data/coloc_input/gene_annots_bentham.tsv")
