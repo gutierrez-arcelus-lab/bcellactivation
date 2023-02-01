@@ -82,24 +82,23 @@ demuxlet_df <- read_tsv("./demuxlet/demuxlet_results.best") |>
     select(barcode = BARCODE, best = BEST) |>
     extract(best, c("status", "sample"), "([^-]+)-(.+)")
 
-
 # HTO counts
-hto <- as_tibble(t(bcells@assays$HTO@counts), rownames = "barcode") |>
+hto <- as_tibble(t(as.matrix(bcells@assays$HTO@counts)), rownames = "barcode") |>
     pivot_longer(-barcode, names_to = "stim") |>
     group_by(barcode) |>
     mutate(hto_max = stim[which.max(value)]) |>
     ungroup() |>
     mutate_at(vars(stim, hto_max), ~factor(., levels = stims))
 
-png("./plots/test.png", units = "in", res = 300, width = 6, height = 3)
-ggplot(hto, aes(x = log10(value + 1))) +
-    geom_density(aes(fill = stim), size = .25, alpha = .5) +
+hto_plot <- ggplot(hto, aes(x = log2(value + 1))) +
+    geom_density(aes(fill = stim), linewidth = .25, alpha = .5) +
     scale_fill_manual(values = stim_colors) +
     facet_wrap(~hto_max, nrow = 2) +
     theme_bw() +
     theme(panel.grid = element_blank()) +
-    labs(x = "log10 (counts + 1)")
-dev.off()
+    labs(x = "log2 (counts + 1)")
+
+ggsave("./plots/hto.png", hto_plot, width = 6, height = 3)
 
 # QC
 bcells <- HTODemux(bcells, assay = "HTO", positive.quantile = 0.99)
@@ -109,6 +108,7 @@ bcells_meta <- bcells@meta.data |>
 
 qc_plot <- bcells_meta |>
     select(barcode, n_genes = nFeature_RNA, percent_mt, stim = HTO_maxID) |> 
+    mutate(stim = factor(stim, levels = stims)) |>
     ggplot(aes(x = n_genes, y = percent_mt)) +
     geom_point(size = .25, alpha = .25) +
     geom_vline(xintercept = 700, linetype = 2, color = "tomato3") +
@@ -118,7 +118,7 @@ qc_plot <- bcells_meta |>
     theme(panel.grid.minor = element_blank()) +
     labs(x = "Number of genes", y = "% reads from Mitochondria")
 
-ggsave("./plots/test.png", qc_plot, width = 6, height = 6)
+ggsave("./plots/qc.png", qc_plot, width = 6, height = 6)
    
 
 demuxlet_singlets <- demuxlet_df |>
@@ -130,6 +130,7 @@ cells_keep <- bcells_meta |>
 
 bcells_pass <- subset(bcells, cells = cells_keep$barcode)
 
+
 # HTO demux
 bcells_pass <- HTODemux(bcells_pass, assay = "HTO", positive.quantile = 0.99)
 
@@ -140,7 +141,45 @@ bcells_pass_demux_meta <- bcells_pass@meta.data |>
 
 bcells_singlet <- subset(bcells_pass, cells = bcells_pass_demux_meta$barcode)
 
-## PCA
+# Plot cells per donor
+cells_after_qc <- bcells_singlet@meta.data |>
+    as_tibble(rownames = "barcode") |>
+    select(barcode) |>
+    inner_join(demuxlet_singlets)
+
+n_cells_plot <- 
+    bind_rows("Before QC" = demuxlet_singlets, "After QC" = cells_after_qc, .id = "qc") |>
+    count(qc, sample) |>
+    extract(sample, "sample", ".+-(\\d+)") |>
+    mutate(qc = factor(qc, levels = c("Before QC", "After QC"))) |>
+    ggplot(aes(x = sample, y = n)) +
+	geom_col(fill = "midnightblue", alpha = .5) +
+	scale_y_continuous(breaks = seq(from = 0, to = 15000, by = 1000)) +
+	facet_wrap(~qc, nrow = 1) +
+	theme_bw() +
+	labs(x = NULL, y = "Total cells")
+
+ggsave("./plots/ncells.png", n_cells_plot, width = 4, height = 2.5)
+
+# Clustering
+scdata <- bcells_singlet@assays$RNA@counts
+
+clusters <- scSHC(scdata, 
+		  batch = NULL, alpha = 0.05, num_features = 2000,
+		  num_PCs = 30, parallel = TRUE, cores = 4)
+
+cluster_df <- enframe(clusters[[1]], "barcode", "cluster")
+
+metadata_update <- bcells_singlet@meta.data |> 
+    as_tibble(rownames = "barcode") |>
+    left_join(cluster_df, by = "barcode") |>
+    column_to_rownames("barcode") |>
+    as.data.frame()
+
+bcells_singlet <- AddMetaData(bcells_singlet, metadata = metadata_update)
+
+
+# PCA
 bcells_singlet <- bcells_singlet |>
     FindVariableFeatures(nfeatures = 2000, selection.method = "vst") |>
     {function(x) ScaleData(x, features = rownames(x))}() |>
@@ -148,7 +187,7 @@ bcells_singlet <- bcells_singlet |>
 
 singlets_meta_data <- bcells_singlet@meta.data |>
     as_tibble(rownames = "barcode") |>
-    select(barcode, stim = HTO_maxID, 
+    select(barcode, stim = HTO_maxID, cluster, 
 	   percent_mt, percent_ribo, n_genes = nFeature_RNA, umi = nCount_RNA) |>
     mutate(stim = factor(stim, levels = stims))
 
@@ -198,7 +237,7 @@ loadings_plot <- bcells_singlet@reductions$pca@feature.loadings |>
 ggsave("./plots/test.png", plot_grid(pca_plot, loadings_plot, nrow = 1), 
        width = 10, height = 5)
 
-
+# UMAP
 bcells_singlet <- bcells_singlet |>
     RunUMAP(dims = 1:30, verbose = FALSE)
 
@@ -216,6 +255,25 @@ umap_stims <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
           axis.ticks = element_blank(),
           legend.key.height = unit(.75, "lines")) +
     guides(color = guide_legend(override.aes = list(size = 2)))
+
+
+cluster_cols <- c("grey", "black", "goldenrod3", pal_npg()(10), "magenta")
+
+umap_cluster <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = factor(cluster))) +
+    geom_point(size = .5) +
+    scale_color_manual(values = cluster_cols) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2))) +
+    labs(color = "Cluster")
+
+ggsave("./plots/umap_cluster.png", 
+       plot_grid(umap_stims, umap_cluster, nrow = 1),
+       width = 10, height = 4)
 
 mki_gene_df <- genes_df |>
     filter(gene_name == "MKI67") |>
@@ -244,6 +302,10 @@ ki67 <- umap_df |>
 
 ggsave("./plots/umap.png", plot_grid(umap_stims, ki67, nrow = 1), 
        width = 10, height = 5)
+
+
+
+
 
 
 # Marker genes
@@ -324,13 +386,96 @@ markers_plot <- plot_markers(bcells_markers, bcells_singlet)
 ggsave("./plots/markers.png", markers_plot)
 
 
+Idents(bcells_singlet) <- "cluster"
 
-# Clustering
-scdata <- bcells_singlet@assays$RNA@data
+cluster_markers <- 
+    FindAllMarkers(bcells_singlet, 
+                   only.pos = TRUE,
+                   min.pct = 0.1,
+                   logfc.threshold = 1) |>
+    as_tibble()
 
-clusters <- scSHC(scdata, 
-		  batch = NULL, alpha = 0.05, num_features = 2500,
-		  num_PCs = 25, parallel = TRUE, cores = 4)
+cluster_markers_plot <- cluster_markers |>
+    mutate(cluster = factor(cluster, levels = sort(unique(as.numeric(as.character(cluster)))))) |>
+    plot_markers(bcells_singlet)
+
+ggsave("./plots/markers_cluster.png", cluster_markers_plot, width = 8, height = 10)
 
 
-str(clusters)
+# ADT
+adt_df <- bcells_singlet@assays$ADT@data |>
+    as_tibble(rownames = "ab") |>
+    pivot_longer(-ab, names_to = "barcode", values_to = "ab_level") |>
+    mutate(ab = factor(ab, levels = str_sort(unique(ab), numeric = TRUE)))
+
+# shrink outliers
+adt_df_sh <- adt_df |>
+    group_by(ab) |>
+    mutate(q01 = quantile(ab_level, 0.01),
+	   q99 = quantile(ab_level, 0.99),
+	   ab_level = case_when(ab_level < q01 ~ q01,
+				ab_level > q99 ~ q99,
+				TRUE ~ ab_level)) |>
+    ungroup()
+
+bcell_prots_plot_list <- umap_df |>
+    select(barcode, UMAP_1, UMAP_2) |>
+    left_join(adt_df_sh, by = "barcode", multiple = "all") |>
+    {function(x) split(x, x$ab)}() |>
+    map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = ab_level)) +
+	    geom_point(size = .2) +
+	    scale_color_scico(palette = "lajolla",
+			      labels = function(x) str_pad(x, 3),
+			      guide = guide_colorbar(barwidth = .5,
+						     barheight = 3)) +
+	    facet_wrap(~ab) +
+	    theme_bw() +
+	    theme(panel.grid = element_blank(),
+		  panel.border = element_blank(),
+		  axis.title = element_blank(),
+		  axis.text = element_blank(),
+		  strip.background = element_blank(),
+		  axis.line = element_blank(),
+		  axis.ticks = element_blank()) +
+	    labs(color = NULL))
+
+adt_plot <- plot_grid(plotlist = bcell_prots_plot_list, ncol = 4)
+
+ggsave("./plots/adt.png", width = 10, height = 40)
+
+
+
+
+# cell types 
+
+library(MCPcounter)
+
+mcp_scores <- 
+    MCPcounter.estimate(expression = bcells_singlet@assays$RNA@data,
+		      featuresType = "ENSEMBL_ID") |>
+    t() |>
+    as.data.frame() |>
+    rownames_to_column("barcode") |>
+    as_tibble() |>
+    pivot_longer(-barcode, names_to = "cell_type")
+
+umap_celltype_list <- umap_df |>
+    left_join(mcp_scores, by = "barcode") |>
+    {function(x) split(x, x$cell_type)}() |>
+    map(~ggplot(.) +
+    geom_point(aes(UMAP_1, UMAP_2, color = value, fill = value), size = .1, shape = 19) +
+    scale_color_viridis_c(guide = "none") +
+    scale_fill_viridis_c("", guide = guide_colorbar(barwidth = .5)) +
+    facet_wrap(~cell_type, scales = "free", ncol = 3) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+	  panel.border = element_blank(),
+	  axis.line = element_blank(),
+	  axis.ticks = element_blank(),
+	  legend.key.height = unit(.75, "lines"),
+	  axis.title = element_blank(),
+	  axis.text = element_blank()))
+
+mcp_plot <- plot_grid(plotlist = umap_celltype_list, ncol = 3)
+
+ggsave("./plots/mcp.png", mcp_plot)
