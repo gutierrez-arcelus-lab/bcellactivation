@@ -1,0 +1,169 @@
+---
+title: "Sle GWAS variants"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, comment = "")
+options(width = 999)
+```
+
+### Packages
+
+```{r pkgs}
+library(tidyverse)
+library(readxl)
+library(rvest)
+library(ggrepel)
+```
+
+
+### Functions
+```{r functions}
+parse_pvalues <- function(p) {
+
+    p %>%
+        gsub("\\s", "", .) %>%
+        sub("^([0-9.]+)[^0-9.]10[^0-9.](\\d+)$", "\\1e-\\2", .) %>%
+        parse_number()
+}
+
+read_langefeld <- function(tab_path, sheet_number) {
+    read_excel(tab_path, sheet_number, skip = 2) %>%
+    select(snp_id = 1, 
+           chr = 2, 
+           pos = 3, 
+           gene_region = 4, 
+           region_rank = 5, 
+           ref_allele = 6, 
+           p = `P-value`,
+           or = `OR (95% CI)`,
+           p_stepwise = `Regional Stepwise  P-value`) %>% 
+    filter(!is.na(pos)) %>%
+    mutate(snp_id = gsub("\\s|[a-zA-Z,]+$", "", snp_id),  
+           p = parse_pvalues(p),
+           p_stepwise = parse_pvalues(p_stepwise),
+           or = parse_number(or)) %>%
+    select(snp_id, chr, pos, gene_region, region_rank, ref_allele, p, p_stepwise, or)
+}
+
+read_bentham <- function(url_address) {
+
+    read_html(url_address) %>%
+    html_node("table") %>%
+    html_table(header = TRUE, fill = TRUE) %>%
+    select(snp_id = 1, chr = 2, pos = 3, locus = 4, p = 5, or = 6) %>%
+    slice(-1) %>%
+    as_tibble() %>%
+    mutate(snp_id = gsub("\\s|[a-zA-Z,]+$", "", snp_id),
+           pos = parse_number(pos),
+           p = parse_pvalues(p),
+           or = parse_number(or))
+}
+```
+
+### Import Langefeld et al. data
+
+```{r}
+tier1_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 1)
+tier2_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 2)
+tier3_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 3)
+
+langefeld_df <- bind_rows("1" = tier1_ea, "2" = tier2_ea, "3" = tier3_ea, .id = "tier") %>%
+    arrange(tier, region_rank, p) %>%
+    mutate(chr = sub("^(\\d+)[qp].*$", "\\1", chr),
+	   chr = factor(chr, levels = c(1:22, "X")))
+
+langefeld_df
+```
+
+### Import Bentham et al. data
+
+```{r}
+bentham_df <- read_bentham("https://www.nature.com/articles/ng.3434/tables/1") %>%
+    mutate(chr = factor(chr, levels = c(1:22, "X")))
+
+bentham_df
+```
+
+### Get p-values and GRCh38 positions from summary statistics
+```{r}
+bentham_stats <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/bentham_GRCh38.tsv.gz" |>
+    read_tsv() |>
+    drop_na(hm_odds_ratio) |>
+    select(chr = hm_chrom, rsid = hm_rsid, pos = hm_pos, 
+          eff_allele = hm_effect_allele, other_allele = hm_other_allele,
+          odds_ratio, beta, se = standard_error, p = p_value) |>
+    mutate(chr = factor(chr, levels = c(1:22, "X"))) |>
+    arrange(chr, pos)
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+
+data_cum <- bentham_stats %>% 
+  group_by(chr) %>% 
+  summarise(max_pos = max(pos)) %>% 
+  mutate(pos_add = lag(cumsum(max_pos), default = 0)) %>% 
+  select(chr, pos_add)
+
+bentham_top <- bentham_df |> 
+    inner_join(data_cum) |> 
+    mutate(pos_cumm = pos + pos_add)
+
+gwas_data <- bentham_stats %>% 
+  inner_join(data_cum, by = "chr") %>% 
+  mutate(pos_cumm = pos + pos_add)
+
+gwas_signal <- gwas_data |>
+    filter(p < 0.01)
+
+gwas_noise <- gwas_data |>
+    filter(p >= 0.01) |>
+    group_by(chr) |>
+    sample_frac(0.1) |>
+    ungroup()
+
+gwas_plot <- bind_rows(gwas_signal, gwas_noise) |>
+    arrange(pos_cumm)
+
+axis_set <- gwas_data %>% 
+  group_by(chr) %>% 
+  summarize(center = mean(pos_cumm))
+
+ylim <- gwas_data %>% 
+  filter(p == min(p)) %>% 
+  mutate(ylim = abs(floor(log10(p))) + 2) %>% 
+  pull(ylim)
+
+manhplot <- 
+    ggplot(gwas_plot, 
+	   aes(x = pos_cumm, y = -log10(p), color = chr)) +
+    geom_hline(yintercept = -log10(5e-8), linetype = 1, size = .5) + 
+    geom_hline(yintercept = -log10(1e-5), linetype = 2, size = .25) + 
+    geom_point(size = .25, alpha = 0.2) +
+    geom_point(data = bentham_top, 
+	       aes(x = pos_cumm, y = -log10(p)),
+	       shape = 1, size = 2, alpha = 1) +
+    geom_text_repel(data = bentham_top, 
+		    aes(x = pos_cumm, y = -log10(p), label = locus),
+		    inherit.aes = FALSE,
+		    direction = "y", angle = 90, size = 4, nudge_y = 10, fontface = "bold", 
+		    min.segment.length = 0, segment.size = .1) +
+    scale_x_continuous(label = axis_set$chr, breaks = axis_set$center) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, ylim)) +
+    scale_color_manual(values = rep(c("cornflowerblue", "tomato2"), unique(length(axis_set$chr)))) +
+    labs(x = NULL, y = "-log10 (p-value)") + 
+    theme_minimal() +
+    theme( 
+	  legend.position = "none",
+	  panel.grid.major.x = element_blank(),
+	  panel.grid.minor.x = element_blank(),
+	  plot.background = element_rect(color = "white", fill = "white")
+    )
+
+ggsave("./manhattan_bentham.png", manhplot, width = 10, height = 5)
+
+```
+
+
