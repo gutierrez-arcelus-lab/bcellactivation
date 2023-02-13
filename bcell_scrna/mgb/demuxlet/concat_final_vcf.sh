@@ -33,3 +33,10 @@ tabix -f -p vcf $VCFSORTFIX
 
 rm ${VCFOUT}* ${VCFSORT}* 
 rm ./data/chr_list.txt ./data/header.txt
+
+# Extract gene regions
+BED=./data/gene_regions.bed
+OUT=allchr.mgb.generegions.vcf.gz 
+
+bcftools view -R $BED -O z -o $OUT $VCFSORTFIX 
+tabix -f -p vcf $OUT

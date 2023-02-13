@@ -1,6 +1,11 @@
+
+# Set large RAM limit for R
+unix::rlimit_as(1e12)
+
 # single-cell data analysis
 library(Seurat)
-library(scSHC)
+#library(scSHC)
+
 
 # Data wrangling
 library(tidyverse)
@@ -11,8 +16,42 @@ library(ggridges)
 library(RColorBrewer)
 library(scico)
 library(ggsci)
+library(ggthemes)
 library(cowplot)
 
+# Function
+make_seurat <- function(cellranger_path, project_id) {
+
+    data10x <- Read10X(cellranger_path, gene.column = 1)
+
+    antibody_mtx <- data10x[["Antibody Capture"]] |>
+	{function(x) x[!grepl("^Hashtag", rownames(x)), ]}()
+
+    rownames(antibody_mtx) <- sub("_prot$", "", rownames(antibody_mtx))
+
+    hashtags_mtx <- data10x[["Antibody Capture"]] |>
+	{function(x) x[grepl("^Hashtag", rownames(x)), ]}()
+
+    rownames(hashtags_mtx) <- setNames(stims[rownames(hashtags_mtx)], NULL)
+
+    bcells <- CreateSeuratObject(counts = data10x[["Gene Expression"]],
+				 project = project_id)
+
+    bcells[["ADT"]] <- CreateAssayObject(counts = antibody_mtx)
+    bcells[["HTO"]] <- CreateAssayObject(counts = hashtags_mtx)
+
+    bcells <- bcells |>
+	NormalizeData(normalization.method = "LogNormalize", margin = 1) |>
+	NormalizeData(assay = "HTO", normalization.method = "CLR", margin = 1) |>
+	NormalizeData(assay = "ADT", normalization.method = "CLR", margin = 2)
+
+    bcells[["percent_mt"]] <- PercentageFeatureSet(bcells, features = mt_genes)
+    bcells[["percent_ribo"]] <- PercentageFeatureSet(bcells, features = ribo_genes)
+
+    bcells
+}
+
+# Stims
 stims <- 
     c(
       "Hashtag6" = "unstim 0h",
@@ -26,13 +65,33 @@ stims <-
       "Hashtag15" = "DN2 72h"
     )
 
-cellranger_dir <- 
+stim_colors <- c("grey80", "grey40", "black", brewer.pal(n = 6, "Paired"))
+names(stim_colors) <- stims
+
+# Cell ranger data
+libraries <- c("1984", "1988", "1990")
+
+cellranger_dir_1984 <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_citeseq",
 	      "SN0268787/broad/hptmp/curtism/bwh10x/KW10456_Maria",
 	      "221101_10X_KW10456_bcl/cellranger-6.1.1/GRCh38/BRI-1984/outs",
 	      "filtered_feature_bc_matrix")
 
-features_df <- file.path(cellranger_dir, "features.tsv.gz") |>
+cellranger_dir_1988 <-
+    file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_citeseq",
+	      "SN0273471/broad/hptmp/sgurajal/bwh10x/KW10598_mgutierrez",
+	      "221211_10X_KW10598_bcl/cellranger-6.1.1/GRCh38/BRI-1988_hashing/outs",
+	      "filtered_feature_bc_matrix")
+
+cellranger_dir_1990 <-
+    file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_citeseq",
+	      "SN0273471/broad/hptmp/sgurajal/bwh10x/KW10598_mgutierrez",
+	      "221211_10X_KW10598_bcl/cellranger-6.1.1/GRCh38/BRI-1990_hashing/outs",
+	      "filtered_feature_bc_matrix")
+
+# Using features from library 1984
+# They are the same for all libraries
+features_df <- file.path(cellranger_dir_1984, "features.tsv.gz") |>
     read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
 
 genes_df <- features_df |>
@@ -47,176 +106,255 @@ ribo_genes <- genes_df |>
     filter(grepl("^RPS\\d+|^RPL\\d+", gene_name)) |>
     pull(gene_id)
 
-data10x <- Read10X(cellranger_dir, gene.column = 1)
+# Seurat objects
+bcells_1984 <- make_seurat(cellranger_dir_1984, "1984")
+bcells_1988 <- make_seurat(cellranger_dir_1988, "1988")
+bcells_1990 <- make_seurat(cellranger_dir_1990, "1990")
 
-antibody_mtx <- data10x[["Antibody Capture"]] |>
-    {function(x) x[!grepl("^Hashtag", rownames(x)), ]}()
-
-rownames(antibody_mtx) <- rownames(antibody_mtx) |>
-    sub("_prot$", "", x = _) |>
-    gsub("_", ".", x = _)
-
-hashtags_mtx <- data10x[["Antibody Capture"]] |>
-    {function(x) x[grepl("^Hashtag", rownames(x)), ]}()
-
-rownames(hashtags_mtx) <- setNames(stims[rownames(hashtags_mtx)], NULL)
-
-stim_colors <- c("grey80", "grey40", "black", brewer.pal(n = 6, "Paired"))
-names(stim_colors) <- stims
-
-# Create object
-bcells <- CreateSeuratObject(counts = data10x[["Gene Expression"]], project = "MGB")
-bcells[["ADT"]] <- CreateAssayObject(counts = antibody_mtx)
-bcells[["HTO"]] <- CreateAssayObject(counts = hashtags_mtx)
-
-bcells <- bcells |>
-    NormalizeData(normalization.method = "LogNormalize", margin = 1) |>
-    NormalizeData(assay = "HTO", normalization.method = "CLR", margin = 1) |>
-    NormalizeData(assay = "ADT", normalization.method = "CLR", margin = 2)
-
-bcells[["percent_mt"]] <- PercentageFeatureSet(bcells, features = mt_genes)
-bcells[["percent_ribo"]] <- PercentageFeatureSet(bcells, features = ribo_genes)
 
 # Demuxlet
-demuxlet_df <- read_tsv("./demuxlet/demuxlet_results.best") |>
+demuxlet_1984 <- read_tsv("./demuxlet/demuxlet_results.best") |>
+    select(barcode = BARCODE, best = BEST) |>
+    extract(best, c("status", "sample"), "([^-]+)-(.+)")
+
+demuxlet_1988 <- read_tsv("./demuxlet/demuxlet_1988_results.best") |>
+    select(barcode = BARCODE, best = BEST) |>
+    extract(best, c("status", "sample"), "([^-]+)-(.+)")
+
+demuxlet_1990 <- read_tsv("./demuxlet/demuxlet_1990_results.best") |>
     select(barcode = BARCODE, best = BEST) |>
     extract(best, c("status", "sample"), "([^-]+)-(.+)")
 
 # HTO counts
-hto <- as_tibble(t(as.matrix(bcells@assays$HTO@counts)), rownames = "barcode") |>
-    pivot_longer(-barcode, names_to = "stim") |>
-    group_by(barcode) |>
-    mutate(hto_max = stim[which.max(value)]) |>
-    ungroup() |>
-    mutate_at(vars(stim, hto_max), ~factor(., levels = stims))
+plot_hto <- function(seurat_obj) {
 
-hto_plot <- ggplot(hto, aes(x = log2(value + 1))) +
-    geom_density(aes(fill = stim), linewidth = .25, alpha = .5) +
-    scale_fill_manual(values = stim_colors) +
-    facet_wrap(~hto_max, nrow = 2) +
-    theme_bw() +
-    theme(panel.grid = element_blank()) +
-    labs(x = "log2 (counts + 1)")
+    hto <- as_tibble(t(as.matrix(seurat_obj@assays$HTO@counts)), rownames = "barcode") |>
+	pivot_longer(-barcode, names_to = "stim") |>
+	group_by(barcode) |>
+	mutate(hto_max = stim[which.max(value)]) |>
+	ungroup() |>
+	mutate_at(vars(stim, hto_max), ~factor(., levels = stims))
 
-ggsave("./plots/hto.png", hto_plot, width = 6, height = 3)
+    ggplot(hto, aes(x = log2(value + 1))) +
+	geom_density(aes(fill = stim), linewidth = .25, alpha = .5) +
+	scale_fill_manual(values = stim_colors) +
+	facet_wrap(~hto_max, nrow = 2) +
+	theme_bw() +
+	theme(panel.grid = element_blank(),
+	      plot.margin = margin(t = 1, unit = "cm")) +
+	labs(x = "log2 (counts + 1)")
+}
+
+
+hto_plots <- list(bcells_1984, bcells_1988, bcells_1990) |>  
+    map(plot_hto) |>
+    plot_grid(plotlist = _, ncol = 1, labels = libraries)
+
+ggsave("./plots/hto.png", hto_plots, width = 6, height = 9)
 
 # QC
-bcells <- HTODemux(bcells, assay = "HTO", positive.quantile = 0.99)
+plot_qc <- function(seurat_metadata, library_id) {
 
-bcells_meta <- bcells@meta.data |>
+    seurat_metadata |>
+	select(barcode, n_genes = nFeature_RNA, percent_mt, stim = HTO_maxID) |> 
+	mutate(stim = factor(stim, levels = stims)) |>
+	ggplot(aes(x = n_genes, y = percent_mt)) +
+	geom_point(size = .25, alpha = .25) +
+	geom_vline(xintercept = 1000, linetype = 2, color = "tomato3") +
+	geom_hline(yintercept = 10, linetype = 2, color = "tomato3") +
+	facet_wrap(~stim, ncol = 3) +
+	theme_bw() +
+	theme(panel.grid.minor = element_blank(),
+	      plot.margin = margin(t = 1, r = 1, unit = "cm")) +
+	labs(x = "Number of genes", 
+	     y = "% reads from Mitochondria")
+}
+
+bcells_1984 <- HTODemux(bcells_1984, assay = "HTO", positive.quantile = 0.99)
+bcells_1988 <- HTODemux(bcells_1988, assay = "HTO", positive.quantile = 0.99)
+bcells_1990 <- HTODemux(bcells_1990, assay = "HTO", positive.quantile = 0.99)
+
+bcells_1984_meta <- bcells_1984@meta.data |>
     as_tibble(rownames = "barcode") 
 
-qc_plot <- bcells_meta |>
-    select(barcode, n_genes = nFeature_RNA, percent_mt, stim = HTO_maxID) |> 
-    mutate(stim = factor(stim, levels = stims)) |>
-    ggplot(aes(x = n_genes, y = percent_mt)) +
-    geom_point(size = .25, alpha = .25) +
-    geom_vline(xintercept = 700, linetype = 2, color = "tomato3") +
-    geom_hline(yintercept = 7, linetype = 2, color = "tomato3") +
-    facet_wrap(~stim, ncol = 3) +
-    theme_bw() +
-    theme(panel.grid.minor = element_blank()) +
-    labs(x = "Number of genes", y = "% reads from Mitochondria")
+bcells_1988_meta <- bcells_1988@meta.data |>
+    as_tibble(rownames = "barcode") 
 
-ggsave("./plots/qc.png", qc_plot, width = 6, height = 6)
+bcells_1990_meta <- bcells_1990@meta.data |>
+    as_tibble(rownames = "barcode") 
+
+qc_plots <- list(bcells_1984_meta, bcells_1988_meta, bcells_1990_meta) |>  
+    map(plot_qc) |>
+    plot_grid(plotlist = _, ncol = 1, labels = libraries)
+
+ggsave("./plots/qc.png", qc_plots, width = 6, height = 12)
    
+# Filter good cells
+filter_cells <- function(seurat_obj, n_genes = 1000, p_mt = 10, demuxlet_df) {
 
-demuxlet_singlets <- demuxlet_df |>
-    filter(status == "SNG")
+    demuxlet_singlets <- demuxlet_df |>
+	filter(status == "SNG") |>
+	group_by(sample) |>
+	filter(n() > 10) |>
+	ungroup() |>
+	pull(barcode)
 
-cells_keep <- bcells_meta |>
-    filter(nFeature_RNA > 700, percent_mt <= 7) |>
-    filter(barcode %in% demuxlet_singlets$barcode)
+    cells_keep <- seurat_obj@meta.data |>
+	as_tibble(rownames = "barcode") |>
+	filter(nFeature_RNA >= n_genes, 
+	       percent_mt <= p_mt,
+	       HTO_classification.global == "Singlet",
+	       barcode %in% demuxlet_singlets)
 
-bcells_pass <- subset(bcells, cells = cells_keep$barcode)
+    seurat_obj <- subset(seurat_obj, cells = cells_keep$barcode)
 
+    seurat_obj
+}
 
-# HTO demux
-bcells_pass <- HTODemux(bcells_pass, assay = "HTO", positive.quantile = 0.99)
+bcells_1984_sng <- filter_cells(bcells_1984, demuxlet_df = demuxlet_1984)
+bcells_1988_sng <- filter_cells(bcells_1988, demuxlet_df = demuxlet_1988)
+bcells_1990_sng <- filter_cells(bcells_1990, demuxlet_df = demuxlet_1990)
 
-bcells_pass_demux_meta <- bcells_pass@meta.data |>
-    as_tibble(rownames = "barcode") |>
-    filter(HTO_classification.global == "Singlet") |>
-    inner_join(demuxlet_singlets, by = "barcode")
-
-bcells_singlet <- subset(bcells_pass, cells = bcells_pass_demux_meta$barcode)
 
 # Plot cells per donor
-cells_after_qc <- bcells_singlet@meta.data |>
-    as_tibble(rownames = "barcode") |>
-    select(barcode) |>
-    inner_join(demuxlet_singlets)
+cells_before_qc <- 
+    bind_rows("1984" = demuxlet_1984, 
+	      "1988" = demuxlet_1988, 
+	      "1990" = demuxlet_1990,
+	      .id = "library_id") |>
+    filter(status == "SNG") |>
+    select(-status)
+
+cells_after_qc <- 
+    map_df(setNames(libraries, libraries),
+	    function(x) {
+		seurat_obj <- get(sprintf("bcells_%s_sng", x)) 
+		demux_df <- get(sprintf("demuxlet_%s", x))
+		
+		seurat_obj@meta.data |>
+		as_tibble(rownames = "barcode") |>
+		select(barcode) |>
+		left_join(demux_df) |>
+		select(-status)
+	    }, 
+	    .id = "library_id")
+
 
 n_cells_plot <- 
-    bind_rows("Before QC" = demuxlet_singlets, "After QC" = cells_after_qc, .id = "qc") |>
-    count(qc, sample) |>
+    bind_rows("Before QC" = cells_before_qc, "After QC" = cells_after_qc, .id = "qc") |>
+    count(library_id, qc, sample) |>
     extract(sample, "sample", ".+-(\\d+)") |>
     mutate(qc = factor(qc, levels = c("Before QC", "After QC"))) |>
     ggplot(aes(x = sample, y = n)) +
 	geom_col(fill = "midnightblue", alpha = .5) +
-	scale_y_continuous(breaks = seq(from = 0, to = 15000, by = 1000)) +
-	facet_wrap(~qc, nrow = 1) +
+	scale_y_continuous(breaks = seq(from = 0, to = 16000, by = 2000)) +
+	facet_grid(qc ~ library_id, scales = "free_x") +
 	theme_bw() +
+	theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+	      panel.grid.minor.y = element_blank()) +
 	labs(x = NULL, y = "Total cells")
 
-ggsave("./plots/ncells.png", n_cells_plot, width = 4, height = 2.5)
+ggsave("./plots/ncells.png", n_cells_plot, width = 4, height = 3)
+
 
 # Clustering
-scdata <- bcells_singlet@assays$RNA@counts
+#scdata <- bcells_singlet@assays$RNA@counts
+#
+#clusters <- scSHC(scdata, 
+#		  batch = NULL, alpha = 0.05, num_features = 2000,
+#		  num_PCs = 30, parallel = TRUE, cores = 4)
+#
+#cluster_df <- enframe(clusters[[1]], "barcode", "cluster")
+#
+#metadata_update <- bcells_singlet@meta.data |> 
+#    as_tibble(rownames = "barcode") |>
+#    left_join(cluster_df, by = "barcode") |>
+#    column_to_rownames("barcode") |>
+#    as.data.frame()
+#
+#bcells_singlet <- AddMetaData(bcells_singlet, metadata = metadata_update)
 
-clusters <- scSHC(scdata, 
-		  batch = NULL, alpha = 0.05, num_features = 2000,
-		  num_PCs = 30, parallel = TRUE, cores = 4)
 
-cluster_df <- enframe(clusters[[1]], "barcode", "cluster")
+# Integrate batches
+bcell_objects <- list("1984" = bcells_1984_sng,
+		      "1988" = bcells_1988_sng,
+		      "1990" = bcells_1990_sng)
 
-metadata_update <- bcells_singlet@meta.data |> 
-    as_tibble(rownames = "barcode") |>
-    left_join(cluster_df, by = "barcode") |>
-    column_to_rownames("barcode") |>
-    as.data.frame()
+integration_features <- SelectIntegrationFeatures(object.list = bcell_objects)
 
-bcells_singlet <- AddMetaData(bcells_singlet, metadata = metadata_update)
+anchors <- FindIntegrationAnchors(object.list = bcell_objects,
+				  anchor.features = integration_features,
+				  assay = c("RNA", "RNA", "RNA"),
+				  reduction = "cca",
+				  k.anchor = 20,
+				  dims = 1:30)
 
+bcells_integrated <- 
+    IntegrateData(anchorset = anchors, 
+		  dims = 1:30,
+		  features.to.integrate = rownames(bcells_1984_sng@assays$RNA@counts))
 
-# PCA
-bcells_singlet <- bcells_singlet |>
-    FindVariableFeatures(nfeatures = 2000, selection.method = "vst") |>
+# PCA on integrated data
+bcells_integrated <- bcells_integrated |>
     {function(x) ScaleData(x, features = rownames(x))}() |>
     {function(x) RunPCA(x, features = VariableFeatures(x))}()
 
-singlets_meta_data <- bcells_singlet@meta.data |>
+write_rds(bcells_integrated, "./bcells_integrated_seurat.rds")
+#bcells_integrated <- read_rds("./bcells_integrated_seurat.rds")
+
+# Plot PCA
+integrated_meta <- bcells_integrated@meta.data |>
     as_tibble(rownames = "barcode") |>
-    select(barcode, stim = HTO_maxID, cluster, 
+    select(barcode, library_id = orig.ident, stim = HTO_maxID, 
 	   percent_mt, percent_ribo, n_genes = nFeature_RNA, umi = nCount_RNA) |>
     mutate(stim = factor(stim, levels = stims))
 
-pca_df <- bcells_singlet@reductions$pca@cell.embeddings |>
+pca_df <- bcells_integrated@reductions$pca@cell.embeddings |>
     as_tibble(rownames = "barcode") |>
-    left_join(singlets_meta_data) |>
-    select(barcode, stim, n_genes, percent_mt, percent_ribo, PC_1:PC_4)
+    select(barcode, PC_1:PC_6) |>
+    left_join(integrated_meta) |>
+    extract(barcode, "barcode", "(.+)_[123]") |>
+    left_join(cells_before_qc) |>
+    extract(sample, "sample_id", "\\d+_[A-Z0-9]+-(\\d+)") |>
+    select(barcode, library_id, sample_id, 
+	   stim, n_genes, percent_mt, percent_ribo, PC_1:PC_6)
 
-pca_plot <- ggplot(pca_df, aes(PC_1, PC_2)) +
+
+pca_plot1 <- ggplot(pca_df, aes(PC_1, PC_2)) +
+    geom_point(aes(color = library_id), alpha = .5, size = .5) +
+    scale_color_manual(values = c("goldenrod3", "red", "midnightblue")) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    guides(color = guide_legend(override.aes = list(size = 4)))
+
+pca_plot2 <- ggplot(pca_df, aes(PC_1, PC_2)) +
+    geom_point(aes(color = sample_id), alpha = .5, size = .5) +
+    scale_color_aaas() +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    guides(color = guide_legend(override.aes = list(size = 4)))
+
+pca_plot3 <- ggplot(pca_df, aes(PC_1, PC_2)) +
     geom_point(aes(color = stim), alpha = .5, size = .5) +
     scale_color_manual(values = stim_colors) +
     theme_bw() +
     theme(panel.grid = element_blank()) +
     guides(color = guide_legend(override.aes = list(size = 4)))
 
-ggsave("./plots/test.png", pca_plot)
-
-sdev_plot <- tibble(sdev = bcells_singlet@reductions$pca@stdev) |>
+sdev_plot <- tibble(sdev = bcells_integrated@reductions$pca@stdev) |>
     rownames_to_column("pc") |>
     mutate(pc = fct_inorder(pc)) |>
     filter(pc %in% 1:50) |>
     ggplot(aes(pc, sdev)) +
     geom_line(aes(group = 1)) +
-    scale_x_discrete(breaks = c(1, seq(5, 25, 5))) +
+    scale_x_discrete(breaks = c(1, seq(5, 50, 5))) +
     theme_bw() +
     theme(panel.grid.minor = element_blank()) +
     labs(x = "Principal component", y = "Standard deviation")
 
-loadings_plot <- bcells_singlet@reductions$pca@feature.loadings |>
+ggsave("./plots/pca_sdev.png", sdev_plot)
+
+loadings_plot <- bcells_integrated@reductions$pca@feature.loadings |>
     as_tibble(rownames = "gene_id") |>
     select(gene_id, PC_1, PC_2) |>
     pivot_longer(-gene_id, names_to = "pc") |>
@@ -232,21 +370,28 @@ loadings_plot <- bcells_singlet@reductions$pca@feature.loadings |>
     scale_y_discrete(labels = function(x) sub("^([^_]+).*$", "\\1", x)) +
     facet_wrap(~pc, scales = "free_y") +
     labs(x = "Loading", y = NULL) +
-    theme_bw()
+    theme_bw() +
+    theme(axis.text.y = element_text(size = 8))
 
-ggsave("./plots/test.png", plot_grid(pca_plot, loadings_plot, nrow = 1), 
-       width = 10, height = 5)
+ggsave("./plots/pca.png", 
+       plot_grid(pca_plot1, pca_plot2, pca_plot3, loadings_plot, nrow = 2),
+       width = 10)
+
+
 
 # UMAP
-bcells_singlet <- bcells_singlet |>
-    RunUMAP(dims = 1:30, verbose = FALSE)
+bcells_integrated <- bcells_integrated |>
+    RunUMAP(dims = 1:35, verbose = FALSE)
 
-umap_df <- as.data.frame(bcells_singlet@reductions$umap@cell.embeddings) |>
+umap_df <- as.data.frame(bcells_integrated@reductions$umap@cell.embeddings) |>
     as_tibble(rownames = "barcode") |>
-    left_join(singlets_meta_data)
+    left_join(integrated_meta) |>
+    extract(barcode, "barcode", "(.+)_[123]") |>
+    left_join(cells_before_qc) |>
+    extract(sample, "sample_id", "\\d+_[A-Z0-9]+-(\\d+)")
 
 umap_stims <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
-    geom_point(size = .5) +
+    geom_point(size = .25, alpha = .5) +
     scale_color_manual(values = stim_colors) +
     theme_bw() +
     theme(panel.grid = element_blank(),
@@ -256,12 +401,9 @@ umap_stims <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = stim)) +
           legend.key.height = unit(.75, "lines")) +
     guides(color = guide_legend(override.aes = list(size = 2)))
 
-
-cluster_cols <- c("grey", "black", "goldenrod3", pal_npg()(10), "magenta")
-
-umap_cluster <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = factor(cluster))) +
-    geom_point(size = .5) +
-    scale_color_manual(values = cluster_cols) +
+umap_batch <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = library_id)) +
+    geom_point(size = .25, alpha = .5) +
+    scale_color_manual(values = c("goldenrod3", "red", "midnightblue")) +
     theme_bw() +
     theme(panel.grid = element_blank(),
           panel.border = element_blank(),
@@ -269,25 +411,33 @@ umap_cluster <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = factor(cluster))) +
           axis.ticks = element_blank(),
           legend.key.height = unit(.75, "lines")) +
     guides(color = guide_legend(override.aes = list(size = 2))) +
-    labs(color = "Cluster")
+    labs(color = "batch")
 
-ggsave("./plots/umap_cluster.png", 
-       plot_grid(umap_stims, umap_cluster, nrow = 1),
-       width = 10, height = 4)
+umap_donor <- ggplot(umap_df, aes(UMAP_1, UMAP_2, color = sample_id)) +
+    geom_point(size = .25, alpha = .5) +
+    scale_color_manual(values = c("black", "goldenrod3", "cornflowerblue", "green", "magenta")) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2))) +
+    labs(color = "donor")
 
 mki_gene_df <- genes_df |>
     filter(gene_name == "MKI67") |>
     select(gene_id, gene_name)
 
-mki_gene_quant <- bcells_singlet@assays$RNA@data |> 
+mki_gene_quant <- bcells_integrated@assays$integrated@data |> 
     {function(x) x[mki_gene_df$gene_id, ,drop = FALSE]}() |>
     as_tibble(rownames = "gene_id") |>
     left_join(mki_gene_df, by = "gene_id") |>
     pivot_longer(-c("gene_id", "gene_name"), 
                  names_to = "barcode", values_to = "gene_exp")
 
-ki67 <- umap_df |>
-    select(barcode, UMAP_1, UMAP_2) |>
+ki67 <- as.data.frame(bcells_integrated@reductions$umap@cell.embeddings) |>
+    as_tibble(rownames = "barcode") |> 
     left_join(mki_gene_quant, by = "barcode") |>
     ggplot(aes(UMAP_1, UMAP_2, color = gene_exp, fill = gene_exp)) +
     geom_point(size = .25, shape = 19) +
@@ -298,10 +448,155 @@ ki67 <- umap_df |>
           axis.title = element_blank(),
           axis.text = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white")) +
-    labs(title = "MKI67 RNA expression", fill = NULL)
+    labs(fill = "KI67\nexpression")
 
-ggsave("./plots/umap.png", plot_grid(umap_stims, ki67, nrow = 1), 
-       width = 10, height = 5)
+ggsave("./plots/umap.png", 
+       plot_grid(umap_stims, umap_batch, umap_donor, ki67, nrow = 2), 
+       width = 10, height = 8)
+
+
+
+
+# Marker genes recommended for integrated data
+DefaultAssay(bcells_integrated) <- "RNA"
+Idents(bcells_integrated) <- "HTO_maxID"
+
+
+bcr24_markers <- 
+    FindConservedMarkers(bcells_integrated, 
+			 ident.1 = "BCR 24h",
+			 ident.2 = "IL4 24h",
+			 grouping.var = "orig.ident", 
+			 verbose = FALSE)
+
+dn72_markers <- 
+    FindConservedMarkers(bcells_integrated, 
+			 ident.1 = "DN2 72h",
+			 grouping.var = "orig.ident", 
+			 verbose = FALSE)
+
+bcr24_markers |>
+    as_tibble(rownames = "gene_id") |>
+    left_join(genes_df) |>
+    print(width = Inf)
+    
+dn72_markers |>
+    as_tibble(rownames = "gene_id") |>
+    left_join(genes_df) |>
+    print(width = Inf)
+
+
+sle_genes <- read_tsv("../reported_genes.tsv")
+
+sle_genes_df <- filter(genes_df, gene_name %in% sle_genes$gene)
+
+b_cell_df <- genes_df |>
+    filter(gene_name %in% c("CD27", "TNFRSF13B", "TNFRSF17", "TCL1A", "FCER2", 
+			    "IL4R", "JCHAIN", "CD69", "CD83", "ITGAX", "TBX21", "MZB1"))
+
+bcell_gene_quant <- bcells_integrated@assays$integrated@data |> 
+    {function(x) x[rownames(x) %in% b_cell_df$gene_id, , drop = FALSE]}() |>
+    as_tibble(rownames = "gene_id") |>
+    left_join(b_cell_df, by = "gene_id") |>
+    pivot_longer(-c("gene_id", "gene_name"), 
+                 names_to = "barcode", values_to = "gene_exp")
+
+sle_gene_quant <- bcells_integrated@assays$integrated@data |> 
+    {function(x) x[rownames(x) %in% sle_genes_df$gene_id, , drop = FALSE]}() |>
+    as_tibble(rownames = "gene_id") |>
+    left_join(sle_genes_df, by = "gene_id") |>
+    pivot_longer(-c("gene_id", "gene_name"), 
+                 names_to = "barcode", values_to = "gene_exp")
+
+sle_gene_umap_df <- as.data.frame(bcells_integrated@reductions$umap@cell.embeddings) |>
+    as_tibble(rownames = "barcode") |> 
+    right_join(sle_gene_quant, by = "barcode") 
+
+bcell_umap_df <- as.data.frame(bcells_integrated@reductions$umap@cell.embeddings) |>
+    as_tibble(rownames = "barcode") |> 
+    right_join(bcell_gene_quant, by = "barcode") 
+
+
+sle_expressed <- sle_gene_umap_df |> 
+    group_by(gene_id) |> 
+    mutate(avg = mean(gene_exp)) |>
+    filter(avg > .1) |>
+    ungroup() |>
+    distinct(gene_id, gene_name, avg) |>
+    arrange(desc(avg))
+
+
+test_umap <- sle_gene_umap_df |>
+    filter(gene_name %in% c("SOCS1", "PTPRC", "IRF8", "BANK1", "NR4A3", "BLK")) |>
+    group_split(gene_name) |>
+    map(function(x) ggplot(data = x, aes(UMAP_1, UMAP_2, color = gene_exp, fill = gene_exp)) +
+    geom_point(size = .25, shape = 19) +
+    scale_color_viridis_c(option = "inferno", guide = "none") +
+    scale_fill_viridis_c(option = "inferno", guide = guide_colorbar(barwidth = .5)) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          axis.title = element_blank(),
+          axis.text = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(title = unique(x$gene_name), fill = "RNA")) |>
+    plot_grid(plotlist = _)
+
+ggsave("./plots/test_umap.png", test_umap, width = 10, height = 7) 
+
+
+test_umap <- bcell_umap_df |>
+    group_split(gene_name) |>
+    map(function(x) ggplot(data = x, aes(UMAP_1, UMAP_2, color = gene_exp, fill = gene_exp)) +
+    geom_point(size = .25, shape = 19) +
+    scale_color_viridis_c(option = "inferno", guide = "none") +
+    scale_fill_viridis_c(option = "inferno", guide = guide_colorbar(barwidth = .5)) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          axis.title = element_blank(),
+          axis.text = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(title = unique(x$gene_name), fill = "RNA")) |>
+    plot_grid(plotlist = _) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/test_umap.png", test_umap, width = 12, height = 9) 
+
+
+
+# default seurat clustering
+DefaultAssay(bcells_integrated) <- "integrated"
+
+bcells_integrated <- bcells_integrated |>
+    FindNeighbors(dims = 1:35) |>
+    FindClusters(resolution = 0.15)
+
+cluster_df <- bcells_integrated@meta.data |>
+    as_tibble(rownames = "barcode") |>
+    select(barcode, cluster = integrated_snn_res.0.15)
+
+umap_only <- as.data.frame(bcells_integrated@reductions$umap@cell.embeddings) |>
+    as_tibble(rownames = "barcode")  
+
+cluster_labs <- umap_only |> 
+    left_join(cluster_df, by = "barcode") |>
+    group_by(cluster) |>
+    summarise_at(vars(UMAP_1, UMAP_2), median) |>
+    ungroup()
+
+umap_cluster <- umap_only |> 
+    left_join(cluster_df, by = "barcode") |>
+    ggplot(aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = cluster), size = .25) +
+    geom_label(data = cluster_labs, aes(label = cluster), alpha = .5) +
+    scale_color_manual(values = c("black", "grey", pal_npg()(10))) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          axis.title = element_blank(),
+          axis.text = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white"),
+	  legend.position = "none")
+
+ggsave("./plots/umap_cluster.png", umap_cluster, width = 5, height = 5) 
 
 
 
@@ -371,35 +666,108 @@ plot_markers <- function(cluster_df, seurat_obj) {
 	guides(fill = guide_colorbar(barheight = .5))
 }
 
-Idents(bcells_singlet) <- "HTO_maxID"
-
-bcells_markers <- 
-    FindAllMarkers(bcells_singlet, 
-                   only.pos = TRUE,
-                   min.pct = 0.1,
-                   logfc.threshold = 1) |>
-    as_tibble() |>
-    mutate(cluster = factor(cluster, levels = stims))
-
-markers_plot <- plot_markers(bcells_markers, bcells_singlet)
-
-ggsave("./plots/markers.png", markers_plot)
-
-
-Idents(bcells_singlet) <- "cluster"
+Idents(bcells_integrated) <- "integrated_snn_res.0.15"
 
 cluster_markers <- 
-    FindAllMarkers(bcells_singlet, 
+    FindAllMarkers(bcells_integrated, 
                    only.pos = TRUE,
                    min.pct = 0.1,
-                   logfc.threshold = 1) |>
+                   logfc.threshold = .5) |>
     as_tibble()
 
-cluster_markers_plot <- cluster_markers |>
-    mutate(cluster = factor(cluster, levels = sort(unique(as.numeric(as.character(cluster)))))) |>
-    plot_markers(bcells_singlet)
+cluster_markers_plot <- plot_markers(cluster_markers, bcells_integrated)
 
-ggsave("./plots/markers_cluster.png", cluster_markers_plot, width = 8, height = 10)
+ggsave("./plots/cluster_markers.png", cluster_markers_plot)
+
+
+# ADT integration
+# Integrate batches
+bcell_objects <- list("1984" = bcells_1984_sng,
+		      "1988" = bcells_1988_sng,
+		      "1990" = bcells_1990_sng)
+
+DefaultAssay(bcells_1984_sng) <- "ADT"
+DefaultAssay(bcells_1988_sng) <- "ADT"
+DefaultAssay(bcells_1990_sng) <- "ADT"
+
+seurat_adt_list <- 
+  list("1984" = bcells_1984_sng, "1988" = bcells_1988_sng, "1900" = bcells_1990_sng) |>
+  map(function(x) {
+    x <- FindVariableFeatures(x, loess.span = .5)
+    x <- ScaleData(x, features = rownames(x), verbose = FALSE)
+    x <- RunPCA(x, features = VariableFeatures(x), assay = "ADT",
+                approx = FALSE, verbose = FALSE)
+  })
+
+adt_anchors <- 
+  FindIntegrationAnchors(object.list = seurat_adt_list, 
+			 assay = c("ADT", "ADT", "ADT"),
+			 reduction = "rpca",
+                         k.anchor = 20)
+
+adt_integrated <- 
+  IntegrateData(anchorset = adt_anchors, 
+                features.to.integrate = rownames(bcells_1984_sng))
+
+adt_df <- adt_integrated@assays$integrated@data |>
+    as_tibble(rownames = "ab") |>
+    pivot_longer(-ab, names_to = "barcode", values_to = "ab_level") |>
+    mutate(ab = factor(ab, levels = str_sort(unique(ab), numeric = TRUE))) |>
+    left_join(umap_only)
+
+# shrink outliers
+adt_df_sh <- adt_df |>
+    group_by(ab) |>
+    mutate(q01 = quantile(ab_level, 0.01),
+	   q99 = quantile(ab_level, 0.99),
+	   ab_level = case_when(ab_level < q01 ~ q01,
+				ab_level > q99 ~ q99,
+				TRUE ~ ab_level)) |>
+    ungroup()
+
+bcell_prots <- 
+    c("IGHD" = "IgD", 
+      "IGHM" = "IgM", 
+      "CR2" = "CD21", 
+      "FCER2" = "CD23",
+      "CD27" = "CD27",
+      "CD69" = "CD69", 
+      "CD86" = "CD86",
+      "ITGAX" = "CD11c", 
+      "CXCR5" = "CD185-or-CXCR5")
+
+
+bcell_adt_plot <- adt_df_sh |>
+    filter(ab %in% bcell_prots) |>
+    mutate(ab = as.character(ab)) |>
+    {function(x) split(x, x$ab)}() |>
+    map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = ab_level)) +
+	    geom_point(size = .2) +
+	    scale_color_scico(palette = "lajolla",
+			      labels = function(x) str_pad(x, 3),
+			      guide = guide_colorbar(barwidth = .5,
+						     barheight = 3)) +
+	    facet_wrap(~ab) +
+	    theme_bw() +
+	    theme(panel.grid = element_blank(),
+		  panel.border = element_blank(),
+		  axis.title = element_blank(),
+		  axis.text = element_blank(),
+		  strip.background = element_blank(),
+		  axis.line = element_blank(),
+		  axis.ticks = element_blank()) +
+	    labs(color = NULL)) |>
+    plot_grid(plotlist = _)
+
+ggsave("./plots/adt.png", bcell_adt_plot, width = 7, height = 6)
+
+
+
+
+
+
+
+
 
 
 # ADT
