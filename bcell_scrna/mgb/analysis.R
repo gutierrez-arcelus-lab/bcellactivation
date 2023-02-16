@@ -188,7 +188,182 @@ qc_plots <- list(bcells_1984_meta, bcells_1988_meta, bcells_1990_meta) |>
     plot_grid(plotlist = _, ncol = 1, labels = libraries)
 
 ggsave("./plots/qc.png", qc_plots, width = 6, height = 12)
-   
+ 
+
+
+# t-SNE
+make_tsne_df <- function(x) {
+    
+    tsne_df <- x@reductions$tsne@cell.embeddings |>
+	as_tibble(rownames = "barcode")
+    
+    meta_df <- as_tibble(x@meta.data, rownames = "barcode") |>
+	select(barcode, clas = HTO_classification.global, stim = HTO_maxID)
+
+    left_join(tsne_df, meta_df, by = "barcode")
+}
+
+
+bcells_1984_noneg <- subset(bcells_1984, idents = "Negative", invert = TRUE)
+bcells_1988_noneg <- subset(bcells_1988, idents = "Negative", invert = TRUE)
+bcells_1990_noneg <- subset(bcells_1990, idents = "Negative", invert = TRUE)
+
+bcells_1984_noneg <- bcells_1984_noneg |>
+    {function(x) ScaleData(x, features = rownames(x), verbose = FALSE)}() |>
+    FindVariableFeatures() |>
+    {function(x) RunPCA(x, features = VariableFeatures(x), verbose = FALSE)}() |>
+    {function(x) RunTSNE(x, dims = 1:35, perplexity = 100, nthreads = 4, verbose = TRUE)}()
+
+bcells_1988_noneg <- bcells_1988_noneg |>
+    {function(x) ScaleData(x, features = rownames(x), verbose = FALSE)}() |>
+    FindVariableFeatures() |>
+    {function(x) RunPCA(x, features = VariableFeatures(x), verbose = FALSE)}() |>
+    {function(x) RunTSNE(x, dims = 1:35, perplexity = 100, nthreads = 4, verbose = TRUE)}()
+
+bcells_1990_noneg <- bcells_1990_noneg |>
+    {function(x) ScaleData(x, features = rownames(x), verbose = FALSE)}() |>
+    FindVariableFeatures() |>
+    {function(x) RunPCA(x, features = VariableFeatures(x), verbose = FALSE)}() |>
+    {function(x) RunTSNE(x, dims = 1:35, perplexity = 100, nthreads = 4, verbose = TRUE)}()
+
+tsne_dat <- bind_rows(
+    "1984" = make_tsne_df(bcells_1984_noneg),
+    "1988" = make_tsne_df(bcells_1988_noneg),
+    "1990" = make_tsne_df(bcells_1990_noneg),
+    .id = "set"
+)
+
+
+demuxlet_df <- 
+    bind_rows("1984" = demuxlet_1984,
+	      "1988" = demuxlet_1988,
+	      "1990" = demuxlet_1990, 
+	      .id = "set") |>
+    select(set, barcode, status)
+
+stim_colors_v2 <- c("goldenrod1", "goldenrod3", "goldenrod4", brewer.pal(n = 6, "Paired"))
+names(stim_colors_v2) <- stims
+stim_colors_v2 <- c("doublet" = "black", stim_colors_v2)
+
+doublet_df <- tsne_dat |>
+    left_join(demuxlet_df)
+
+doublet_hto <- doublet_df |>
+    mutate(doublet_lab = case_when(clas == "Doublet" & status == "SNG" ~ "doublet",
+				   TRUE ~ stim))
+
+doublet_demux <- doublet_df |>
+    mutate(doublet_lab = case_when(clas != "Doublet" & status != "SNG" ~ "doublet",
+				   TRUE ~ stim))
+
+doublet_both <- doublet_df |>
+    mutate(doublet_lab = case_when(clas == "Doublet" & status != "SNG" ~ "doublet",
+				   TRUE ~ stim))
+
+
+doublet_plot_df <- 
+    bind_rows("Doublets for HTO only" = doublet_hto,
+	      "Doublets for demuxlet only" = doublet_demux,
+	      "Doublets for both" = doublet_both,
+	      .id = "rowid") |>
+    mutate(rowid = factor(rowid, levels = c("Doublets for HTO only",
+					    "Doublets for demuxlet only",
+					    "Doublets for both")),
+	   doublet_lab = factor(doublet_lab, levels = names(stim_colors_v2)))
+    
+tsne_tmp <- ggplot() +
+    geom_point(data = doublet_plot_df, 
+	       aes(tSNE_1, tSNE_2, color = doublet_lab), 
+	       size = 4, alpha = 1) +
+    scale_color_manual(values = stim_colors_v2) +
+    labs(color = "Condition")
+
+tsne_legend <- get_legend(tsne_tmp)
+
+tsne_plot <- ggplot() +
+    geom_point(data = filter(doublet_plot_df, !grepl("doublet", doublet_lab)),
+	       aes(tSNE_1, tSNE_2, color = doublet_lab), size = .2, alpha = .1) +
+    geom_point(data = filter(doublet_plot_df, grepl("doublet", doublet_lab)),
+	       aes(tSNE_1, tSNE_2, color = doublet_lab), size = .2, alpha = .5) +
+    scale_color_manual(values = stim_colors_v2) +
+    facet_grid(rowid~set) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_text(size = 8),
+	  plot.background = element_rect(fill = "white", color = "white"),
+	  legend.position = "none")
+
+
+ggsave("./plots/tsne.png", 
+       plot_grid(tsne_plot, tsne_legend, rel_widths = c(1, .2)) + 
+	   theme(plot.background = element_rect(fill = "white", color = "white")), 
+       width = 8, height = 6)
+
+doublet_counts_plot <- 
+    doublet_df |>
+    mutate(lab = case_when(clas == "Doublet" & status != "SNG" ~ "Doublet for both",
+			   clas == "Doublet" & status == "SNG" ~ "Doublet for HTO",
+			   clas == "Singlet" & status != "SNG" ~ "Doublet for demuxlet",
+			   TRUE ~ "Singlet")) |>
+    count(set, lab) |>
+    group_by(set) |>
+    mutate(prop = n/sum(n)) |>
+    ungroup() |>
+    mutate(lab = factor(lab, levels = c("Singlet", "Doublet for HTO", "Doublet for demuxlet", "Doublet for both"))) |>
+    ggplot(aes(lab, prop)) +
+	geom_col() +
+	facet_wrap(~set, nrow = 1) +
+	theme_bw() +
+	theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+	labs(x = NULL, y = "Proportion of droplets")
+
+ggsave("./plots/doublet_counts.png", doublet_counts_plot, width = 7, height = 3.5)
+
+# Plot admix
+library(sclibr)
+
+admix_1984_s <- subset(bcells_1984_noneg, idents = "Doublet", invert = TRUE) |>
+    plot_admix(stim_colors) +
+    labs(title = "1984: Singlets")
+
+admix_1984_d <- subset(bcells_1984_noneg, idents = "Doublet") |>
+    plot_admix(stim_colors) +
+    labs(title = "1984: Doublets")
+
+ggsave("./plots/admix_1984.png", 
+       plot_grid(admix_1984_s, admix_1984_d, ncol = 1),
+       width = 8, height = 4)
+
+admix_1988_s <- subset(bcells_1988_noneg, idents = "Doublet", invert = TRUE) |>
+    plot_admix(stim_colors) +
+    labs(title = "1988: Singlets")
+
+admix_1988_d <- subset(bcells_1988_noneg, idents = "Doublet") |>
+    plot_admix(stim_colors) +
+    labs(title = "1988: Doublets")
+
+ggsave("./plots/admix_1988.png", 
+       plot_grid(admix_1988_s, admix_1988_d, ncol = 1),
+       width = 8, height = 4)
+
+admix_1990_s <- subset(bcells_1990_noneg, idents = "Doublet", invert = TRUE) |>
+    plot_admix(stim_colors) +
+    labs(title = "1990: Singlets")
+
+admix_1990_d <- subset(bcells_1990_noneg, idents = "Doublet") |>
+    plot_admix(stim_colors) +
+    labs(title = "1990: Doublets")
+
+ggsave("./plots/admix_1990.png", 
+       plot_grid(admix_1990_s, admix_1990_d, ncol = 1),
+       width = 8, height = 4)
+
+
+
+
+
+
+
 # Filter good cells
 filter_cells <- function(seurat_obj, n_genes = 1000, p_mt = 10, demuxlet_df) {
 
