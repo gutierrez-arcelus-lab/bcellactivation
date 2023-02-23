@@ -1,0 +1,363 @@
+---
+title: "CITE-seq on Mexican Samples"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+unix::rlimit_as(1e12)
+library(knitr)
+opts_chunk$set(echo = TRUE, 
+	       message = FALSE, 
+	       warning = FALSE, 
+	       comment = "#",
+               dpi = 300)
+```
+
+## Packages
+```{r}
+## single-cell data analysis
+library(Seurat)
+library(MCPcounter)
+
+## Data wrangling
+library(tidyverse)
+
+## Plotting
+library(MetBrewer)
+library(scico)
+library(cowplot)
+library(sclibr)
+```
+
+## Make the Seurat object
+
+```{r}
+# Directories
+labshr <- "/lab-share/IM-Gutierrez-e2/Public/Lab_datasets"
+
+mex_dir <- 
+    file.path(labshr, "CITEseq_MX/SN0274885/broad/hptmp/sgurajal/bwh10x",
+	      "KW10748_mariagutierrezarcelus/230126_10X_KW10748_bcl/cellranger-7.1.0/GRCh38",
+	      "BRI-2120_ADT/outs/filtered_feature_bc_matrix")
+
+# Feature IDs
+mex_features <- file.path(mex_dir, "features.tsv.gz") |>
+    read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
+
+genes_df <- filter(mex_features, phenotype == "Gene Expression") |>
+    select(gene_id, gene_name)
+
+# Mitochondrial and Ribosomal protein genes
+mt_genes <- mex_features |>
+    filter(grepl("^MT-", gene_name)) |>
+    pull(gene_id)
+
+ribo_genes <- mex_features |>
+    filter(grepl("^RPS\\d+|^RPL\\d+", gene_name)) |>
+    pull(gene_id)
+
+# Seurat object
+# using function from custom R package 'sclibr'
+mex_obj <- make_seurat(mex_dir, project_id = "MX", mito_ids = mt_genes, ribo_ids = ribo_genes)
+```
+
+## QC
+
+### Include cells with up to 10% of reads from MT genes and more than 500 genes detected.
+
+```{r filter}
+mex_filt <- subset(mex_obj, subset = nFeature_RNA > 500 & percent_mt < 10)
+```
+
+```{r mt_n_genes, echo = FALSE, fig.width = 8, fig.height = 4}
+qcplot1 <- mex_obj@meta.data |>
+    as_tibble(rownames = "barcode") |>
+	select(barcode, n_genes = nFeature_RNA, percent_mt) |> 
+	ggplot(aes(x = n_genes, y = percent_mt)) +
+	geom_point(size = .25, alpha = .25) +
+	geom_vline(xintercept = 500, linetype = 1, color = "tomato3", linewidth = 1) +
+	geom_hline(yintercept = 10, linetype = 1, color = "tomato3", linewidth = 1) +
+	scale_x_continuous(expand = c(0, 0), breaks = scales::pretty_breaks(6)) +
+	scale_y_continuous(expand = c(0, 0), limit = c(0, 100)) +
+	theme_bw() +
+	theme(panel.grid.minor = element_blank(),
+	      plot.margin = margin(t = .5, r = .5, l = .5, b = .5, unit = "cm")) +
+	labs(x = "Number of genes", 
+	     y = "% reads from Mitochondria")
+
+qcplot2 <- enframe(c("Total" = ncol(mex_obj), "After QC" = ncol(mex_filt))) |>
+    mutate(name = fct_inorder(name)) |>
+    ggplot(aes(x = name, y = value)) +
+	geom_col(fill = "midnightblue", alpha = .8) +
+	theme_bw() +
+	theme(plot.margin = margin(t = .5, r = .5, l = .5, b = .5, unit = "cm")) +
+	labs(x = " ", y = "Number of cells")
+
+plot_grid(qcplot1, qcplot2, nrow = 1)
+```
+
+\pagebreak
+
+## PCA
+
+```{r PCA}
+mex_filt <- mex_filt |>
+    {function(x) ScaleData(x, features = rownames(x), verbose = FALSE)}() |>
+    FindVariableFeatures(verbose = FALSE) |>
+    {function(x) RunPCA(x, features = VariableFeatures(x), verbose = FALSE)}()
+```
+
+```{r PCA_plot, echo = FALSE, fig.width = 7, fig.height = 7 }
+metadf <- mex_filt@meta.data |>
+    as_tibble(rownames = "barcode") |>
+    select(barcode, percent_mt, percent_ribo, n_genes = nFeature_RNA, umi = nCount_RNA)
+
+pca_df <- mex_filt@reductions$pca@cell.embeddings |>
+    as_tibble(rownames = "barcode") |>
+    select(barcode, PC_1:PC_4) |>
+    left_join(metadf)
+
+pca_plot1 <- ggplot(pca_df, aes(PC_1, PC_2)) +
+    geom_point(alpha = .5, size = .5) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    labs(x = "PC1", y = "PC2")
+
+sdev_plot <- tibble(sdev = mex_filt@reductions$pca@stdev) |>
+    rownames_to_column("pc") |>
+    mutate(pc = fct_inorder(pc)) |>
+    filter(pc %in% 1:50) |>
+    ggplot(aes(pc, sdev)) +
+    geom_line(aes(group = 1)) +
+    scale_x_discrete(breaks = c(1, seq(5, 50, 5))) +
+    theme_bw() +
+    theme(panel.grid.minor = element_blank()) +
+    labs(x = "Principal component", y = "Standard deviation")
+
+loadings_plot <- mex_filt@reductions$pca@feature.loadings |>
+    as_tibble(rownames = "gene_id") |>
+    select(gene_id, PC_1, PC_2) |>
+    pivot_longer(-gene_id, names_to = "pc") |>
+    mutate(direction = case_when(sign(value) == 1 ~ "+",
+				 sign(value) == -1 ~ "-",
+				 sign(value) == 0 ~ "0")) |>
+    group_by(pc, direction) |>
+    top_n(15, abs(value)) |>
+    ungroup() |>
+    left_join(mex_features) |>
+    ggplot(aes(value, reorder_within(gene_name, value, pc))) +
+    geom_col(fill = "midnightblue", alpha = .75) +
+    scale_y_discrete(labels = function(x) sub("^([^_]+).*$", "\\1", x)) +
+    facet_wrap(~pc, scales = "free_y") +
+    labs(x = "Loading", y = NULL) +
+    theme_bw() +
+    theme(axis.text.y = element_text(size = 8))
+       
+plot_grid(
+	  plot_grid(pca_plot1, sdev_plot, nrow = 1),
+	  loadings_plot, 
+	  nrow = 2)
+```
+
+
+
+## Clustering and UMAP
+
+```{r UMAP}
+mex_filt <- mex_filt |>
+    RunUMAP(dims = 1:30, verbose = FALSE) |>
+    FindNeighbors(dims = 1:30, verbose = FALSE) |>
+    FindClusters(resolution = 0.15, verbose = FALSE)
+```
+
+
+```{r, echo = FALSE}
+cluster_df <- mex_filt@meta.data |>
+    as_tibble(rownames = "barcode") |>
+    select(barcode, cluster = seurat_clusters)
+
+umap_df <- as.data.frame(mex_filt@reductions$umap@cell.embeddings) |>
+    as_tibble(rownames = "barcode")  
+```
+
+\pagebreak
+
+## Cell type annotation with MCPcounter
+
+```{r MCP}
+mcp_scores <- 
+    MCPcounter.estimate(expression = mex_filt@assays$RNA@data,
+                      featuresType = "ENSEMBL_ID") |>
+    t() |>
+    as.data.frame() |>
+    as_tibble(rownames = "barcode") |>
+    pivot_longer(-barcode, names_to = "cell_type")
+```
+
+```{r MCP_plot, echo = FALSE, fig.width = 8, fig.height = 8}
+mcp_plot_list <- mcp_scores |>
+    left_join(umap_df, by = "barcode") |>
+    {function(x) split(x, x$cell_type)}() |>
+    map(~ggplot(.) +
+	geom_point(aes(UMAP_1, UMAP_2, color = value, fill = value), size = .1, shape = 19) +
+	scale_color_viridis_c(guide = "none") +
+	scale_fill_viridis_c("", guide = guide_colorbar(barwidth = .5)) +
+	facet_wrap(~cell_type, scales = "free", ncol = 3) +
+	theme_bw() +
+	theme(panel.grid = element_blank(),
+	      panel.border = element_blank(),
+	      axis.line = element_blank(),
+	      axis.ticks = element_blank(),
+	      legend.key.height = unit(.75, "lines"),
+	      axis.title = element_blank(),
+	      axis.text = element_blank()))
+    
+plot_grid(plotlist = mcp_plot_list, ncol = 3) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+```
+
+\pagebreak
+
+## Seurat clustering at low resolution (0.15) indentifies 11 clusters
+
+```{r UMAP_cluster, echo = FALSE, fig.width = 8, fig.height = 4}
+cluster_labs <- umap_df |> 
+    left_join(cluster_df, by = "barcode") |>
+    group_by(cluster) |>
+    summarise_at(vars(UMAP_1, UMAP_2), median) |>
+    ungroup()
+
+umap_clusters <- umap_df |> 
+    left_join(cluster_df, by = "barcode") |>
+    ggplot(aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = cluster), size = .25) +
+    geom_label(data = cluster_labs, aes(label = cluster), alpha = .5) +
+    scale_color_manual(values = c(met.brewer("Redon", n = 11))) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          axis.title = element_blank(),
+          axis.text = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white"),
+	  legend.position = "none")
+
+# MKI67
+mki_gene_df <- genes_df |>
+    filter(gene_name == "MKI67") |>
+    select(gene_id, gene_name)
+
+mki_gene_quant <- mex_filt@assays$RNA@data |> 
+    {function(x) x[mki_gene_df$gene_id, ,drop = FALSE]}() |>
+    as_tibble(rownames = "gene_id") |>
+    left_join(mki_gene_df, by = "gene_id") |>
+    pivot_longer(-c("gene_id", "gene_name"), 
+                 names_to = "barcode", values_to = "gene_exp")
+
+umap_ki67 <- umap_df |> 
+    left_join(mki_gene_quant, by = "barcode") |>
+    ggplot(aes(UMAP_1, UMAP_2, color = gene_exp, fill = gene_exp)) +
+    geom_point(size = .25, shape = 19) +
+    scale_color_viridis_c(guide = "none") +
+    scale_fill_viridis_c(guide = guide_colorbar(barwidth = .5)) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          axis.title = element_blank(),
+          axis.text = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(fill = "KI67\nexpression")
+
+plot_grid(umap_clusters, 
+	  umap_ki67 + theme(legend.position = "none"),
+	  get_legend(umap_ki67),
+	  nrow = 1, rel_widths = c(1, 1, .2))
+```
+
+\pagebreak
+
+## Top 10 marker genes for each cluster
+
+```{r Markers}
+cluster_markers <- 
+    FindAllMarkers(mex_filt, 
+                   only.pos = TRUE,
+                   min.pct = 0.1,
+                   logfc.threshold = .5) |>
+    as_tibble() |>
+    left_join(genes_df, by = c("gene" = "gene_id"))
+```
+
+```{r Markers_plot, echo = FALSE, fig.width = 8, fig.height = 8}
+plot_markers(mex_filt, cluster_markers)
+```
+
+\pagebreak
+
+## ADT counts for specific markers
+
+
+| Marker | Cell type          |
+|:-------|:------------------:|
+|CD3     |T cells             |
+|CD14    |Classical monocytes |
+|CD16    |Non-classical monocytes / NK cells |
+|CD19    |B cells                 |
+|CD56    |NK cells |
+|FceRIa  |Dendritic cells |
+
+
+```{r ADT, echo = FALSE, fig.width = 8, fig.height = 8}
+adt_df <- mex_filt@assays$ADT@data |>
+    as_tibble(rownames = "ab") |>
+    pivot_longer(-ab, names_to = "barcode", values_to = "ab_level") |>
+    mutate(ab = factor(ab, levels = str_sort(unique(ab), numeric = TRUE))) |>
+    left_join(umap_df)
+
+# shrink outliers
+adt_df_sh <- adt_df |>
+    group_by(ab) |>
+    mutate(q01 = quantile(ab_level, 0.01),
+	   q99 = quantile(ab_level, 0.99),
+	   ab_level = case_when(ab_level < q01 ~ q01,
+				ab_level > q99 ~ q99,
+				TRUE ~ ab_level)) |>
+    ungroup()
+
+cell_prots <- 
+    c("CD3",
+      "CD4",
+      "CD8",
+      "CD13",
+      "CD14",
+      "CD16",
+      "CD19",
+      "CD11b",
+      "CD11c",
+      "CD27",
+      "CD56",
+      "CD122-or-IL-2Rb",
+      "CD127-or-IL-7Ra",
+      "FceRIa",
+      "IgD")
+
+adt_plot_list <- adt_df_sh |>
+    filter(ab %in% cell_prots) |>
+    mutate(ab = factor(ab, levels = cell_prots)) |>
+    {function(x) split(x, x$ab)}() |>
+    map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = ab_level)) +
+	    geom_point(size = .2) +
+	    scale_color_scico(palette = "lajolla",
+			      labels = function(x) str_pad(x, 3),
+			      guide = guide_colorbar(barwidth = .5,
+						     barheight = 3)) +
+	    facet_wrap(~ab) +
+	    theme_bw() +
+	    theme(panel.grid = element_blank(),
+		  panel.border = element_blank(),
+		  axis.title = element_blank(),
+		  axis.text = element_blank(),
+		  strip.background = element_blank(),
+		  axis.line = element_blank(),
+		  axis.ticks = element_blank()) +
+	    labs(color = NULL))
+
+plot_grid(plotlist = adt_plot_list, ncol = 3)
+```
