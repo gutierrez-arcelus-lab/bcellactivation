@@ -18,6 +18,7 @@ opts_chunk$set(echo = TRUE,
 ## single-cell data analysis
 library(Seurat)
 library(MCPcounter)
+library(scRepertoire)
 
 ## Data wrangling
 library(tidyverse)
@@ -256,6 +257,14 @@ umap_clusters <- umap_df |>
     left_join(cluster_df, by = "barcode") |>
     ggplot(aes(UMAP_1, UMAP_2)) +
     geom_point(aes(color = cluster), size = .25) +
+    geom_segment(x = min(umap_df$UMAP_1), xend = min(umap_df$UMAP_1) + 4,
+		 y = min(umap_df$UMAP_2), yend = min(umap_df$UMAP_2),
+		 arrow = arrow(length = unit(10, "pt")),
+		 show.legend = FALSE) +
+    geom_segment(x = min(umap_df$UMAP_1), xend = min(umap_df$UMAP_1),
+		 y = min(umap_df$UMAP_2), yend = min(umap_df$UMAP_2) + 4,
+		 arrow = arrow(length = unit(10, "pt")), 
+		 show.legend = FALSE) +
     geom_label(data = cluster_labs, aes(label = cluster), alpha = .5) +
     scale_color_manual(values = c(met.brewer("Redon", n = 12))) +
     theme_minimal() +
@@ -263,7 +272,11 @@ umap_clusters <- umap_df |>
           axis.title = element_blank(),
           axis.text = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white"),
-	  legend.position = "none")
+	  legend.position = "none") +
+    annotate("text", label = "UMAP 1", size = 3,
+	     x = min(umap_df$UMAP_1) + 2, y = min(umap_df$UMAP_2) - 1) + 
+    annotate("text", label = "UMAP 2", size = 3,
+	     x = min(umap_df$UMAP_1) - 1, y = min(umap_df$UMAP_2) + 2, angle = 90) 
 
 # MKI67
 mki_gene_df <- genes_df |>
@@ -281,6 +294,14 @@ umap_ki67 <- umap_df |>
     left_join(mki_gene_quant, by = "barcode") |>
     ggplot(aes(UMAP_1, UMAP_2, color = gene_exp, fill = gene_exp)) +
     geom_point(size = .25, shape = 19) +
+    geom_segment(x = min(umap_df$UMAP_1), xend = min(umap_df$UMAP_1) + 4,
+		 y = min(umap_df$UMAP_2), yend = min(umap_df$UMAP_2),
+		 arrow = arrow(length = unit(10, "pt")),
+		 show.legend = FALSE) +
+    geom_segment(x = min(umap_df$UMAP_1), xend = min(umap_df$UMAP_1),
+		 y = min(umap_df$UMAP_2), yend = min(umap_df$UMAP_2) + 4,
+		 arrow = arrow(length = unit(10, "pt")), 
+		 show.legend = FALSE) +
     scale_color_viridis_c(guide = "none") +
     scale_fill_viridis_c(guide = guide_colorbar(barwidth = .5)) +
     theme_minimal() +
@@ -288,7 +309,11 @@ umap_ki67 <- umap_df |>
           axis.title = element_blank(),
           axis.text = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white")) +
-    labs(fill = "KI67\nexpression")
+    labs(fill = "KI67\nexpression") +
+    annotate("text", label = "UMAP 1", size = 3,
+	     x = min(umap_df$UMAP_1) + 2, y = min(umap_df$UMAP_2) - 1) + 
+    annotate("text", label = "UMAP 2", size = 3,
+	     x = min(umap_df$UMAP_1) - 1, y = min(umap_df$UMAP_2) + 2, angle = 90) 
 
 plot_grid(umap_clusters, 
 	  umap_ki67 + theme(legend.position = "none"),
@@ -386,3 +411,76 @@ adt_plot_list <- adt_df_sh |>
 
 plot_grid(plotlist = adt_plot_list, ncol = 3)
 ```
+
+\pagebreak
+
+## TCR and BCR
+
+```{r Receptors, echo = FALSE, fig.width = 4, fig.height = 4}
+
+tcr <- 
+    file.path(labshr, "CITEseq_MX",
+	      "SN0274885/broad/hptmp/sgurajal/bwh10x/KW10748_mariagutierrezarcelus",
+	      "230126_10X_KW10748_bcl/cellranger-7.1.0/GRCh38/BRI-2122/outs",
+	      "filtered_contig_annotations.csv") |>
+    read_csv()
+
+tcr_combined <- combineTCR(list(tcr), samples = "MX", cells = "T-AB")
+
+bcr <- 
+    file.path(labshr, "CITEseq_MX",
+	      "SN0274885/broad/hptmp/sgurajal/bwh10x/KW10748_mariagutierrezarcelus",
+	      "230126_10X_KW10748_bcl/cellranger-7.1.0/GRCh38/BRI-2123/outs",
+	      "filtered_contig_annotations.csv") |>
+    read_csv()
+
+bcr_combined <- combineBCR(list(bcr), samples = "MX") 
+
+# Modify barcode IDs to match
+rownames(mex_filt@meta.data) <- paste0("MX_", rownames(mex_filt@meta.data))  
+
+mex_tcrbcr <- 
+    combineExpression(c(tcr_combined, bcr_combined), 
+		      mex_filt, 
+		      cloneCall = "gene", 
+		      proportion = TRUE)
+
+
+umap_recep_df <- mex_tcrbcr@meta.data |> as_tibble(rownames = "barcode_orig") |>
+    select(barcode_orig, barcode, CTstrict) |>
+    mutate(barcode = sub("^MX_", "", barcode)) |>
+    mutate(receptor =  case_when(!is.na(barcode) & barcode %in% bcr$barcode ~ "BCR", 
+				 !is.na(barcode) & barcode %in% tcr$barcode ~ "TCR",
+				 is.na(barcode) ~ NA_character_,
+				 TRUE ~ NA_character_)) |>
+    select(barcode = barcode_orig, CTstrict, receptor) |>
+    mutate(barcode = sub("^MX_", "", barcode)) |>
+    left_join(umap_df, by = "barcode") |>
+    mutate(receptor = ifelse(is.na(receptor), "None", receptor),
+	   receptor = factor(receptor, levels = c("BCR", "TCR", "None")))
+
+    
+ggplot(umap_recep_df, aes(UMAP_1, UMAP_2, color = receptor)) +
+    geom_point(size = .25) +
+    geom_segment(x = min(umap_df$UMAP_1), xend = min(umap_df$UMAP_1) + 4,
+		 y = min(umap_df$UMAP_2), yend = min(umap_df$UMAP_2),
+		 arrow = arrow(length = unit(10, "pt")),
+		 show.legend = FALSE) +
+    geom_segment(x = min(umap_df$UMAP_1), xend = min(umap_df$UMAP_1),
+		 y = min(umap_df$UMAP_2), yend = min(umap_df$UMAP_2) + 4,
+		 arrow = arrow(length = unit(10, "pt")), 
+		 show.legend = FALSE) +
+    scale_color_manual(values = c("BCR" = "midnightblue", "TCR" = "tomato3", "None" = "grey60")) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+	  axis.title = element_blank(),
+	  axis.text = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(color = "Receptor\ndetected") +
+    annotate("text", label = "UMAP 1", size = 3,
+	     x = min(umap_df$UMAP_1) + 2, y = min(umap_df$UMAP_2) - 1) + 
+    annotate("text", label = "UMAP 2", size = 3,
+	     x = min(umap_df$UMAP_1) - 1, y = min(umap_df$UMAP_2) + 2, angle = 90) 
+```
+
