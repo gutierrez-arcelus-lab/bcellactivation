@@ -23,6 +23,7 @@ library(MCPcounter)
 library(tidyverse)
 
 ## Plotting
+library(tidytext)
 library(MetBrewer)
 library(scico)
 library(cowplot)
@@ -63,27 +64,51 @@ mex_obj <- make_seurat(mex_dir, project_id = "MX", mito_ids = mt_genes, ribo_ids
 
 ## QC
 
-### Include cells with up to 10% of reads from MT genes and more than 500 genes detected.
+Include cells passing filters:
+
+1. Up to 10% of reads from MT genes;
+
+2. At least 500 genes detected;
+
+3. Classified as "singlet" by Scrublet.
+
 
 ```{r filter}
-mex_filt <- subset(mex_obj, subset = nFeature_RNA > 500 & percent_mt < 10)
+scrublet <- read_tsv("./scrublet_calls.tsv")
+names(scrublet)[1] <- "barcode"
+
+meta <- mex_obj@meta.data |>
+    as_tibble(rownames = "barcode") |>
+    select(barcode, n_genes = nFeature_RNA, percent_mt) |> 
+    left_join(scrublet) |>
+    mutate(status = case_when(predicted_doublets == TRUE ~ "doublet",
+			      predicted_doublets == FALSE ~ "singlet"))  
+
+cells_passed <- meta |>
+    filter(percent_mt <= 10, n_genes >= 500, status == "singlet") |>
+    pull(barcode)
+
+mex_filt <- subset(mex_obj, cells = cells_passed)
 ```
 
 ```{r mt_n_genes, echo = FALSE, fig.width = 8, fig.height = 4}
-qcplot1 <- mex_obj@meta.data |>
-    as_tibble(rownames = "barcode") |>
-	select(barcode, n_genes = nFeature_RNA, percent_mt) |> 
-	ggplot(aes(x = n_genes, y = percent_mt)) +
+
+qcplot1 <- meta |>
+    ggplot(aes(x = n_genes, y = percent_mt, color = status)) +
 	geom_point(size = .25, alpha = .25) +
-	geom_vline(xintercept = 500, linetype = 1, color = "tomato3", linewidth = 1) +
-	geom_hline(yintercept = 10, linetype = 1, color = "tomato3", linewidth = 1) +
+	geom_vline(xintercept = 500, linetype = 2, color = "black", linewidth = 1) +
+	geom_hline(yintercept = 10, linetype = 2, color = "black", linewidth = 1) +
 	scale_x_continuous(expand = c(0, 0), breaks = scales::pretty_breaks(6)) +
 	scale_y_continuous(expand = c(0, 0), limit = c(0, 100)) +
+	scale_color_manual(values = c("singlet" = "cornflowerblue", "doublet" = "indianred")) +
 	theme_bw() +
 	theme(panel.grid.minor = element_blank(),
-	      plot.margin = margin(t = .5, r = .5, l = .5, b = .5, unit = "cm")) +
+	      plot.margin = margin(t = .5, r = .5, l = .5, b = .5, unit = "cm"),
+	      legend.position = c(.8, .5)) +
 	labs(x = "Number of genes", 
-	     y = "% reads from Mitochondria")
+	     y = "% reads from Mitochondria",
+	     color = NULL) +
+	guides(color = guide_legend(override.aes = list(size = 2, alpha = 1)))
 
 qcplot2 <- enframe(c("Total" = ncol(mex_obj), "After QC" = ncol(mex_filt))) |>
     mutate(name = fct_inorder(name)) |>
@@ -218,7 +243,7 @@ plot_grid(plotlist = mcp_plot_list, ncol = 3) +
 
 \pagebreak
 
-## Seurat clustering at low resolution (0.15) indentifies 11 clusters
+## Seurat clustering at low resolution (0.15) indentifies 12 clusters
 
 ```{r UMAP_cluster, echo = FALSE, fig.width = 8, fig.height = 4}
 cluster_labs <- umap_df |> 
@@ -232,7 +257,7 @@ umap_clusters <- umap_df |>
     ggplot(aes(UMAP_1, UMAP_2)) +
     geom_point(aes(color = cluster), size = .25) +
     geom_label(data = cluster_labs, aes(label = cluster), alpha = .5) +
-    scale_color_manual(values = c(met.brewer("Redon", n = 11))) +
+    scale_color_manual(values = c(met.brewer("Redon", n = 12))) +
     theme_minimal() +
     theme(panel.grid = element_blank(),
           axis.title = element_blank(),
@@ -246,7 +271,7 @@ mki_gene_df <- genes_df |>
     select(gene_id, gene_name)
 
 mki_gene_quant <- mex_filt@assays$RNA@data |> 
-    {function(x) x[mki_gene_df$gene_id, ,drop = FALSE]}() |>
+    {function(x) x[mki_gene_df$gene_id, , drop = FALSE]}() |>
     as_tibble(rownames = "gene_id") |>
     left_join(mki_gene_df, by = "gene_id") |>
     pivot_longer(-c("gene_id", "gene_name"), 
@@ -294,14 +319,14 @@ plot_markers(mex_filt, cluster_markers)
 ## ADT counts for specific markers
 
 
-| Marker | Cell type          |
-|:-------|:------------------:|
-|CD3     |T cells             |
-|CD14    |Classical monocytes |
+| Marker | Cell type                         |
+|:-------|:----------------------------------|
+|CD3     |T cells                            |
+|CD14    |Classical monocytes                |
 |CD16    |Non-classical monocytes / NK cells |
-|CD19    |B cells                 |
-|CD56    |NK cells |
-|FceRIa  |Dendritic cells |
+|CD19    |B cells                            |
+|CD56    |NK cells                           |
+|FceRIa  |Dendritic cells                    |
 
 
 ```{r ADT, echo = FALSE, fig.width = 8, fig.height = 8}
