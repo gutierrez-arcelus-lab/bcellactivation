@@ -128,11 +128,11 @@ stim_order <-
     )
       
 stim_colors <- 
-    c("grey60", "grey80",
-      "grey30", "black",
-      brewer.pal(n = 9, "YlOrRd")[c(1, 4)],
-      brewer.pal(n = 9, "Blues")[c(2, 8)],
-      brewer.pal(n = 9, "Greens")[c(2, 8)],
+    c("grey80", "grey60",
+      "grey50", "grey40",
+      c("goldenrod1", "goldenrod3"),
+      brewer.pal(n = 9, "Blues")[c(3, 8)],
+      brewer.pal(n = 9, "Greens")[c(3, 8)],
       brewer.pal(n = 9, "Purples")[c(7, 9)],
       grep("pink", colors(), value = TRUE)[c(16, 4)],
       paste0("tomato", c(2, 4))
@@ -193,7 +193,7 @@ meta_df <-
 
 # QC plots
 qcplot <- ggplot(meta_df, aes(x = n_genes, y = percent_mt)) +
-    geom_point(aes(color = demuxlet), size = .25, alpha = .2) +
+    geom_point(aes(color = demuxlet), size = .5, alpha = .5) +
     geom_hline(yintercept = 10, color = "midnightblue", linewidth = 1, alpha = .8) +
     geom_vline(xintercept = 500, color = "midnightblue", linewidth = 1, alpha = .8) +
     scale_x_continuous(labels = function(x) x/1e3 ) +
@@ -204,14 +204,11 @@ qcplot <- ggplot(meta_df, aes(x = n_genes, y = percent_mt)) +
     theme(panel.grid.minor.x = element_blank(),
 	  panel.grid.minor.y = element_blank(),
 	  legend.position = "top",
-	  plot.margin = margin(t = .5, b = .1, r = .1, l = .1, unit = "cm")) +
+	  plot.margin = margin(t = .25, b = .1, r = .1, l = .1, unit = "cm")) +
     labs(x = "Number of genes detected (in thousands)", 
 	 y = "% reads from MT",
 	 color = "Genetic demultiplexing:") +
     guides(color = guide_legend(override.aes = list(alpha = 1, size = 3)))
-
-ggsave("./plots/qc.png", qcplot, width = 9, height = 2.5)
-
 
 # remove bad cells
 # compare number of cells
@@ -246,12 +243,19 @@ cells_df <-
 
 cells_plot <- ggplot(cells_df, aes(x = set, y = cells)) +
     geom_col(fill = "midnightblue", alpha = .9) +
+    scale_y_continuous(labels = function(x) x/1e3) +
     facet_wrap(~lib, nrow = 1) +
     theme_bw() +
     theme(panel.grid.major.x = element_blank()) +
-    labs(x = NULL, y = "Total number of cells")
+    labs(x = NULL, y = "Total number of cells (k)")
 
-ggsave("./plots/cells.png", cells_plot, width = 9, height = 2.5)
+
+qc_out <- plot_grid(qcplot, NULL, cells_plot, 
+		    ncol = 1, rel_heights = c(1, .1, .8),
+		    labels = c("A)", "", "B)")) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/qc.png", qc_out, width = 9, height = 5)
 
 
 # HTO distribution
@@ -305,6 +309,18 @@ lib1984_htodemux <- HTODemux(lib1984_filt, assay = "HTO", positive.quantile = 0.
 lib1988_htodemux <- HTODemux(lib1988_filt, assay = "HTO", positive.quantile = 0.99)
 lib1990_htodemux <- HTODemux(lib1990_filt, assay = "HTO", positive.quantile = 0.99)
 
+get_htodemux_class <- function(x) {
+    x@meta.data |>
+	as_tibble(rownames = "barcode") |>
+	select(barcode, orig.ident, hto_class = hash.ID, hto_global = HTO_classification.global)
+}
+
+htodemux_df <- 
+    list(pilot1_htodemux, pilot2_htodemux, lib1984_htodemux, lib1988_htodemux, lib1990_htodemux) |>
+    map_dfr(get_htodemux_class)
+
+
+
 # demuxmix
 run_demuxmix <- function(x) {
     
@@ -336,4 +352,369 @@ lib1988_dmm <- run_demuxmix(lib1988_filt) |>
 
 lib1990_dmm <- run_demuxmix(lib1990_filt) |> 
     as_tibble(rownames = "barcode")
+
+process_dmm <- function(x) {
+    
+    x |> 
+	mutate(Type = recode(Type, 
+			     "multiplet" = "Doublet", 
+			     "singlet" = "Singlet", 
+			     "negative" = "Negative",
+			     "uncertain" = "Uncertain"),
+	       HTO = ifelse(Type == "Singlet", HTO, Type)) |>
+	select(barcode, hto_class = HTO, hto_global = Type)
+}
+
+dmm_df <- 
+    list("pilot1" = pilot1_dmm,
+	 "pilot2" = pilot2_dmm,
+	 "1984" = lib1984_dmm,
+	 "1988" = lib1988_dmm,
+	 "1990" = lib1990_dmm) |>
+    map_dfr(process_dmm, .id = "orig.ident") |>
+    select(barcode, orig.ident, everything())
+
+
+demulti_df <- 
+    left_join(htodemux_df, dmm_df, 
+	      by = c("barcode", "orig.ident"), 
+	      suffix = c(".htodemux", ".dmm")) |>
+    mutate_at(vars(hto_global.htodemux, hto_global.dmm), 
+	      ~factor(., levels = c("Singlet", "Doublet", "Negative", "Uncertain"))) |>
+    mutate(orig.ident = factor(orig.ident, 
+			       levels = c("pilot1", "pilot2", "1984", "1988", "1990")))
+
+demulti_summ <- demulti_df |>
+    count(orig.ident, hto_global.htodemux, hto_global.dmm) |>
+    complete(orig.ident, hto_global.htodemux, hto_global.dmm, fill = list(n = 0))
+
+demux_plot1 <- ggplot(demulti_summ, aes(x = hto_global.htodemux, y = hto_global.dmm)) +
+    geom_tile(aes(fill = n), show.legend = FALSE) +
+    geom_text(aes(label = n), size = 2.5) +
+    scale_fill_gradient(low = "white", high = "slateblue") +
+    facet_grid(. ~ orig.ident) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+    labs(x = "HTODemux", y = "demuxmix")
+
+
+demulti_summ2 <- demulti_df |> 
+    select(orig.ident, demuxmix = hto_global.dmm, HTODemux = hto_global.htodemux) |>
+    pivot_longer(-orig.ident, names_to = "method") |>
+    count(orig.ident, method, value) |>
+    mutate(method = fct_inorder(method))
+
+
+demux_plot2 <- ggplot(demulti_summ2, aes(x = value, y = n, fill = method)) +
+    geom_col(position = "dodge", alpha = .9) +
+    scale_fill_manual(values = c("HTODemux" = "tomato3", "demuxmix" = "midnightblue")) +
+    facet_grid(. ~ orig.ident) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+	  legend.position = "bottom",
+	  plot.margin = margin(l = 0.66, r = .2, unit = "cm"),
+	  panel.grid.major.x = element_blank()) +
+    labs(x = NULL, y = "N droplets", fill = NULL)
+
+demux_plot <- 
+    plot_grid(demux_plot1, NULL, demux_plot2, 
+	      ncol = 1, rel_heights = c(1, .1, 1),
+	      labels = c("A)", "", "B)")) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/demux.png", demux_plot, width = 9, height = 5)
+
+
+# TSNE
+DefaultAssay(pilot1_filt) <- "HTO"
+DefaultAssay(pilot2_filt) <- "HTO"
+DefaultAssay(lib1984_filt) <- "HTO"
+DefaultAssay(lib1988_filt) <- "HTO"
+DefaultAssay(lib1990_filt) <- "HTO"
+
+pilot1_filt <- pilot1_filt |>
+    {function(x) ScaleData(x, features = rownames(x))}() |>
+    {function(x) RunPCA(x, features = rownames(x), approx = FALSE)}() |>
+    {function(x) RunTSNE(x, dims = 1:nrow(x), perplexity = 100, nthreads = 4)}()
+
+pilot2_filt <- pilot2_filt |>
+    {function(x) ScaleData(x, features = rownames(x))}() |>
+    {function(x) RunPCA(x, features = rownames(x), approx = FALSE)}() |>
+    {function(x) RunTSNE(x, dims = 1:nrow(x), perplexity = 100, nthreads = 4)}()
+
+lib1984_filt <- lib1984_filt |>
+    {function(x) ScaleData(x, features = rownames(x))}() |>
+    {function(x) RunPCA(x, features = rownames(x), approx = FALSE)}() |>
+    {function(x) RunTSNE(x, dims = 1:nrow(x), perplexity = 100, nthreads = 4)}()
+
+lib1988_filt <- lib1988_filt |>
+    {function(x) ScaleData(x, features = rownames(x))}() |>
+    {function(x) RunPCA(x, features = rownames(x), approx = FALSE)}() |>
+    {function(x) RunTSNE(x, dims = 1:nrow(x), perplexity = 100, nthreads = 4)}()
+
+lib1990_filt <- lib1990_filt |>
+    {function(x) ScaleData(x, features = rownames(x))}() |>
+    {function(x) RunPCA(x, features = rownames(x), approx = FALSE)}() |>
+    {function(x) RunTSNE(x, dims = 1:nrow(x), perplexity = 100, nthreads = 4)}()
+
+
+
+add_colors <- c("Uncertain" = "turquoise", "Negative" = "beige", "Doublet" = "black")
+stim_order_add <- c(names(rev(add_colors)), stim_order)
+
+tsne_df <- 
+    list("pilot1" = pilot1_filt, 
+	 "pilot2" = pilot2_filt, 
+	 "1984" = lib1984_filt, 
+	 "1988" = lib1988_filt,
+	 "1990" = lib1990_filt) |>
+    map_dfr(function(x) x@reductions$tsne@cell.embeddings |>
+		as_tibble(rownames = "barcode"),
+	    .id = "orig.ident") |>
+    mutate(orig.ident = fct_inorder(orig.ident)) |>
+    left_join(demulti_df, by = c("barcode", "orig.ident")) |>
+    select(barcode, orig.ident, hto_class.htodemux, hto_class.dmm, tSNE_1, tSNE_2) |>
+    pivot_longer(hto_class.htodemux:hto_class.dmm, names_to = "method", values_to = "hto_class") |>
+    mutate(method = case_when(method == "hto_class.htodemux" ~ "HTODemux",
+			      method == "hto_class.dmm" ~ "demuxmix",
+			      TRUE ~ NA_character_),
+	   method = fct_inorder(method),
+	   hto_class = factor(hto_class, levels = stim_order_add))
+
+
+
+tsne_plot <- ggplot(tsne_df, aes(x = tSNE_1, y = tSNE_2)) +
+    geom_point(aes(color = hto_class), size = .25) +
+    scale_color_manual(values = c(stim_colors, add_colors)) +
+    facet_grid(orig.ident ~ method) +
+    theme_minimal() +
+    theme(axis.text = element_blank(),
+	  strip.text = element_text(size = 12),
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    guides(color = guide_legend(override.aes = list(size = 4))) +
+    labs(color = NULL, x = "HTO tSNE 1", y = "HTO tSNE 2")
+
+ggsave("./plots/tsne.png", tsne_plot, width = 6.5, height = 10)
+
+# Admixture plots
+
+
+admix_df <- bind_rows("HTODemux" = htodemux_df, "demuxmix" = dmm_df, .id = "method") |>
+    filter(hto_global %in% c("Singlet", "Doublet")) |>
+    left_join(hto_counts, by = c("barcode", "orig.ident"), multiple = "all") |>
+    group_by(method, barcode, orig.ident) |>
+    mutate(top_hto = hto[which.max(value)],
+	   p = value/sum(value),
+	   p_top = p[which.max(value)]) |>
+    ungroup() |>
+    mutate(orig.ident = fct_inorder(orig.ident),
+	   hto_class = factor(hto_class, levels = stim_order_add),
+	   hto_global = factor(hto_global, levels = c("Singlet", "Doublet")))
+	
+
+plot_admix <- function(dat) {
+
+    ggplot(dat, aes(x = reorder_within(barcode, by = p_top, within = top_hto), y = p)) +
+	geom_col(aes(fill = hto), position = "fill", width = 1.1, show.legend = FALSE) +
+	scale_fill_manual(values = stim_colors) +
+	scale_y_continuous(expand = c(0, 0)) +
+	facet_grid(orig.ident~top_hto, scales = "free_x", space = "free", switch = 'y') +
+	theme_minimal() +
+	theme(axis.text = element_blank(),
+	      strip.text.x = element_blank(),
+	      panel.spacing = unit(.1, "lines"),
+	      plot.margin = margin(t = 0, b = 0, l = .2, r = .2, unit = "cm"),
+	      plot.background = element_rect(fill = "white", color = "white")) +
+	labs(x = NULL, y = NULL)
+}
+
+## Singlets
+# HTOdemux
+admix_htodemux_singlet_pilot1 <- admix_df |>
+    filter(method == "HTODemux", 
+	   orig.ident == "pilot1", 
+	   hto_global == "Singlet") |>
+    plot_admix()
+
+admix_htodemux_singlet_pilot2 <- admix_df |>
+    filter(method == "HTODemux", 
+	   orig.ident == "pilot2", 
+	   hto_global == "Singlet") |>
+    plot_admix()
+
+admix_htodemux_singlet_1984 <- admix_df |>
+    filter(method == "HTODemux", 
+	   orig.ident == "1984", 
+	   hto_global == "Singlet") |>
+    plot_admix()
+
+admix_htodemux_singlet_1988 <- admix_df |>
+    filter(method == "HTODemux", 
+	   orig.ident == "1988", 
+	   hto_global == "Singlet") |>
+    plot_admix()
+
+admix_htodemux_singlet_1990 <- admix_df |>
+    filter(method == "HTODemux", 
+	   orig.ident == "1990", 
+	   hto_global == "Singlet") |>
+    plot_admix()
+
+admix_htodemux_singlets <- 
+    plot_grid(NULL,
+	      admix_htodemux_singlet_pilot1,
+	      admix_htodemux_singlet_pilot2,
+	      admix_htodemux_singlet_1984,
+	      admix_htodemux_singlet_1988,
+	      admix_htodemux_singlet_1990,
+	      ncol = 1,
+	      rel_heights = c(.25, rep(1, 5)),
+	      labels = c("HTODemux", rep("", 5)),
+	      label_size = 8) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+# demuxmix
+admix_dmm_singlet_pilot1 <- admix_df |>
+    filter(method == "demuxmix", 
+	   orig.ident == "pilot1", 
+	   hto_global == "Singlet") |>
+    plot_admix()
+
+admix_dmm_singlet_pilot2 <- admix_df |>
+    filter(method == "demuxmix", 
+	   orig.ident == "pilot2", 
+	   hto_global == "Singlet") |>
+    plot_admix()
+
+admix_dmm_singlet_1984 <- admix_df |>
+    filter(method == "demuxmix", 
+	   orig.ident == "1984", 
+	   hto_global == "Singlet") |>
+    plot_admix()
+
+admix_dmm_singlet_1988 <- admix_df |>
+    filter(method == "demuxmix", 
+	   orig.ident == "1988", 
+	   hto_global == "Singlet") |>
+    plot_admix()
+
+admix_dmm_singlet_1990 <- admix_df |>
+    filter(method == "demuxmix", 
+	   orig.ident == "1990", 
+	   hto_global == "Singlet") |>
+    plot_admix()
+
+admix_dmm_singlets <- 
+    plot_grid(NULL,
+	      admix_dmm_singlet_pilot1,
+	      admix_dmm_singlet_pilot2,
+	      admix_dmm_singlet_1984,
+	      admix_dmm_singlet_1988,
+	      admix_dmm_singlet_1990,
+	      ncol = 1,
+	      rel_heights = c(.25, rep(1, 5)),
+	      labels = c("demuxmix", rep("", 5)),
+	      label_size = 8) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/admix_singlets.png", 
+       plot_grid(admix_htodemux_singlets, admix_dmm_singlets, ncol = 1),
+       height = 8, width = 6.5)
+
+
+
+## Doublets
+# HTOdemux
+admix_htodemux_dbl_pilot1 <- admix_df |>
+    filter(method == "HTODemux", 
+	   orig.ident == "pilot1", 
+	   hto_global == "Doublet") |>
+    plot_admix()
+
+admix_htodemux_dbl_pilot2 <- admix_df |>
+    filter(method == "HTODemux", 
+	   orig.ident == "pilot2", 
+	   hto_global == "Doublet") |>
+    plot_admix()
+
+admix_htodemux_dbl_1984 <- admix_df |>
+    filter(method == "HTODemux", 
+	   orig.ident == "1984", 
+	   hto_global == "Doublet") |>
+    plot_admix()
+
+admix_htodemux_dbl_1988 <- admix_df |>
+    filter(method == "HTODemux", 
+	   orig.ident == "1988", 
+	   hto_global == "Doublet") |>
+    plot_admix()
+
+admix_htodemux_dbl_1990 <- admix_df |>
+    filter(method == "HTODemux", 
+	   orig.ident == "1990", 
+	   hto_global == "Doublet") |>
+    plot_admix()
+
+admix_htodemux_doublets <- 
+    plot_grid(NULL,
+	      admix_htodemux_dbl_pilot1,
+	      admix_htodemux_dbl_pilot2,
+	      admix_htodemux_dbl_1984,
+	      admix_htodemux_dbl_1988,
+	      admix_htodemux_dbl_1990,
+	      ncol = 1,
+	      rel_heights = c(.25, rep(1, 5)),
+	      labels = c("HTODemux", rep("", 5)),
+	      label_size = 8) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+# demuxmix
+admix_dmm_dbl_pilot1 <- admix_df |>
+    filter(method == "demuxmix", 
+	   orig.ident == "pilot1", 
+	   hto_global == "Doublet") |>
+    plot_admix()
+
+admix_dmm_dbl_pilot2 <- admix_df |>
+    filter(method == "demuxmix", 
+	   orig.ident == "pilot2", 
+	   hto_global == "Doublet") |>
+    plot_admix()
+
+admix_dmm_dbl_1984 <- admix_df |>
+    filter(method == "demuxmix", 
+	   orig.ident == "1984", 
+	   hto_global == "Doublet") |>
+    plot_admix()
+
+admix_dmm_dbl_1988 <- admix_df |>
+    filter(method == "demuxmix", 
+	   orig.ident == "1988", 
+	   hto_global == "Doublet") |>
+    plot_admix()
+
+admix_dmm_dbl_1990 <- admix_df |>
+    filter(method == "demuxmix", 
+	   orig.ident == "1990", 
+	   hto_global == "Doublet") |>
+    plot_admix()
+
+admix_dmm_doublets <- 
+    plot_grid(NULL,
+	      admix_dmm_dbl_pilot1,
+	      admix_dmm_dbl_pilot2,
+	      admix_dmm_dbl_1984,
+	      admix_dmm_dbl_1988,
+	      admix_dmm_dbl_1990,
+	      ncol = 1,
+	      rel_heights = c(.25, rep(1, 5)),
+	      labels = c("demuxmix", rep("", 5)),
+	      label_size = 8) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/admix_doublets.png", 
+       plot_grid(admix_htodemux_doublets, admix_dmm_doublets, ncol = 1),
+       height = 8, width = 6.5)
+
 
