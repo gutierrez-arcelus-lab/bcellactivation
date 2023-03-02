@@ -10,4 +10,4 @@ annot |>
     filter(X1 %in% paste0("chr", c(1:22, "X"))) |>
     distinct() |>
     arrange(X1, X4, X5) |>
-    write_tsv("./data/gene_regions.bed", col_names = FALSE)
+    write_tsv("../data/gene_regions.bed", col_names = FALSE)

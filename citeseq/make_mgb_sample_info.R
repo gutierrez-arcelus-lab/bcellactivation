@@ -1,6 +1,6 @@
 library(tidyverse)
 
-samples <- read_lines("../sample_ids.txt")
+samples <- read_lines("./data/mgb_sample_ids.txt")
 
 batches <- sprintf("04%02d", 1:8)
 
@@ -16,8 +16,8 @@ ids_df |>
     group_by(batch) |>
     summarise(id = list(mgb_id)) |>
     ungroup() |>
-    mutate(f = paste0("data/", batch, ".txt")) |>
+    mutate(f = paste0("./data/", batch, ".txt")) |>
     {function(dat) walk2(dat$id, dat$f, ~write_lines(.x, .y))}()
 
-write_tsv(ids_df, "./samples.tsv", col_names = FALSE)
+write_tsv(ids_df, "./data/mgb_sample_info.tsv", col_names = FALSE)
 

@@ -15,7 +15,7 @@ source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
 
 CHR=$SLURM_ARRAY_TASK_ID
-INFO=${SLURM_SUBMIT_DIR}/samples.tsv
+INFO=${SLURM_SUBMIT_DIR}/data/mgb_sample_info.tsv
 BATCHES=$( awk '{ print $1 }' $INFO | sort | uniq )
 
 for b in $BATCHES
