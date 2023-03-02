@@ -167,10 +167,10 @@ read_demuxlet <- function(f) {
     extract(best, c("status", "sample"), "([^-]+)-(.+)")
 }
 
-demuxlet_pilot2 <- read_demuxlet("./pilot_2/demuxlet/demuxlet_allsnps.best")
-demuxlet_1984 <- read_demuxlet("./mgb/demuxlet/demuxlet_results.best") 
-demuxlet_1988 <- read_demuxlet("./mgb/demuxlet/demuxlet_1988_results.best")
-demuxlet_1990 <- read_demuxlet("./mgb/demuxlet/demuxlet_1990_results.best")
+demuxlet_pilot2 <- read_demuxlet("../bcell_scrna/pilot_2/demuxlet/demuxlet_allsnps.best")
+demuxlet_1984 <- read_demuxlet("../bcell_scrna/mgb/demuxlet/demuxlet_results.best") 
+demuxlet_1988 <- read_demuxlet("../bcell_scrna/mgb/demuxlet/demuxlet_1988_results.best")
+demuxlet_1990 <- read_demuxlet("../bcell_scrna/mgb/demuxlet/demuxlet_1990_results.best")
 
 demuxlet_df <- 
     bind_rows("pilot2" = demuxlet_pilot2,
@@ -320,7 +320,6 @@ htodemux_df <-
     map_dfr(get_htodemux_class)
 
 
-
 # demuxmix
 run_demuxmix <- function(x) {
     
@@ -356,13 +355,13 @@ lib1990_dmm <- run_demuxmix(lib1990_filt) |>
 process_dmm <- function(x) {
     
     x |> 
-	mutate(Type = recode(Type, 
-			     "multiplet" = "Doublet", 
-			     "singlet" = "Singlet", 
-			     "negative" = "Negative",
-			     "uncertain" = "Uncertain"),
-	       HTO = ifelse(Type == "Singlet", HTO, Type)) |>
-	select(barcode, hto_class = HTO, hto_global = Type)
+    mutate(Type = recode(Type, 
+			 "multiplet" = "Doublet", 
+			 "singlet" = "Singlet", 
+			 "negative" = "Negative",
+			 "uncertain" = "Uncertain"),
+	   HTO = ifelse(Type == "Singlet", HTO, Type)) |>
+    select(barcode, hto_class = HTO, hto_global = Type)
 }
 
 dmm_df <- 
@@ -498,19 +497,20 @@ tsne_plot <- ggplot(tsne_df, aes(x = tSNE_1, y = tSNE_2)) +
 ggsave("./plots/tsne.png", tsne_plot, width = 6.5, height = 10)
 
 # Admixture plots
-
-
 admix_df <- bind_rows("HTODemux" = htodemux_df, "demuxmix" = dmm_df, .id = "method") |>
     filter(hto_global %in% c("Singlet", "Doublet")) |>
     left_join(hto_counts, by = c("barcode", "orig.ident"), multiple = "all") |>
+    mutate(hto = as.character(hto)) |>
     group_by(method, barcode, orig.ident) |>
     mutate(top_hto = hto[which.max(value)],
 	   p = value/sum(value),
 	   p_top = p[which.max(value)]) |>
     ungroup() |>
-    mutate(orig.ident = fct_inorder(orig.ident),
+    mutate(hto_facet = ifelse(hto_global == "Singlet", hto_class, top_hto),
+	   orig.ident = fct_inorder(orig.ident),
 	   hto_class = factor(hto_class, levels = stim_order_add),
-	   hto_global = factor(hto_global, levels = c("Singlet", "Doublet")))
+	   hto_global = factor(hto_global, levels = c("Singlet", "Doublet")),
+	   hto_facet = factor(hto_facet, levels = stim_order))
 	
 
 plot_admix <- function(dat) {
@@ -519,7 +519,7 @@ plot_admix <- function(dat) {
 	geom_col(aes(fill = hto), position = "fill", width = 1.1, show.legend = FALSE) +
 	scale_fill_manual(values = stim_colors) +
 	scale_y_continuous(expand = c(0, 0)) +
-	facet_grid(orig.ident~top_hto, scales = "free_x", space = "free", switch = 'y') +
+	facet_grid(orig.ident~hto_facet, scales = "free_x", space = "free", switch = 'y') +
 	theme_minimal() +
 	theme(axis.text = element_blank(),
 	      strip.text.x = element_blank(),

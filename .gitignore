@@ -1,7 +1,7 @@
 bcell_quant
 bcell_samples.txt
 indices
-log
+*.log
 *gz
 *gz.tbi
 *.html
@@ -24,3 +24,6 @@ data/pca
 mgb_biobank/allchr*
 mgb_biobank/sle_variants
 *test.R
+*.sing2
+*.single
+*.best
