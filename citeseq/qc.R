@@ -227,6 +227,14 @@ lib1984_filt <- subset(lib1984_obj, cells = good_cells[["1984"]])
 lib1988_filt <- subset(lib1988_obj, cells = good_cells[["1988"]])
 lib1990_filt <- subset(lib1990_obj, cells = good_cells[["1990"]])
 
+
+# Export data for Scrublet
+DropletUtils::write10xCounts(x = lib1984_filt@assays$RNA@counts, path = "./data/lib1984_matrix")
+DropletUtils::write10xCounts(x = lib1988_filt@assays$RNA@counts, path = "./data/lib1988_matrix")
+DropletUtils::write10xCounts(x = lib1990_filt@assays$RNA@counts, path = "./data/lib1990_matrix")
+
+
+
 cells_df <- 
     tribble(
 	~lib, ~set, ~cells,
@@ -638,7 +646,58 @@ tsne_plot <- ggplot(tsne_df, aes(x = tSNE_1, y = tSNE_2)) +
     guides(color = guide_legend(override.aes = list(size = 4))) +
     labs(color = NULL, x = "HTO tSNE 1", y = "HTO tSNE 2")
 
+
 ggsave("./plots/tsne.png", tsne_plot, width = 6.5, height = 11)
+
+# Scrublet
+scrublet_1984 <- read_tsv("./demultiplexing/scrublet/scrublet_calls_1984.tsv") |>
+    rename("barcode" = "...1")
+
+scrublet_1988 <- read_tsv("./demultiplexing/scrublet/scrublet_calls_1988.tsv") |>
+    rename("barcode" = "...1")
+
+scrublet_1990 <- read_tsv("./demultiplexing/scrublet/scrublet_calls_1990.tsv") |>
+    rename("barcode" = "...1")
+
+scrublet_df <- 
+    bind_rows("1984" = scrublet_1984, 
+	      "1988" = scrublet_1988, 
+	      "1990" = scrublet_1990,
+	      .id = "orig.ident") |>
+    mutate(orig.ident = fct_inorder(orig.ident))
+
+tsne_scr_df <- tsne_df |>
+    select(barcode, orig.ident, tSNE_1, tSNE_2) |>
+    filter(orig.ident %in% c("1984", "1988", "1990")) |>
+    left_join(scrublet_df, join_by(barcode, orig.ident))
+
+scrub_plot1 <- ggplot(tsne_scr_df, aes(x = tSNE_1, y = tSNE_2)) +
+    geom_point(aes(color = doublet_score), size = .25) +
+    scale_color_gradient(low = "white", high = "tomato3", 
+			 guide = guide_colorbar(barwidth = .5)) +
+    facet_wrap(~orig.ident, ncol = 1) +
+    theme_minimal() +
+    theme(axis.text = element_blank(),
+	  strip.text = element_text(size = 12),
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(color = "Scrublet\nscore", x = "HTO tSNE 1", y = "HTO tSNE 2")
+
+scrub_plot2 <- ggplot(tsne_scr_df, aes(x = tSNE_1, y = tSNE_2)) +
+    geom_point(aes(color = doublet_score > .4), size = .25) +
+    scale_color_manual(values = c("TRUE" = "black", "FALSE" = "grey90")) +
+    facet_wrap(~orig.ident, ncol = 1) +
+    theme_minimal() +
+    theme(axis.text = element_blank(),
+	  strip.text = element_text(size = 12),
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    guides(color = guide_legend(override.aes = list(size = 2.5))) +
+    labs(color = "Predicted\ndoublet", x = "HTO tSNE 1", y = "HTO tSNE 2")
+
+ggsave("./plots/tsne_scrublet.png", 
+       plot_grid(scrub_plot1, scrub_plot2, nrow = 1),
+       width = 6.5, height = 6)
 
 
 # Admixture plots
@@ -747,13 +806,19 @@ ggsave("./plots/admix.png", admix_out, width = 10, height = 12)
 
 # Save data
 cells_1984 <- filter(lib1984_dmm, Type == "singlet") |>
-    select(barcode, hto = HTO, prob = Prob)
+    select(barcode, hto = HTO, prob = Prob) |>
+    left_join(scrublet_1984, join_by(barcode)) |>
+    filter(doublet_score <= 0.4)
 
 cells_1988 <- filter(lib1988_dmm, Type == "singlet") |>
-    select(barcode, hto = HTO, prob = Prob)
+    select(barcode, hto = HTO, prob = Prob) |>
+    left_join(scrublet_1988, join_by(barcode)) |>
+    filter(doublet_score <= 0.4)
 
 cells_1990 <- filter(lib1990_dmm, Type == "singlet") |>
-    select(barcode, hto = HTO, prob = Prob)
+    select(barcode, hto = HTO, prob = Prob) |>
+    left_join(scrublet_1990, join_by(barcode)) |>
+    filter(doublet_score <= 0.4)
 
 lib1984_filt <- subset(lib1984_filt, cells = cells_1984$barcode)
 lib1988_filt <- subset(lib1988_filt, cells = cells_1988$barcode)
