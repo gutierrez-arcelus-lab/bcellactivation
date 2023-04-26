@@ -1,3 +1,7 @@
+# Code borrowed from the featurecounts_deseq2.r script in 
+# nf-core atacseq pipeline v1.2.2
+
+
 library(DESeq2)
 library(vsn)
 library(BiocParallel)
