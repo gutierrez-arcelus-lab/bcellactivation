@@ -3,13 +3,13 @@ library(qvalue)
 library(ggrepel)
 library(RColorBrewer)
 
-
 meta <- "./arrayspec_ase.tsv" |>
-    read_tsv(col_names = c("subject_id", "sample_id", "stim", "mgbid")) |>
+    read_tsv(col_names = c("subject_id", "sample_id", "stim", "mgbid"), 
+	     col_types = c(.default = "c")) |>
     unite("id", c("sample_id", "stim"), sep = "_", remove = FALSE) |>
     select(id, subject_id, sample_id, stim)
     
-ase_df <- sprintf("./ase/%s.asereadcounter.txt", meta$id) |>
+ase_df <- sprintf("./results/ase/%s.asereadcounter.txt", meta$id) |>
     setNames(meta$id) |>
     map_df(read_tsv, .id = "id") |>
     left_join(meta, by = "id") |>
@@ -28,6 +28,11 @@ ase_res <- ase_df |>
 	   q = qvalue(p)$qvalues)
 
 # Manhattan plot
+stim_colors <- c("unstday0" = "grey",
+		 "BCR" = "#55bdfb",
+		 "TLR7" = "#488f31",
+		 "DN2" = "#de425b")
+
 annotations <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens",
 	      "gencode.v38.primary_assembly.annotation.gtf") |>
@@ -72,37 +77,91 @@ ase_top <- ase_data |>
     group_by(stim, position) |>
     slice_max(-log10(p)) |>
     group_by(stim) |>
-    top_n(50, -log10(p)) |>
+    top_n(25, -log10(p)) |>
     ungroup() |>
     mutate(chr = factor(chr, levels = paste0("chr", c(1:22, "X")))) |>
     arrange(chr, -log10(p))
+
+threshold_line <- ase_data |>
+    filter(q < 0.01) |>
+    group_by(stim) |>
+    slice(which.max(p)) |>
+    ungroup()
     
 
-manhplot_dn2 <- 
-    ggplot(ase_data |> filter(stim == "DN2"), 
+manh_plot <- 
+    ggplot(ase_data, 
 	   aes(x = pos_cumm, y = -log10(p), color = chr)) +
     geom_point(size = .5, alpha = 0.25) +
-    geom_point(data = ase_top |> filter(stim == "DN2"), 
-	     aes(x = pos_cumm, y = -log10(p)),
-	     shape = 1, size = 2, alpha = 1) +
-    geom_text_repel(data = ase_top |> filter(stim == "DN2"), 
+    geom_point(data = ase_top, 
+	       aes(x = pos_cumm, y = -log10(p)),
+	       shape = 1, size = 2, alpha = 1) +
+    geom_text_repel(data = ase_top, 
 		    aes(x = pos_cumm, y = -log10(p), label = gene_name),
 		    inherit.aes = FALSE,
-		    direction = "both", angle = 90, size = 3, nudge_y = 10, fontface = "bold", 
+		    direction = "both", angle = 90, size = 3, nudge_y = 5, fontface = "bold", 
 		    min.segment.length = 0, segment.size = .1, max.overlaps = Inf) +
+    geom_hline(data = threshold_line, 
+	       aes(yintercept = -log10(p)),
+	       linetype = 2) +
     scale_x_continuous(label = sub("chr", "", axis_set$chr), breaks = axis_set$center) +
     scale_y_continuous(expand = c(0, 0), limits = c(0, ase_ylim)) +
-    scale_color_manual(values = rep(c("tomato2", "tomato4"), unique(length(axis_set$chr)))) +
-    labs(x = NULL, y = "-log10 (p-value)", title = "DN2") + 
+    scale_color_manual(values = rep(c("#8aa1b4", "grey35"), unique(length(axis_set$chr)))) +
+    facet_wrap(~stim, ncol = 1) +
+    labs(x = NULL, y = "-log10 (p-value)") + 
     theme_minimal() +
-    theme( 
+    theme(text = element_text(size = 14),
 	  legend.position = "none",
 	  panel.grid.major.x = element_blank(),
 	  panel.grid.minor.x = element_blank(),
-	  plot.background = element_rect(color = "white", fill = "white")
-    )
+	  plot.background = element_rect(color = "white", fill = "white"))
 
-ggsave("./plots/ase_manhattan_dn2.png", manhplot_dn2, width = 10, height = 5)
+ggsave("./plots/ase_manhattan.png", manh_plot, width = 12, height = 16)
+
+
+
+
+###############################################################################
+# Some genes have a lot of SNPs with monoallelic expression of the REF allele
+# mapping bias?
+ase_genes <- ase_data |>
+    filter(q < 0.05) |>
+    select(sample_id, stim, chr, position, refCount, total, p) |>
+    mutate(chr = as.character(chr)) |>
+    left_join(gene_df, join_by(chr, position >= start, position <= end)) |>
+    filter(!is.na(gene_name)) |>
+    group_by(sample_id, stim, chr, position, p, refCount, total) |>
+    summarise(gene = paste(gene_name, collapse = ",")) |>
+    ungroup()
+
+ase_genes |>
+    count(stim, gene, sample_id, sort = TRUE) |>
+    filter(n > 10) |> print(n = 30)
+
+
+ase_genes |>
+    mutate(imb = refCount/total)
+
+ase_genes |>
+    filter(chr == "chr1", position == 2508718)
+
+
+
+ase_x <- ase_genes |>
+    filter(stim == "TLR7", gene == "HLA-DPB1", sample_id == "10044277.1") |>
+    arrange(position)
+
+ase_genes |>
+    filter(stim == "unstday0", gene == "RIPOR2", sample_id == "10085290.1") |>
+    arrange(position) |>
+    print(n = Inf)
+
+vcf <- read_tsv("./data/allchr.r2filtered.mgb.vcf.gz", comment = "##")
+
+    
+
+
+###############################################################################
 
 
 #mapped_reads <- read_tsv("./star_n_uniq_mapped_reads.tsv")
@@ -122,7 +181,7 @@ ase_irf <- ase_res |>
     select(-gene_name, -gene_id, -start, -end)
 
 vcf_irf <- vcf |>
-    filter(ID %in% ase_plot_df$variantID) |>
+    filter(ID %in% ase_irf$variantID) |>
     pivot_longer(-(1:9), names_to = "subject_id", values_to = "gt") |>
     select(subject_id, position = POS, variantID = ID, gt) |>
     mutate(subject_id = sub("^\\d+_[A-Z0-9]+-(\\d+)$", "\\1", subject_id)) |>
@@ -189,6 +248,10 @@ p2 <- irf_df |>
 
 ggsave("./plots/irf8.png", cowplot::plot_grid(p, p2, ncol = 1), width = 8, height = 10)
 
+
+# SLE genes
+sle_genes <- read_tsv("../bcell_scrna/reported_genes.tsv")
+
 ase_select_df <- ase_res |>
     filter(total >= 20) |>
     group_by(sample_id, variantID) |>
@@ -216,6 +279,65 @@ ase_genes <-
     filter(n_distinct(variantID) > 1) |>
     ungroup()
 
+ase_genes |> filter(gene_name %in% sle_genes$gene)
+
+
+bach2 <- ase_res |> 
+    filter(variantID == "chr6:90206626:T:C",
+	   sample_id %in% c("10085290.1", "10044277.1")) |>
+    mutate_at(vars(1:2), as.character) |>
+    select(sample_id, stim, variantID, refCount, total) |>
+    mutate(imb = refCount/total) |>
+    mutate(stim = fct_inorder(stim)) |>
+    mutate(lab = paste(refCount, total, sep = "/"))
+
+bach2_plot <- ggplot(bach2, aes(x = stim, y = imb, fill = stim)) +
+    geom_col() +
+    geom_text(aes(label = lab), vjust = 1) +
+    scale_fill_manual(values = stim_colors) +
+    facet_wrap(~sample_id, ncol = 1) +
+    theme_bw() +
+    theme(legend.position = "none",
+	  panel.grid.minor.y = element_blank()) +
+    labs(x = NULL, y = "Ref allele / total")
+
+ggsave("./plots/bach2_ase.png", bach2_plot, width = 4, height = 5) 
+
+
+gene_quants <- read_tsv("./quantifications_genes.tsv")
+
+bach2_gene_tpm <- gene_quants |> 
+    filter(sample_id %in% c("10085290.1", "10044277.1"), gene_name == "BACH2") |>
+    mutate(stim = factor(stim, levels = c("unstday0", "BCR", "TLR7", "DN2"))) |>
+    ggplot(aes(x = stim, y = tpm, fill = stim)) +
+	geom_col() +
+	scale_fill_manual(values = stim_colors) +
+	facet_wrap(~sample_id, ncol = 1) +
+	theme_bw() +
+	theme(legend.position = "none",
+	      panel.grid.minor.y = element_blank()) +
+	labs(x = NULL, y = "Transcripts per Million")
+
+ggsave("./plots/bach2_tpm.png", bach2_gene_tpm, width = 4, height = 5) 
+    
+tx_quants <- read_tsv("./quantifications_transcripts.tsv")
+
+bach2_tx_quants <- tx_quants |> 
+    filter(sample_id %in% c("10085290.1", "10044277.1"), gene_name == "BACH2") |>
+    mutate(stim = factor(stim, levels = c("unstday0", "BCR", "TLR7", "DN2")))
+
+bach2_tx_tpm <- bach2_tx_quants |>
+    ggplot(aes(x = stim, y = tpm, fill = stim)) +
+	geom_col() +
+	scale_fill_manual(values = stim_colors) +
+	facet_grid(tx_id~sample_id) +
+	theme_bw() +
+	theme(legend.position = "none",
+	      panel.grid.minor.y = element_blank()) +
+	labs(x = NULL, y = "Transcripts per Million")
+
+ggsave("./plots/bach2_tx_tpm.png", bach2_tx_tpm, width = 5, height = 10) 
+
 ase_genes |> 
     count(gene_id, gene_name, variantID, sort = TRUE) |> 
     print(n = 50)
@@ -223,6 +345,9 @@ ase_genes |>
 ase_genes |> 
     distinct(stim_activ, gene_name) |>
     count(stim_activ)
+
+
+# OAS3
 
 oas3 <- ase_res |>
     filter(chr == "chr12") |>
@@ -255,25 +380,36 @@ oas3 <- oas3 |>
 	      rowid_to_column("i"))
 
 
-oas_p <- ggplot(oas3, aes(x = factor(i), y = eff, group = variantID)) +
-    geom_point(aes(color = stim), size = 2) +
+oas_p <- ggplot(oas3, aes(x = factor(i), y = refCount/total, group = variantID)) +
     geom_line(linewidth = .1) +
+    geom_point(aes(color = stim, size = total)) +
     scale_color_manual(values = c("unstday0" = "grey", "BCR" = "cornflowerblue", 
 				  "TLR7" = "forestgreen", "DN2" = "tomato3")) +
+    scale_size(range = c(0.5, 5)) +
     facet_wrap(~as.character(sample_id), nrow = 1) +
     theme_bw() +
     theme(panel.grid.minor.y = element_blank(),
 	  panel.grid.major.x = element_blank(),
 	  legend.position = "top",
 	  plot.background = element_rect(fill = "white", color = "white")) +
-    labs(x = "variants in OAS3", y = "Allelic imbalance")
+    labs(x = "variants in OAS3", y = "Allelic imbalance") +
+    guides(color = guide_legend(override.aes = list(size = 6)))
 
+tx_quant <- read_tsv("./quantifications_transcripts.tsv")
 
+oas_quant <- filter(tx_quant, 
+		    gene_name == "OAS3",
+		    sample_id %in% unique(oas3$sample_id)) |>
+    group_by(tx_id) |>
+    filter(mean(tpm > 1) > .2) |>
+    ungroup() |>
+    distinct(tx_id) |>
+    pull(tx_id)
 
 tx_annot <- read_rds("../splicing/plot_data/transcripts_annot.rds")
 
 txi_df <- tx_annot |> 
-    filter(gene_name == "OAS3") |>
+    filter(transcript_id %in% oas_quant) |>
     group_by(transcript_id) |>
     mutate(i = row_number(),
            col = case_when(feature == "intron" & i == min(i) ~ NA_character_,
@@ -304,7 +440,7 @@ test <- ggplot() +
     geom_text_repel(data = plot_annot_df, 
 		    aes(x = x, y = y, label = i), 
 		    force_pull = 0,
-		    nudge_y = 1, 
+		    nudge_y = 0.1, 
 		    direction = "x", 
 		    min.segment.length = 0) +
     theme_minimal() +
@@ -315,6 +451,6 @@ test <- ggplot() +
 	  plot.margin = margin(1, 0, 0, 0, unit = "cm"))
 
 ggsave("./plots/oas3.png", 
-       cowplot::plot_grid(oas_p, test, rel_heights = c(.25, 1), ncol = 1),
-       width = 10, height = 10)
+       cowplot::plot_grid(oas_p, test, rel_heights = c(1, .5), ncol = 1),
+       width = 10, height = 5)
 
