@@ -10,9 +10,10 @@ meta <-
 ids <- paste(meta$sample_id, meta$stim, sep = "_")  
 
 id_df <- tibble(id = ids) |>
-    separate(id, c("sample_id", "stim"), sep = "_", remove = FALSE)
+    separate(id, c("sample_id", "stim"), sep = "_", remove = FALSE) |>
+    separate(sample_id, c("donor_id", "rep"), sep = "\\.", remove = FALSE)
 
-results_df <- file.path("results", ids, "quant.sf") |>
+results_df <- file.path("results/salmon", ids, "quant.sf") |>
     setNames(ids) |>
     map_df(read_tsv, .id = "id")
 
@@ -27,9 +28,8 @@ gene_df <- transcript_df |>
     summarise_at(vars(counts, tpm), sum) |>
     ungroup()
 
-write_tsv(transcript_df, "./quantifications_transcripts.tsv")
-write_tsv(gene_df, "./quantifications_genes.tsv")
-
+write_tsv(transcript_df, "./results/salmon_transcripts.tsv")
+write_tsv(gene_df, "./results/salmon_genes.tsv")
 
 
 #
