@@ -23,9 +23,11 @@ adj_vcf <- read_tsv(vcfin, comment = "##") |>
 	   ID = paste(`#CHROM`, POS, REF, ALT, sep = ":")) |>
     select(`#CHROM`, POS, ID, REF, ALT, everything())
 
-write_lines(header, vcfout)
-write_tsv(adj_vcf, vcfout, col_names = TRUE, append = TRUE)
-unlink(paste0(vcfout, ".gz"))
-system(paste("bgzip", vcfout))
-system(paste0("tabix -p vcf ", vcfout, ".gz"))
+vcfout_tmp <- sub("\\.gz$", "", vcfout)
+write_lines(header, vcfout_tmp)
+write_tsv(adj_vcf, vcfout_tmp, col_names = TRUE, append = TRUE)
+unlink(vcfout)
+unlink(paste0(vcfout, ".tbi"))
+system(paste("bgzip", vcfout_tmp))
+system(paste("tabix -p vcf", vcfout))
 

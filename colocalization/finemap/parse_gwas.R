@@ -46,14 +46,15 @@ stats_hg38 <- bed38 |>
     read_tsv(col_names = c("chr", "start", "end", "varid")) |>
     select(chr, bp_hg38 = end, varid) |>
     left_join(gwas_stats, join_by(chr == `#CHROM`, varid == ID)) |>
-    select(chr, varid, bp = bp_hg38, ref = REF, alt = ALT, info = FORMAT, stats = `EBI-a-GCST003156`)
+    select(chr, varid, bp = bp_hg38, ref = REF, alt = ALT, info = FORMAT, 
+	   stats = `EBI-a-GCST003156`)
 
 # Extract variants in windows around lead variants
 lead_vars_windows <- bentham_top |>
     select(chr, varid = rsid, locus) |>
     inner_join(stats_hg38) |>
-    mutate(window_start = bp - 5e5, 
-	   window_end = bp + 5e5) |>
+    mutate(window_start = bp - 2.5e5, 
+	   window_end = bp + 2.5e5) |>
     select(chr, locus, window_start, window_end)
 
 stats_windows <- 
@@ -68,42 +69,6 @@ lead_vars_windows |>
     mutate(coord = sprintf("%s:%d-%d", chr, window_start, window_end)) |>
     pull(coord) |>
     write_lines("./data/regions_bentham.txt")
-
-
-# test concordance between ref panel and gwas summ stats
-Sys.setenv(VROOM_CONNECTION_SIZE = 500000L)
-
-## At multiallelic variants, remove allele with 0 counts in this sample
-## and recode alleles so some will be now biallelic
-r1_h <- read_lines("./data/region1.vcf.gz", n_max = 5000) |>
-    keep(grepl("^##", x = r1_h))
-
-r1 <- read_tsv("./data/region1.vcf.gz", comment = "##") |>
-    extract(INFO, "ac", "^AC=([^;]+)", remove = FALSE) |>
-    separate_rows(c(ALT, ac), sep = ",") |>
-    filter(ac != "0") |>
-    select(-ac) |>
-    group_by(across(c(-ALT))) |>
-    summarise(ALT = paste(ALT, collapse = ",")) |>
-    ungroup() |>
-    mutate(QUAL = ".", FILTER = ".", INFO = ".")
-
-write_lines(r1_h, "./data/region1.adj.vcf")
-write_tsv(r1, "./data/region1.adj.vcf", col_names = TRUE, append = TRUE)
-system(paste("bgzip", out))
-system(paste0("tabix -p vcf ", out, ".gz"))
-
-#keep variants with the same allele in both the ref panel and gwas summ stats
-stats_windows |>
-    filter(locus == first(locus)) |>
-    left_join(r1, join_by(chr, bp)) |>
-    filter(ref != REF | alt != ALT) |>
-    mutate(p = 10^-as.numeric(logp))
-
-
-
-
-
 
 
 

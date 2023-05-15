@@ -6,14 +6,14 @@
 #SBATCH --time=8:00:00
 #SBATCH -p bch-compute
 #SBATCH --array=1-41
-#SBATCH --job-name=subset1KGP
+#SBATCH --job-name=LD1KGP
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /temp_work/ch229163/log/subset1KGP-%A-%a
+#SBATCH -o /temp_work/ch229163/log/LD1KGP-%A-%a
 
 source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
-export R_X=4.1.2
+export R_X=4.1
 
 IDS=${SLURM_SUBMIT_DIR}/data/europeans_samples.txt
 REGIONSFILE=${SLURM_SUBMIT_DIR}/data/regions_bentham.txt 
