@@ -7,9 +7,8 @@ library(tidyverse)
 ## filter and normalize to TMM
 filt_norm <- function(y) {
 
-    #keep_y <- rowMeans(cpm(y) > 1) >= 0.7 
+    #keep_y <- filterByExpr(y)
     #y <- y[keep_y, , keep.lib.sizes = FALSE]
-
     y <- calcNormFactors(y)
     y <- estimateDisp(y)
     
