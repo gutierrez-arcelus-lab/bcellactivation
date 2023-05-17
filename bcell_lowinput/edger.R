@@ -3,12 +3,10 @@ library(splines)
 library(tidyverse)
 
 # Functions
-
-## filter and normalize to TMM
 filt_norm <- function(y) {
 
-    #keep_y <- filterByExpr(y)
-    #y <- y[keep_y, , keep.lib.sizes = FALSE]
+    keep_y <- filterByExpr(y)
+    y <- y[keep_y, , keep.lib.sizes = FALSE]
     y <- calcNormFactors(y)
     y <- estimateDisp(y)
     
@@ -17,33 +15,18 @@ filt_norm <- function(y) {
 
 
 # data
-expr_df <- read_rds("./data/expression.rds") %>%
+expr_df <- read_rds("./data/expression.rds") |>
     mutate(gene_id = sub("\\.\\d+$", "", gene_id))
 
-sample_decode <- read_tsv("./data/sample_decode.tsv") %>%
-    separate(sample_name, c("name", "stim", "time"), sep = "_", remove = FALSE) %>%
-    mutate(time = factor(time, levels = str_sort(unique(time), numeric = TRUE))) %>%
+sample_decode <- read_tsv("./data/sample_decode.tsv") |>
+    separate(sample_name, c("name", "stim", "time"), sep = "_", remove = FALSE) |>
+    mutate(time = factor(time, levels = str_sort(unique(time), numeric = TRUE))) |>
     arrange(stim, time, name)
 
-expressed_genes <- expr_df %>%
-    group_by(id) %>%
-    mutate(cpm_ = count/sum(count) * 1e6) %>%
-    ungroup() %>%
-    left_join(sample_decode, by = c("id" = "sample_id")) %>%
-    group_by(gene_id, stim, time) %>%
-    summarise(i = mean(cpm_ > 1) > .5) %>%
-    group_by(gene_id) %>%
-    filter(any(i == TRUE)) %>%
-    ungroup() %>%
-    distinct(gene_id) %>%
-    pull(gene_id)
-
-expr_filt_df <- filter(expr_df, gene_id %in% expressed_genes)
-
-counts <- expr_filt_df %>%
-    select(-tpm, -gene_name) %>%
-    pivot_wider(names_from = id, values_from = count) %>%
-    column_to_rownames("gene_id") %>%
+counts <- expr_df |>
+    select(-tpm, -gene_name) |>
+    pivot_wider(names_from = id, values_from = count) |>
+    column_to_rownames("gene_id") |>
     data.matrix()
 
 counts_sorted <- counts[, sample_decode$sample_id]
@@ -51,35 +34,35 @@ counts_sorted <- counts[, sample_decode$sample_id]
 pooled <- sumTechReps(counts_sorted, ID=sample_decode$sample_name)
 
 # Use Unstim 0hr as 0hr for all stims
-matrix_0hrs <- pooled[ , grep("_0hrs$", colnames(pooled), value = TRUE)] %>%
-    as_tibble(rownames = "gene_id") %>%
-    pivot_longer(-gene_id, names_to = "sample_name") %>%
-    separate(sample_name, c("id", "stim", "time"), sep = "_") %>%
-    select(-stim) %>%
-    nest(data = everything()) %>%
-    expand_grid(stim = unique(sample_decode$stim)) %>%
-    filter(stim != "Unstim") %>%
-    unnest(cols = c(data)) %>%
-    unite("sample_name", c(id, stim, time), sep = "_") %>%
-    pivot_wider(names_from = sample_name, values_from = value) %>%
-    column_to_rownames("gene_id") %>%
-    data.matrix() %>%
-    .[rownames(pooled), ]
+matrix_0hrs <- pooled[ , grep("_0hrs$", colnames(pooled), value = TRUE)] |>
+    as_tibble(rownames = "gene_id") |>
+    pivot_longer(-gene_id, names_to = "sample_name") |>
+    separate(sample_name, c("id", "stim", "time"), sep = "_") |>
+    select(-stim) |>
+    nest(data = everything()) |>
+    expand_grid(stim = unique(sample_decode$stim)) |>
+    filter(stim != "Unstim") |>
+    unnest(cols = c(data)) |>
+    unite("sample_name", c(id, stim, time), sep = "_") |>
+    pivot_wider(names_from = sample_name, values_from = value) |>
+    column_to_rownames("gene_id") |>
+    data.matrix() |>
+    {function(x) x[rownames(pooled), ]}()
 
-counts_full <- cbind(pooled, matrix_0hrs) %>%
-    as_tibble(rownames = "gene_id") %>%
-    pivot_longer(-gene_id, names_to = "sample_name") %>%
-    separate(sample_name, c("id", "stim", "time"), sep = "_", remove = FALSE) %>%
-    mutate(time = factor(time, levels = str_sort(unique(time), numeric = TRUE))) %>%
-    arrange(stim, time, id) %>%
-    select(gene_id, sample_name, value) %>%
-    pivot_wider(names_from = "sample_name", values_from = "value") %>%
-    column_to_rownames("gene_id") %>%
+counts_full <- cbind(pooled, matrix_0hrs) |>
+    as_tibble(rownames = "gene_id") |>
+    pivot_longer(-gene_id, names_to = "sample_name") |>
+    separate(sample_name, c("id", "stim", "time"), sep = "_", remove = FALSE) |>
+    mutate(time = factor(time, levels = str_sort(unique(time), numeric = TRUE))) |>
+    arrange(stim, time, id) |>
+    select(gene_id, sample_name, value) |>
+    pivot_wider(names_from = "sample_name", values_from = "value") |>
+    column_to_rownames("gene_id") |>
     data.matrix()
 
-stim_matrices <- sample_decode %>%
-    distinct(stim) %>%
-    filter(! stim %in% c("Unstim", "IL4")) %>%
+stim_matrices <- sample_decode |>
+    distinct(stim) |>
+    filter(! stim %in% c("Unstim", "IL4")) |>
     mutate(mat = map(stim, ~counts_full[, grepl(sprintf("_%s_", .x), colnames(counts_full))]),
 	   tp = map(mat, ~sub("^[^_]+_[^_]+_(\\d+hrs)$", "\\1", colnames(.x))),
 	   dge = map2(mat, tp, ~DGEList(counts = .x, group = .y)),
@@ -93,36 +76,36 @@ stim_matrices <- sample_decode %>%
 	   logcpm_obs = map2(dgefilt, fit, ~cpm(.x, log = TRUE, prior.count = .y$prior.count)),
 	   logcpm_fit = map(fit, ~cpm(.x, log = TRUE)))
 
-obs_cpm_df <- stim_matrices %>%
-    select(stim, logcpm_obs) %>%
-    mutate(logcpm_obs = map(logcpm_obs, ~as_tibble(.x, rownames = "gene_id") %>%
-			    pivot_longer(-gene_id, names_to = "sample_name", values_to = "cpm"))) %>%
+obs_cpm_df <- stim_matrices |>
+    select(stim, logcpm_obs) |>
+    mutate(logcpm_obs = map(logcpm_obs, ~as_tibble(.x, rownames = "gene_id") |>
+			    pivot_longer(-gene_id, names_to = "sample_name", values_to = "cpm"))) |>
     unnest(cols = c(logcpm_obs))
 
-fit_cpm_df <- stim_matrices %>%
-    select(stim, logcpm_obs, logcpm_fit) %>%
-    mutate(logcpm_fit = map2(logcpm_fit, logcpm_obs, ~`colnames<-`(.x, colnames(.y)))) %>%
-    select(-logcpm_obs) %>%
-    mutate(logcpm_fit = map(logcpm_fit, ~as_tibble(.x, rownames = "gene_id") %>%
-			    pivot_longer(-gene_id, names_to = "sample_name", values_to = "fit"))) %>%
+fit_cpm_df <- stim_matrices |>
+    select(stim, logcpm_obs, logcpm_fit) |>
+    mutate(logcpm_fit = map2(logcpm_fit, logcpm_obs, ~`colnames<-`(.x, colnames(.y)))) |>
+    select(-logcpm_obs) |>
+    mutate(logcpm_fit = map(logcpm_fit, ~as_tibble(.x, rownames = "gene_id") |>
+			    pivot_longer(-gene_id, names_to = "sample_name", values_to = "fit"))) |>
     unnest(cols = c(logcpm_fit))
 
-genes_df <- distinct(expr_filt_df, gene_id, gene_name)
+genes_df <- distinct(expr_df, gene_id, gene_name)
 
-cpm_df <- left_join(obs_cpm_df, fit_cpm_df) %>%
-    left_join(genes_df) %>%
-    separate(sample_name, c("id", "stim_", "time"), sep = "_") %>%
-    select(id, stim, time, gene_id, gene_name, cpm, fit) %>%
+cpm_df <- left_join(obs_cpm_df, fit_cpm_df) |>
+    left_join(genes_df) |>
+    separate(sample_name, c("id", "stim_", "time"), sep = "_") |>
+    select(id, stim, time, gene_id, gene_name, cpm, fit) |>
     mutate(time = factor(time, levels = str_sort(unique(time), numeric = TRUE)))
 
-results_df <- stim_matrices %>%
-    select(stim, fit) %>%
-    mutate(toptag = map(fit, ~topTags(.x, n = Inf) %>% 
-			as.data.frame() %>%
-			as_tibble(rownames = "gene_id") %>%
-			left_join(genes_df) %>%
-			select(gene_id, gene_name, everything()))) %>%
-    select(stim, toptag) %>%
+results_df <- stim_matrices |>
+    select(stim, fit) |>
+    mutate(toptag = map(fit, ~topTags(.x, n = Inf) |> 
+			as.data.frame() |>
+			as_tibble(rownames = "gene_id") |>
+			left_join(genes_df) |>
+			select(gene_id, gene_name, everything()))) |>
+    select(stim, toptag) |>
     unnest(cols = c(toptag))
 
 write_tsv(cpm_df, "./data/edger_cpm_fit.tsv")

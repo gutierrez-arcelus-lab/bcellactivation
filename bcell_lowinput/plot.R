@@ -73,8 +73,7 @@ top_specific_genes <- edger_results |>
 
 
 cpm_plot_df <- cpm_df |>
-    #inner_join(top_specific_genes)
-    inner_join(top_genes)
+    inner_join(top_sle_genes)
 
 p_vals <- edger_results |>
     inner_join(distinct(cpm_plot_df, stim, gene_id, gene_name)) |>
@@ -84,8 +83,6 @@ p_vals <- edger_results |>
     mutate(p_lab = format(p, format = "e", digits = 2),
 	   p_lab = paste("p =", p_lab),
 	   p_lab = ifelse(fdr < 0.05, paste(p_lab, "*"), p_lab))
-
-
 
 plot_tc <- function(stimulus) {
     
@@ -107,14 +104,10 @@ plot_tc <- function(stimulus) {
 	labs(x = NULL, y = "CPM")
 }
 
-out_plot_list <- map(levels(cpm_df$stim), plot_tc) |>
-    plot_grid(plotlist = _, ncol = 1)
+plot_list <- map(levels(cpm_df$stim), plot_tc)
+out_plot <- plot_grid(plotlist = plot_list, ncol = 1)
 
-out_plot_list <- map(c("BCR", "TLR7", "BCR-TLR7", "DN2"), plot_tc) |>
-    plot_grid(plotlist = _, ncol = 1)
-
-ggsave("./plots/timecourse_top_specific.png", out_plot_list, width = 10, height = 7)
-ggsave("./plots/timecourse_topgenes.png", out_plot_list, width = 12, height = 10)
+ggsave("./plots/timecourse_topgenes.png", out_plot, width = 12, height = 10)
 
 
 
