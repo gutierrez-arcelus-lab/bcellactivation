@@ -2,6 +2,7 @@
 
 Sys.setenv(VROOM_CONNECTION_SIZE = 500000L)
 
+library(rtracklayer)
 library(tidyverse)
 library(susieR)
 library(cowplot)
@@ -100,35 +101,40 @@ make_pip_df <- function(fit_obj) {
     return(pip_df)
 }
 
-plot_susie <- function(res_df) {
+plot_susie <- function(region_index) {
 
+    n_gene_rows <- 15
+    loc <- regions$locus[region_index]
+    res_df <- filter(plot_df, locus == loc)
 
     tracks_df <- tracks |>
 	filter(gwas_locus == unique(res_df$locus)) |>
-	select(chr, locus = gene_name, feature, i, start, end) |>
-	group_by(chr, locus) |>
+	select(chr, gene_id, locus = gene_name, feature, i, start, end) |>
+	group_by(chr, gene_id, locus) |>
 	nest() |>
 	ungroup()
 
-    tracks_df$rowid <- rep(1:5, length.out = nrow(tracks_df))
+    tracks_df$rowid <- rep(1:n_gene_rows, length.out = nrow(tracks_df))
     tracks_df <- unnest(tracks_df, cols = data)
-    
-    strand_df <- distinct(tracks, gene_name, strand)
-   
-    arrows_df <- 
-	left_join(tracks_df, strand_df, by = join_by(locus == gene_name)) |>
-	group_by(locus) |>
-	mutate(pos = ifelse(strand == "+", max(end), min(start)) ) |>
-	distinct(locus, strand, pos) |>
-	mutate(x1 = ifelse(strand == "+", pos + 1e3, pos - 1e3))
-    
+
+    strand_df <- distinct(tracks, gene_id, locus = gene_name, strand)	
+
     genes_df <- 
-	left_join(tracks_df, strand_df, by = join_by(locus == gene_name)) |>
-	group_by(locus) |>
+	left_join(tracks_df, strand_df, by = join_by(gene_id, locus)) |>
+	group_by(gene_id, locus) |>
 	mutate(pos = ifelse(strand == "-", max(end), min(start)) ) |>
 	ungroup() |>
-	distinct(locus, pos) |>
-	left_join(distinct(tracks_df, locus, rowid), join_by(locus))
+	distinct(gene_id, locus, pos) |>
+	left_join(distinct(tracks_df, gene_id, locus, rowid), join_by(gene_id, locus))
+
+    arrows_df <- 
+	left_join(tracks_df, strand_df, by = join_by(gene_id, locus)) |>
+	group_by(gene_id, locus) |>
+	mutate(pos = ifelse(strand == "+", max(end), min(start)) ) |>
+	ungroup() |>
+	distinct(gene_id, locus, strand, x0 = pos) |>
+	mutate(x1 = ifelse(strand == "+", x0 + 1e3, x0 - 1e3)) |>
+	left_join(select(genes_df, gene_id, locus, rowid), join_by(gene_id, locus))
 
     max_pip <- res_df |> 
 	filter(!is.na(cs), stat == "Susie PIP") |>
@@ -136,7 +142,6 @@ plot_susie <- function(res_df) {
 	slice_max(value) |>
 	mutate(stat = paste0(stat, ";GWAS p-value")) |>
 	separate_rows(stat, sep = ";")
-
 
     pip_plot <- 
 	ggplot(data = res_df, 
@@ -149,6 +154,7 @@ plot_susie <- function(res_df) {
 	theme(axis.text.x = element_blank(),
 	      axis.text.y = element_text(margin = margin(0, -.75, 0, 0, unit = "cm")),
 	      axis.ticks = element_blank(),
+	      panel.grid.minor.y = element_blank(),
 	      panel.background = element_rect(fill = "grey96"),
 	      legend.position = "top",
 	      plot.margin = margin(0, 0.5, 0.5, 0.5, unit = "cm")) +
@@ -157,7 +163,7 @@ plot_susie <- function(res_df) {
 	     color = "Credible Set:",
 	     title = unique(res_df$locus))
 
-    arrow_plot <- 
+    genes_plot <- 
 	ggplot(tracks_df |> mutate(rowid = factor(rowid))) +
 	#geom_vline(data = max_pip, aes(xintercept = pos), linetype = 2, color = "grey35") +
 	geom_segment(data = filter(tracks_df, feature == "intron"),
@@ -167,32 +173,84 @@ plot_susie <- function(res_df) {
 		     aes(x = start, xend = end, y = rowid, yend = rowid),
 		     linewidth = 3, 
 		     color = "midnightblue") +
+	geom_segment(data = arrows_df,
+		 aes(x = x0, xend = x1, y = rowid, yend = rowid),
+		 linewidth = .2,
+		 arrow = arrow(length = unit(0.2, "cm")),
+		 color = "blue") +
 	geom_text_repel(data = genes_df, 
 		  aes(x = pos, y = rowid, label = locus),
 		  fontface = "italic", 
-		  size = 2.5,
+		  size = 2,
 		  nudge_y = .35,
 		  direction = "x",
 		  min.segment.length = 0,
 		  segment.size = .25,
-		  color = "black") +
+		  force_pull = 100,
+		  segment.color = "grey90",
+		  color = "black",
+		  max.overlaps = 100) +
 	scale_x_continuous(limits = range(res_df$pos), labels = function(x) x/1e6L) +
-	scale_y_discrete(breaks = c(0:5)) +
-	theme(panel.grid = element_blank(),
+	scale_y_discrete(breaks = 0:n_gene_rows) +
+	theme(axis.text = element_blank(),
+	      axis.title = element_blank(),
+	      axis.ticks = element_blank(),
+	      panel.grid = element_blank(),
 	      plot.margin = margin(0, 0.5, 0.5, 0.5, unit = "cm"),
-	      panel.background = element_rect(fill = "white", color = "white")) +
-	labs(x = sprintf("Position in %s (Mb)", unique(res_df$chr)), 
-	     y = NULL)
+	      panel.background = element_rect(fill = "white", color = "white"))
 
-	ggsave("./plots/test.png", 
-	       plot_grid(get_legend(pip_plot), 
-			 pip_plot + theme(legend.position = "none"),
-			 arrow_plot, 
-			 ncol = 1, rel_heights = c(.1, 1, .35)) +
-	       theme(plot.background = element_rect(fill = "white", color = "white")),
-	       height = 7, width = 8)
+    gr <- 
+	map(bigwigs, ~import(., which = interv[region_index])) |>
+	map_dfr(~as.data.frame(.) |> as_tibble(), .id = "stim") |>
+	mutate(stim = factor(stim, levels = names(stim_colors)))
+
+    gr_df <- gr |>
+	mutate(score = score/max(score),
+	       bp = map2(start, end, ~.x:.y)) |>
+	select(stim, bp, score) |>
+	unnest(cols = bp)
+
+    atac <- 
+	ggplot(gr_df) +
+	geom_line(aes(x = bp, y = score, group = 1, color = stim),
+		  linewidth = .4) +
+	scale_x_continuous(limits = range(res_df$pos), labels = function(x) x/1e6L) +
+	scale_color_manual(values = stim_colors) +
+	facet_wrap(~stim, ncol = 1) +
+	theme_minimal() +
+	theme(axis.ticks.y = element_blank(),
+	      axis.text.y = element_blank(),
+	      axis.title.y = element_blank(),
+	      strip.text = element_blank(),
+	      legend.position = "none",
+	      panel.grid = element_blank(),
+	      plot.margin = margin(0, 0.5, 0.5, 0.5, unit = "cm"),
+	      plot.background = element_rect(fill = "white", color = "white")) +
+    labs(x = sprintf("Position in %s (Mb)", unique(res_df$chr)))
+
+    p <- 
+	plot_grid(get_legend(pip_plot), 
+		  pip_plot + theme(legend.position = "none"),
+		  genes_plot,
+		  atac,
+		  ncol = 1, rel_heights = c(.1, 1, .6, .5)) +
+	theme(plot.background = element_rect(fill = "white", color = "white"))
+
+    ggsave(sprintf("./plots/susie%s.pdf", loc), p, 
+	   width = 7, height = 7
+)
 
 }
+
+# Colors
+stim_colors <- 
+    c("unst_0" = "grey80", 
+      "unst_24" = "grey50",
+      "IL4_24" = "black", 
+      "BCR_24" = "#00a0e4",
+      "TLR7_24" = "#488f31",
+      "DN2_24" = "#de425b"
+      )
 
 ## Data
 # Genomics windows
@@ -205,7 +263,7 @@ regions <-
 
 # GWAS data
 sample_size <- 4036 + 6959
-summ_stats_all <- read_tsv("./data/bentham_opengwas_1MbWindows_hg38_summstats.tsv")
+summ_stats <- read_tsv("./data/bentham_opengwas_1MbWindows_hg38_summstats.tsv")
 
 # Gene tracks
 tracks <- 
@@ -221,15 +279,12 @@ tracks <-
 # Analysis
 #plan(multisession, workers = availableCores())
 #susie_results <- future_map(regions$locus, run_susie)
-
 susie_results <- read_rds("./susie_results.rds")
 
 pip_df <- 
     map_dfr(setNames(susie_results, regions$locus), 
 	    make_pip_df, 
 	    .id = "locus")
-
-summ_stats <- read_tsv("./data/bentham_opengwas_1MbWindows_hg38_summstats.tsv")
 
 plot_df <- 
     left_join(pip_df, summ_stats, 
@@ -240,14 +295,21 @@ plot_df <-
 	   stat = recode(stat, pip = "Susie PIP", logp = "GWAS p-value"),
 	   stat = factor(stat, levels = c("Susie PIP", "GWAS p-value")))
 
-plot_list <- plot_df |>
-    group_split(locus) |>
-    map(plot_susie)
+# atacseq
+interv <- GRanges(regions$chr, IRanges(regions$left, regions$right))
 
-ggsave(
-   filename = "./plots/susie.pdf", 
-   plot = marrangeGrob(plot_list, nrow = 1, ncol = 1), 
-   width = 7, height = 5
-)
-    
+bigwigs <- "../../atacseq/results/bwa/merged_replicate/bigwig" |>
+    list.files(full.name = TRUE, pattern = "*.bigWig")
 
+names(bigwigs) <- sub("^([^_]+_\\d+).+$", "\\1", basename(bigwigs))
+
+# Plot
+plan(multisession, workers = availableCores())
+future_walk(1:nrow(regions), plot_susie)
+
+#ggsave(
+#   filename = "./plots/susie.pdf", 
+#   plot = marrangeGrob(plot_list, nrow = 1, ncol = 1), 
+#   width = 7, height = 7
+#)
+#
