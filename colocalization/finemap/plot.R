@@ -3,8 +3,6 @@ library(tidyverse)
 library(cowplot)
 library(gridExtra)
 library(furrr)
-library(ggrepel)
-
 
 plot_susie <- function(region_index) {
 
@@ -27,7 +25,7 @@ plot_susie <- function(region_index) {
     genes_df <- 
 	left_join(tracks_df, strand_df, by = join_by(gene_id, locus)) |>
 	group_by(gene_id, locus) |>
-	mutate(pos = ifelse(strand == "-", max(end), min(start)) ) |>
+	mutate(pos = min(start))  |>
 	ungroup() |>
 	distinct(gene_id, locus, pos) |>
 	left_join(distinct(tracks_df, gene_id, locus, rowid), join_by(gene_id, locus))
@@ -70,7 +68,6 @@ plot_susie <- function(region_index) {
 
     genes_plot <- 
 	ggplot(tracks_df |> mutate(rowid = factor(rowid))) +
-	#geom_vline(data = max_pip, aes(xintercept = pos), linetype = 2, color = "grey35") +
 	geom_segment(data = filter(tracks_df, feature == "intron"),
 		     aes(x = start, xend = end, y = rowid, yend = rowid),
 		     linewidth = .5, color = "midnightblue") +
@@ -83,18 +80,11 @@ plot_susie <- function(region_index) {
 		 linewidth = .2,
 		 arrow = arrow(length = unit(0.2, "cm")),
 		 color = "blue") +
-	geom_text_repel(data = genes_df, 
+	geom_text(data = genes_df, 
 		  aes(x = pos, y = rowid, label = locus),
 		  fontface = "italic", 
 		  size = 2,
-		  nudge_y = .35,
-		  direction = "x",
-		  min.segment.length = 0,
-		  segment.size = .25,
-		  force_pull = 100,
-		  segment.color = "grey90",
-		  color = "black",
-		  max.overlaps = 100) +
+		  hjust = 1) +
 	scale_x_continuous(limits = range(res_df$pos), labels = function(x) x/1e6L) +
 	scale_y_discrete(breaks = 0:n_gene_rows) +
 	theme(axis.text = element_blank(),
@@ -142,8 +132,7 @@ plot_susie <- function(region_index) {
 	theme(plot.background = element_rect(fill = "white", color = "white"))
 
     ggsave(sprintf("./plots/susie%s.pdf", loc), p, 
-	   width = 7, height = 7
-)
+	   width = 7, height = 7, dpi = 200)
 
 }
 
@@ -171,7 +160,7 @@ summ_stats <- read_tsv("./data/bentham_opengwas_1MbWindows_hg38_summstats.tsv")
 
 # Gene tracks
 tracks <- 
-    "/lab-share/IM-Gutierrez-e2/Public/vitor/gencode_v38_gene_tracks.tsv" |>
+    "/lab-share/IM-Gutierrez-e2/Public/vitor/genecode_V38_tracks.tsv" |>
     read_tsv() |>
     group_by(gene_id) |>
     mutate(tss = ifelse(strand == "+", min(start), max(end))) |>
@@ -181,8 +170,6 @@ tracks <-
 	   strand, feature, i, start, end)
 
 # Analysis
-#plan(multisession, workers = availableCores())
-
 pip_df <- read_tsv("./susie_results.tsv") 
 
 plot_df <- 

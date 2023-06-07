@@ -1,6 +1,5 @@
 # Use 48Gb of RAM
 
-Sys.setenv(VROOM_CONNECTION_SIZE = 500000L)
 
 library(tidyverse)
 library(susieR)
@@ -33,32 +32,30 @@ run_susie <- function(locus_name) {
     #condz$plot
     #dev.off()
 
-    fit <- susie_rss(summ_stats$z, 
-		     ldmat, 
-		     n = sample_size, 
-		     L = 5, 
-		     coverage = 0.9, 
-		     r_tol = 1e-05)
-
     # if it does not converge, remove problematic SNPs and repeat until convergence
     iter <- 0L
+    fit <- list()
+    fit$converged <- FALSE
     while ( !fit$converged & iter <= 20 ) {
 
-	condz <- kriging_rss(summ_stats$z, ldmat, n = sample_size, r_tol = 1e-04)
+	if ( iter > 0 ) { 
+	
+	    condz <- kriging_rss(summ_stats$z, ldmat, n = sample_size, r_tol = 1e-04)
 
-	snp_rm <- as_tibble(condz$conditional_dist) |>
-	    rowid_to_column() |>
-	    arrange(desc(abs(z_std_diff))) |>
-	    slice(1) |>
-	    pull(rowid)
+	    snp_rm <- as_tibble(condz$conditional_dist) |>
+		rowid_to_column() |>
+		arrange(desc(abs(z_std_diff))) |>
+		slice(1) |>
+		pull(rowid)
 
-	ldmat <- ldmat[-snp_rm, -snp_rm]
-	summ_stats <- slice(summ_stats, -snp_rm)
+	    ldmat <- ldmat[-snp_rm, -snp_rm]
+	    summ_stats <- slice(summ_stats, -snp_rm)
+	}
 
 	fit <- susie_rss(summ_stats$z, 
 			 ldmat, 
 			 n = sample_size, 
-			 L = 5, 
+			 L = 10, 
 			 coverage = 0.9, 
 			 r_tol = 1e-05)
 
@@ -108,18 +105,18 @@ regions <-
 
 # GWAS data
 sample_size <- 4036 + 6959
-summ_stats <- read_tsv("./data/bentham_opengwas_1MbWindows_hg38_summstats.tsv")
-
+Sys.setenv(VROOM_CONNECTION_SIZE = 500000L)
+summ_stats_all <- read_tsv("./data/bentham_opengwas_1MbWindows_hg38_summstats.tsv")
 
 # Analysis
-#plan(multisession, workers = availableCores())
-#susie_results <- future_map(regions$locus, run_susie)
-susie_results <- read_rds("./susie_results.rds")
+plan(multisession, workers = availableCores())
 
-pip_df <- 
-    map_dfr(setNames(susie_results, regions$locus), 
-	    make_pip_df, 
-	    .id = "locus")
+susie_results <- regions$locus |>
+    setNames(regions$locus) |>
+    future_map(run_susie)
+
+write_rds(susie_results, "./susie_results.rds")
+
+pip_df <- map_dfr(susie_results, make_pip_df, .id = "locus")
 
 write_tsv(pip_df, "./susie_results.tsv")
-
