@@ -167,3 +167,45 @@ ggsave("./manhattan_bentham.png", manhplot, width = 10, height = 5)
 ```
 
 
+```{r, eval=FALSE, echo=FALSE}
+langefeld1 <- read_excel("./paper_data/langefeld_tableS2.xlxs", 1, skip = 2) |>
+    mutate(`P-value` = parse_pvalues(`P-value`)) |>
+    group_by(`Region Rank`) |>
+    slice(which.min(`P-value`)) |>
+    ungroup() |>
+    select(rsid = 1, locus = `Gene Region*`, cases = `RAF Case`, controls = `RAF Control`) |>
+    mutate(rsid = sub("^(rs\\d+).*$", "\\1", rsid),
+	   locus = paste0(rsid, " (", locus, ")")) |>
+    arrange(controls) |>
+    mutate(locus = fct_inorder(locus)) |>
+    select(locus, cases, controls) |>
+    pivot_longer(-locus, names_to = "group", values_to = "f")
+    
+freq_plot <- ggplot(langefeld1, aes(x = f, y = locus, fill = group)) +
+    geom_line(aes(group = locus)) +
+    geom_point(shape = 21, size = 3) +
+    scale_fill_manual(values = c("cases" = "black", "controls" = "white")) +
+    theme(panel.background = element_rect(fill = "grey96")) +
+    labs(x = "Allele frequency", y = NULL,
+	 title = "Minor allele frequencies for the 38 genome-wide\nsignificant variants in Langefeld et al. 2017\n(European set)")
+
+ggsave("./freq_langefeld.png", freq_plot)
+
+
+
+```
+
+```{r, eval=FALSE, echo=FALSE}
+read_excel("./paper_data/langefeld_tableS2.xlxs", 1, skip = 2) |>
+    mutate(`P-value` = parse_pvalues(`P-value`)) |>
+    group_by(`Region Rank`) |>
+    slice(which.min(`P-value`)) |>
+    ungroup() |>
+    select(rsid = 1, chr = 2, pos = 3, locus = 4, p = 9, or = 10) |>
+    extract(rsid, "rsid", "(rs\\d+)") |> 
+    extract(chr, "chr", "([^pq]+)", convert = TRUE) |>
+    select(locus, chr, pos, rsid, p, or) |>
+    arrange(chr, pos) |>
+    write_tsv("./paper_data/langefeld_top.tsv")
+```
+
