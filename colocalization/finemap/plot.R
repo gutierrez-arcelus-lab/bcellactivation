@@ -131,7 +131,9 @@ plot_susie <- function(region_index) {
 		  ncol = 1, rel_heights = c(.1, 1, .6, .5)) +
 	theme(plot.background = element_rect(fill = "white", color = "white"))
 
-    ggsave(sprintf("./plots/susie%s.pdf", loc), p, 
+    #ggsave(sprintf("./plots/susie%s.pdf", loc), p, 
+    #	   width = 7, height = 7, dpi = 200)
+    ggsave(sprintf("./plots/susie%s_langefeld.pdf", loc), p, 
 	   width = 7, height = 7, dpi = 200)
 
 }
@@ -147,34 +149,55 @@ stim_colors <-
       )
 
 ## Data
+# Gene tracks
+tracks_all <- 
+    "/lab-share/IM-Gutierrez-e2/Public/vitor/genecode_V38_tracks.tsv" |>
+    read_tsv() |>
+    group_by(gene_id) |>
+    mutate(tss = ifelse(strand == "+", min(start), max(end))) |>
+    ungroup()
+
+# ATAC-seq data
+bigwigs <- "../../atacseq/results/bwa/merged_replicate/bigwig" |>
+    list.files(full.name = TRUE, pattern = "*.bigWig")
+
+names(bigwigs) <- sub("^([^_]+_\\d+).+$", "\\1", basename(bigwigs))
+
 # Genomics windows
 regions <- 
-    "./data/regions_bentham_1mb.tsv" |>
+    #"./data/regions_bentham_1mb.tsv" |>
+    "./data/regions_langefeld_1mb.tsv" |>
     read_tsv(col_names = c("region", "locus")) |>
     extract(region, c("chr", "left", "right"), 
 	    "(chr[^:]+):(\\d+)-(\\d+)", 
 	    convert = TRUE, remove = FALSE)
 
 # GWAS data
-summ_stats <- read_tsv("./data/bentham_opengwas_1MbWindows_hg38_summstats.tsv")
+#summ_stats <- read_tsv("./data/bentham_opengwas_1MbWindows_hg38_summstats.tsv")
+summ_stats <- read_tsv("./data/langefeld_1MbWindows_hg38_summstats.tsv")
 
-# Gene tracks
-tracks <- 
-    "/lab-share/IM-Gutierrez-e2/Public/vitor/genecode_V38_tracks.tsv" |>
-    read_tsv() |>
-    group_by(gene_id) |>
-    mutate(tss = ifelse(strand == "+", min(start), max(end))) |>
-    ungroup() |>
+tracks <- tracks_all |> 
     inner_join(regions, join_by(chr, between(tss, left, right))) |>
     select(chr, gwas_locus = locus, gene_id, gene_name, transcript_id, 
 	   strand, feature, i, start, end)
 
-# Analysis
-pip_df <- read_tsv("./susie_results.tsv") 
+# Plot
+#pip_df <- read_tsv("./susie_results.tsv") 
+pip_df <- read_tsv("./susie_results_langefeld.tsv") 
 
+#plot_df <- 
+#    left_join(pip_df, summ_stats, 
+#	      join_by(locus, chr, pos == bp, ref, alt)) |>
+#    select(locus, chr, pos, logp, pip, cs, coverage) |>
+#    pivot_longer(logp:pip, names_to = "stat") |>
+#    mutate(locus = factor(locus, levels = regions$locus),
+#	   stat = recode(stat, pip = "Susie PIP", logp = "GWAS p-value"),
+#	   stat = factor(stat, levels = c("Susie PIP", "GWAS p-value")))
+#
 plot_df <- 
     left_join(pip_df, summ_stats, 
-	      join_by(locus, chr, pos == bp, ref, alt)) |>
+	      join_by(locus, chr, pos == bp, ref == major, alt == minor)) |>
+    mutate(logp = -log10(p)) |>
     select(locus, chr, pos, logp, pip, cs, coverage) |>
     pivot_longer(logp:pip, names_to = "stat") |>
     mutate(locus = factor(locus, levels = regions$locus),
@@ -184,18 +207,6 @@ plot_df <-
 # atacseq
 interv <- GRanges(regions$chr, IRanges(regions$left, regions$right))
 
-bigwigs <- "../../atacseq/results/bwa/merged_replicate/bigwig" |>
-    list.files(full.name = TRUE, pattern = "*.bigWig")
-
-names(bigwigs) <- sub("^([^_]+_\\d+).+$", "\\1", basename(bigwigs))
-
 # Plot
 plan(multisession, workers = availableCores())
 future_walk(1:nrow(regions), plot_susie)
-
-#ggsave(
-#   filename = "./plots/susie.pdf", 
-#   plot = marrangeGrob(plot_list, nrow = 1, ncol = 1), 
-#   width = 7, height = 7
-#)
-#

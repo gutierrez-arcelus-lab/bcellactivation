@@ -1,14 +1,13 @@
 # Use 48Gb of RAM
 
-
 library(tidyverse)
 library(susieR)
 library(furrr)
 
 # Functions
-run_susie <- function(locus_name) {
+run_susie <- function(locus_name, region_df, summ_stats_df, sample_size) {
 
-    region_id <- regions$region[regions$locus == locus_name] 
+    region_id <- region_df$region[region_df$locus == locus_name] 
 
     vcf <- sprintf("./data/%s.adj.vcf.gz", region_id) |>
 	read_tsv(comment = "##") 
@@ -16,16 +15,26 @@ run_susie <- function(locus_name) {
     plink <- sprintf("./data/%s.ld", region_id) |>
 	read_delim(delim = " ", col_names = FALSE)
 
-    plink_filt <- plink[, sapply(plink, function(x) !all(is.na(x)))]
+    if ( (ncol(plink) %% nrow(plink) == 1) && all(is.na(plink[, ncol(plink)])) ) {
+
+	plink <- plink[, -ncol(plink)]
+    }
+
+    valid_snps <- which(sapply(plink, function(x) !all(is.na(x))))
+    
+    plink_filt <- plink[valid_snps, valid_snps]
     ldmat <- data.matrix(plink_filt)
+    vcf <- slice(vcf, valid_snps)
     rownames(ldmat) <- vcf$ID
     colnames(ldmat) <- vcf$ID
 
-    summ_stats <- summ_stats_all |>
+    summ_stats <- summ_stats_df |>
 	filter(locus == locus_name) |>
 	unite("ID", c(chr, bp, ref, alt), sep = ":") |>
 	filter(ID %in% vcf$ID) |>
-	mutate(z = beta/se)
+	mutate(z = beta/se,
+	       ID = factor(ID, levels = vcf$ID)) |>
+	arrange(ID)
 
     #condz <- kriging_rss(summ_stats$z, ldmat, n = sample_size, r_tol = 1e-04)
     #png(sprintf("./plots/diagnostic_%s.png", locus_name))
@@ -94,7 +103,7 @@ make_pip_df <- function(fit_obj) {
     return(pip_df)
 }
 
-## Data
+## Bentham 
 # Genomics windows
 regions <- 
     "./data/regions_bentham_1mb.tsv" |>
@@ -120,3 +129,41 @@ write_rds(susie_results, "./susie_results.rds")
 pip_df <- map_dfr(susie_results, make_pip_df, .id = "locus")
 
 write_tsv(pip_df, "./susie_results.tsv")
+
+
+###############################################################################
+# Langefeld
+
+# Genomics windows
+langefeld_regions <- 
+    "./data/regions_langefeld_1mb.tsv" |>
+    read_tsv(col_names = c("region", "locus")) |>
+    extract(region, c("chr", "left", "right"), 
+	    "(chr[^:]+):(\\d+)-(\\d+)", 
+	    convert = TRUE, remove = FALSE) |>
+    mutate(region = paste0(region, "_langefeld"))
+
+# GWAS data
+langefeld_sample_size <- 6748 + 11516
+Sys.setenv(VROOM_CONNECTION_SIZE = 500000L)
+langefeld_summ_stats_all <- 
+    "./data/langefeld_1MbWindows_hg38_summstats.tsv" |>
+    read_tsv() |>
+    select(chr, locus, varid, bp, ref = major, alt = minor, beta, se, p)
+
+# Analysis
+plan(multisession, workers = availableCores())
+
+susie_results_langefeld <- langefeld_regions$locus |>
+    setNames(langefeld_regions$locus) |>
+    future_map(run_susie, 
+	       region_df = langefeld_regions, 
+	       summ_stats_df = langefeld_summ_stats_all, 
+	       sample_size = langefeld_sample_size)
+
+write_rds(susie_results_langefeld, "./susie_results_langefeld.rds")
+
+langefeld_pip_df <- map_dfr(susie_results_langefeld, make_pip_df, .id = "locus")
+
+write_tsv(langefeld_pip_df, "./susie_results_langefeld.tsv")
+
