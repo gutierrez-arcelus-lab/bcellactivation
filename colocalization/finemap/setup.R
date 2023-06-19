@@ -104,16 +104,17 @@ langefeld_regions <- langefeld_top |>
     mutate(start = pos - 5e5L, end = pos + 5e5L) |>
     select(locus, chr, start, end)
 
-
 langefeld_stats <- 
     "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Langefeld/ea.imputed.chr%d.out" |>
     sprintf(1:22) |>
     setNames(sprintf("chr%d", 1:22)) |>
     map_dfr(~read_delim(., comment = "#", delim = " ") |>
 	    select(varid = rsid, bp = position, major = alleleA, minor = alleleB,
-		   beta = `frequentist_add_beta_1:add/sle=1`, se = frequentist_add_se_1, 
-		   p = frequentist_add_wald_pvalue_1) |>
+		   beta = `frequentist_add_beta_1:add/sle=1`, 
+		   se = frequentist_add_se_1, 
+		   p = frequentist_add_lrt_pvalue) |>
 	    drop_na(beta) |> 
+	    drop_na(p) |>
 	    filter(grepl("^rs", varid)) |>
 	    extract(varid, "varid", "(rs\\d+)") |>
 	    add_count(varid) |>
