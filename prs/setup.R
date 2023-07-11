@@ -42,6 +42,7 @@ mgb_sle_data <-
 
 count(mgb_sle_data, group)
 count(mgb_sle_data, batch)
+count(mgb_sle_data, race)
 
 # Set up Job array to filter MGB VCFs
 dir.create("./mgb_data/ids_per_batch")
@@ -54,3 +55,10 @@ mgb_sle_data |>
     mutate(f = paste0("mgb_data/ids_per_batch/", batch, ".txt")) |>
     {function(dat) walk2(dat$id, dat$f, ~write_lines(.x, .y))}()
 
+# 1000 Genomes unrelated samples
+kgp <- 
+    "http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000G_2504_high_coverage/1000G_2504_high_coverage.sequence.index" |>
+    read_tsv(comment = "##") |>
+    pull(SAMPLE_NAME)
+
+write_lines(kgp, "./mgb_data/kgp_samples.txt")

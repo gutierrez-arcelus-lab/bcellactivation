@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 #SBATCH -N 1
 #SBATCH -c 4
@@ -23,15 +23,14 @@ CHR=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $2 }' $SPEC )
 
 # Define IO
 LABSHARE=/lab-share/IM-Gutierrez-e2/Public
-VCFIN=${LABSHARE}/mgb_biobank/$BATCH/vcf/chr${CHR}.dose.vcf.gz 
+VCFIN=${LABSHARE}/External_datasets/mgb_biobank/$BATCH/vcf/${CHR}.dose.vcf.gz 
 IDS=${SLURM_SUBMIT_DIR}/mgb_data/ids_per_batch/${BATCH}.txt
 OUTDIR=${TEMP_WORK}/vcf/prs
-VCFOUT=${OUTDIR}/chr${CHR}.MGB.${BATCH}.vcf.gz
+VCFOUT=${OUTDIR}/${CHR}.MGB.${BATCH}.vcf.gz
 
 # CMD
 bcftools view --threads $SLURM_CPUS_PER_TASK --samples-file $IDS --force-samples $VCFIN |\
-    bcftools annotate --threads $SLURM_CPUS_PER_TASK -x INFO,FORMAT - |\
-    bcftools view --threads $SLURM_CPUS_PER_TASK --min-ac 1:minor - |\
-    bgzip -c > $VCFOUT    
+    bcftools view --threads $SLURM_CPUS_PER_TASK -i 'INFO/R2>=0.8' --min-ac 1:minor - |\
+    bcftools annotate --threads $SLURM_CPUS_PER_TASK -x FILTER,^INFO/R2,INFO/AC,INFO/AN,^FORMAT/GT -O z -o $VCFOUT -
 
 tabix -p vcf $VCFOUT
