@@ -45,7 +45,7 @@ count(mgb_sle_data, batch)
 count(mgb_sle_data, race)
 
 # Set up Job array to filter MGB VCFs
-dir.create("./mgb_data/ids_per_batch")
+#dir.create("./mgb_data/ids_per_batch")
 
 expand_grid(batch = batches, chr = paste0("chr", c(1:22, "X"))) |>
     write_tsv("array.spec", col_names = FALSE)
@@ -62,3 +62,4 @@ kgp <-
     pull(SAMPLE_NAME)
 
 write_lines(kgp, "./mgb_data/kgp_samples.txt")
+
