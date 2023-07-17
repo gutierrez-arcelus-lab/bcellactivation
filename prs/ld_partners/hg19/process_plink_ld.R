@@ -11,8 +11,6 @@ snp_info <-
 
 sentinels <- read_tsv("./data/regions.tsv", col_names = c("region", "rsid"))
 
-s_snp <- sentinels$rsid[1]
-
 main <- function(s_snp) {
     
     vcf <- 
