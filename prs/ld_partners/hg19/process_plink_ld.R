@@ -40,30 +40,18 @@ main <- function(s_snp) {
 	ldmat |>
 	as_tibble(rownames = "id1") |>
 	pivot_longer(-id1, names_to = "id2", values_to = "r2") |>
-	mutate(idmin = pmin(id1, id2),
-	       idmax = pmax(id1, id2)) |>
-	distinct(idmin, idmax, r2) |>
-	filter(idmin != idmax, r2 >= .8) |>
-	filter(idmin %in% snp_info$rsid & idmax %in% snp_info$rsid)
+	filter(id1 == s_snp, 
+	       id1 != id2,
+	       id2 %in% snp_info$rsid) |>
+	arrange(desc(r2)) |>
+	select(sentinel = id1, snp2 = id2, r2)
 
     if ( nrow(ldmat_filt) == 0 ) {
 	return(tibble(sentinel = s_snp, snp2 = NA, r2 = NA)) 
-    }
-
-    out <- 
-	ldmat_filt |>
-	select(snp1 = idmin, snp2 = idmax, r2) |>
-	filter(snp1 == s_snp | snp2 == s_snp) |>
-	mutate(sentinel = ifelse(snp1 == s_snp, snp1, snp2),
-	       snp2 = ifelse(snp2 == s_snp, snp1, snp2)) |>
-	select(sentinel, snp2, r2) |>
-	arrange(desc(r2))
-
-    if ( nrow(out) == 0 ) {
-	return(tibble(sentinel = s_snp, snp2 = NA, r2 = NA)) 
     } else {
-	return(out)
+	return(ldmat_filt)
     }
+
 }
 
 # run analysis
@@ -82,4 +70,15 @@ res_df <- res |>
     map("result") |>
     bind_rows()
 
-write_tsv(res_df, "./data/Khunsriraksakul_sentinel_r2.tsv")
+sentinels |>
+    select(sentinel = rsid) |>
+    left_join(filter(res_df, r2 >= .8)) |>
+    write_tsv("./data/Khunsriraksakul_sentinel_r2.tsv")
+
+read_tsv("./data/Khunsriraksakul_sentinel_r2.tsv") |>
+    select(-r2) |>
+    pivot_longer(sentinel:snp2) |>
+    drop_na() |>
+    distinct() |>
+    pull(value) |>
+    write_lines("./data/sentinels_and_LDpartners_rsid.txt")
