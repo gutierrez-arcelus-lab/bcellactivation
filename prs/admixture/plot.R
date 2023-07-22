@@ -1,4 +1,5 @@
 library(tidyverse)
+library(tidytext)
 library(RColorBrewer)
 library(cowplot)
 library(patchwork)
@@ -51,25 +52,48 @@ p2 <- ggplot(pca_df, aes(x = PC2, y = PC3, color = population_code)) +
     scale_color_manual(values = all_cols) +
     theme_bw()
 
+p3 <- ggplot(pca_df, aes(x = PC3, y = PC4, color = population_code)) +
+    geom_point() +
+    scale_color_manual(values = all_cols) +
+    theme_bw()
+
+p4 <- ggplot(pca_df, aes(x = PC4, y = PC5, color = population_code)) +
+    geom_point() +
+    scale_color_manual(values = all_cols) +
+    theme_bw()
+
 p1o <- p1 + theme(legend.position = "none")
 p2o <- p2 + theme(legend.position = "none")
+p3o <- p3 + theme(legend.position = "none")
+p4o <- p4 + theme(legend.position = "none")
 
-p <- p1o + p2o + get_legend(p1) + plot_layout(nrow = 1, widths = c(1, 1, .33))
+ptemp <- p1o + p2o + p3o + p4o + plot_layout(nrow = 2)
 
-ggsave("./pca.png", p, height = 4, width = 10)
+p <- plot_grid(ptemp, get_legend(p1), nrow = 1, rel_widths = c(1, .25)) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./pca.png", p, height = 7, width = 9)
 
 selected_amr <- pca_df |>
     top_n(125, -PC3) |>
     select(1:3)
 
+selected_afr <- pca_df |>
+    top_n(125, -PC1) |>
+    select(1:3)
+
+selected_sas <- pca_df |>
+    top_n(125, PC3) |>
+    select(1:3)
+
+
 set.seed(1)
 ref_panel <- sample_meta |>
-    filter(super_population != "AMR", 
-	   !population_code %in% c("ACB", "ASW")) |>
+    filter(super_population %in% c("EAS", "EUR")) |>
     group_by(super_population) |>
     sample_n(125) |>
     ungroup() |>
-    bind_rows(selected_amr) |>
+    bind_rows(selected_amr, selected_afr, selected_sas) |>
     arrange(super_population, population_code, sample_name)
 
 ref_panel |>
@@ -77,6 +101,9 @@ ref_panel |>
     arrange(sample_name) |>
     pull(ids) |>
     write_lines("./data/kgp_refpanel_ids.txt")
+
+## Run ADMIXTURE
+
 
 # plot admixture results
 ref_panel_admix <- 
@@ -95,56 +122,102 @@ ref_q <-
     bind_cols(ref_panel_admix) |>
     left_join(sample_meta, join_by(sample_name)) |>
     select(sample_name, population_code, super_population, X1:X5) |>
-    pivot_longer(X1:X5, names_to = "ancestry") |>
-    mutate(ancestry = fct_inorder(ancestry))
+    pivot_longer(X1:X5, names_to = "k") |>
+    mutate(k = fct_inorder(k))
 
 continental_colors <- 
     c("EUR" = all_cols[["GBR"]],
       "AMR" = all_cols[["MXL"]],
-      "AFR" = all_cols[["LWK"]],
+      "AFR" = all_cols[["MSL"]],
       "SAS" = all_cols[["PJL"]],
-      "EAS" = all_cols[["CHB"]])
+      "EAS" = all_cols[["CDX"]])
 
 ancestry_pop_map <- 
     ref_q |>
-    group_by(ancestry, super_population) |>
+    group_by(k, super_population) |>
     summarise(q = mean(value)) |>
-    group_by(ancestry) |>
+    group_by(k) |>
     slice_max(q) |>
     ungroup() |>
-    select(ancestry, super_population)
+    select(k, ancestry = super_population)
 
 mgb_q <- 
     "./allchr.mgb.5.Q" |>
     read_delim(delim = " ", col_names = FALSE) |>
     bind_cols(mgb_admix) |>
     select(sample_name, X1:X5) |>
-    pivot_longer(X1:X5, names_to = "ancestry") |>
-    mutate(ancestry = fct_inorder(ancestry)) |>
-    left_join(ancestry_pop_map, join_by(ancestry))
+    pivot_longer(X1:X5, names_to = "k") |>
+    mutate(k = fct_inorder(k)) |>
+    left_join(ancestry_pop_map, join_by(k)) |>
+    select(-k)
 
-sample_order <- mgb_q |>
+top_ancestry <- mgb_q |>
     group_by(sample_name) |>
     slice_max(value) |>
     ungroup() |>
-    arrange(ancestry, value) |>
-    pull(sample_name)
+    count(top = ancestry, sort = TRUE)
+
+top_ancestry_within <- 
+    mgb_q |>
+    group_by(sample_name) |>
+    mutate(max_ancestry = ancestry[which.max(value)]) |>
+    ungroup() |>
+    group_by(max_ancestry, ancestry) |>
+    summarise(m = mean(value)) |>
+    ungroup() |>
+    mutate(max_ancestry = factor(max_ancestry, levels = top_ancestry$top)) |>
+    arrange(max_ancestry, desc(m)) |>
+    {function(x) split(x, x$max_ancestry)}() |>
+    map("ancestry")
+
+tmp <- 
+    mgb_q |>
+    group_by(sample_name) |>
+    mutate(max_ancestry = ancestry[which.max(value)]) |>
+    ungroup() |>
+    mutate(max_ancestry = factor(max_ancestry, levels = top_ancestry$top)) |>
+    {function(x) split(x, x$max_ancestry)}()
+
+plot_df <- 
+    map_dfr(top_ancestry$top, 
+	   function(x) {
+	    
+	    ancestries <- top_ancestry_within[[x]] 
+
+	    tmp[[x]] |>
+	    pivot_wider(names_from = ancestry, values_from = value) |>
+	    select(sample_name, max_ancestry, !!!ancestries) |>
+	    arrange(desc(.data[[ancestries[1]]]),
+		    .data[[ancestries[2]]],
+		    .data[[ancestries[3]]],
+		    .data[[ancestries[4]]],
+		    .data[[ancestries[5]]])
+	   }) |>
+    mutate(sample_name = fct_inorder(sample_name)) |>
+    pivot_longer(-c(1:2), names_to = "ancestry") |>
+    mutate_at(vars(max_ancestry, ancestry), ~factor(., levels = top_ancestry$top)) |>
+    arrange(sample_name, ancestry)
 
 admix_p <- 
-    ggplot(mgb_q |> mutate(sample_name = factor(sample_name, levels = sample_order)), 
-	   aes(x = sample_name, y = value, fill = super_population)) +
-    geom_col(width = 1.001) +
+    ggplot(plot_df,
+	   aes(x = sample_name, 
+	       y = value, 
+	       fill = ancestry)) +
+    geom_col(width = .80, position = "fill") +
     scale_y_continuous(labels = scales::percent,
-		       breaks = c(0, .5, 1)) +
+		       breaks = c(0, .5, 1),
+		       limits = c(0, 1)) +
     scale_fill_manual(values = continental_colors) +
-    facet_grid(.~ancestry, space = "free") +
+    facet_grid(. ~ max_ancestry, space = "free_x", scales = "free_x") +
     theme_minimal() +
     theme(axis.text.x = element_blank(),
 	  axis.ticks.x = element_blank(),
 	  strip.text = element_blank(),
 	  legend.position = "top",
-	  plot.background = element_rect(fill = "white", color = "white")) +
-    labs(x = NULL, y = "Ancestry percentage")
+	  plot.background = element_rect(fill = "white", color = "white"),
+	  panel.background = element_rect(fill = "white", color = "white"),
+	  panel.grid = element_blank()) +
+    labs(x = NULL, y = "Ancestry percentage", fill = "Ancestry")
 
 ggsave("./admix.png", admix_p, width = 12, height = 4)
 

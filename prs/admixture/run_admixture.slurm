@@ -15,7 +15,6 @@ source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
 
 ## Extract data for ref panel samples from 1000G data
-
 DIR=${TEMP_WORK}/vcf/prs 
 VCF1000G=${DIR}/allchr.1000G.vcf.gz
 SAMPLES=${SLURM_SUBMIT_DIR}/data/kgp_refpanel_ids.txt
@@ -35,10 +34,10 @@ PREFIXMGB=allchr.mgb
 VCFMGB=${DIR}/${PREFIXMGB}.vcf.gz
 BEDMGB=${DIR}/${PREFIXMGB}.bed
 
-bcftools view --threads $SLURM_CPUS_PER_TASK \
-    --samples-file $SAMPLESMGB \
-    -O z -o $VCFMGB \
-    $MERGED
+#bcftools view --threads $SLURM_CPUS_PER_TASK \
+#    --samples-file $SAMPLESMGB \
+#    -O z -o $VCFMGB \
+#    $MERGED
 
 # Make plink files
 plink --vcf $VCFREF \
@@ -46,10 +45,10 @@ plink --vcf $VCFREF \
     --make-bed \
     --out $PREFIX
 
-plink --vcf $VCFMGB \
-    --keep-allele-order \
-    --make-bed \
-    --out $PREFIXMGB
+#plink --vcf $VCFMGB \
+#    --keep-allele-order \
+#    --make-bed \
+#    --out $PREFIXMGB
 
 # Run admixture
 cd ${SLURM_SUBMIT_DIR}
