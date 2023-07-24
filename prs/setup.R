@@ -63,3 +63,21 @@ kgp <-
 
 write_lines(kgp, "./mgb_data/kgp_samples.txt")
 
+# ADMIXTURE ref panel
+kgp_pops <- 
+    "ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/20131219.populations.tsv" |>
+    read_tsv() |>
+    janitor::clean_names() |>
+    filter(population_description != "Total")
+
+kgp_samples <- 
+    "http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000G_2504_high_coverage/1000G_2504_high_coverage.sequence.index" |>
+    read_tsv(comment = "##") |>
+    select(sample_name = SAMPLE_NAME, population_code = POPULATION) |>
+    distinct() |>
+    left_join(kgp_pops, by = "population_code") |>
+    select(sample_name, population_code, super_population)
+
+
+
+

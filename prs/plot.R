@@ -109,13 +109,12 @@ pca_df <-
     inner_join(pca_meta) |>
     mutate(population = factor(population, levels = names(all_cols)))
 
-## UMAP
 # Not variance explained in the data because only 10 PCs were approximated
-"/temp_work/ch229163/vcf/prs/allchr.merged.pruned.plink.pca.eigenval" |>
-    read_lines() |>
-    {function(x) tibble(eigenval = as.numeric(x))}() |>
-    select(eigenval) |>
-    mutate(var_exp = eigenval/sum(eigenval) * 100)
+#"/temp_work/ch229163/vcf/prs/allchr.merged.pruned.plink.pca.eigenval" |>
+#    read_lines() |>
+#    {function(x) tibble(eigenval = as.numeric(x))}() |>
+#    select(eigenval) |>
+#    mutate(var_exp = eigenval/sum(eigenval) * 100)
 
 pca_legend_1 <- 
     ggplot(pca_df, aes(PC1, PC2)) +
@@ -179,11 +178,14 @@ pca_p <-
 
 ggsave("./plots/pca.png", pca_p, width = 10, dpi = 600)
 
-
+# UMAP
 mgb_umap <- select(pca_df, PC1:PC7) |>
-    umap()
+    umap(n_threads = future::availableCores(),
+	 seed = 1)
 
-umap_df <- bind_cols(select(pca_df, subject_id, population), as.data.frame(mgb_umap)) |>
+umap_df <- 
+    bind_cols(select(pca_df, subject_id, population), 
+	      as.data.frame(mgb_umap)) |>
     as_tibble()
 
 plot_umap <- 
@@ -230,5 +232,98 @@ plot_umap_race <- umap_df |>
 ggsave("./plots/umap.png", plot_umap, width = 5, height = 5)
 ggsave("./plots/umap_race.png", plot_umap_race, width = 7, height = 5)
 
+prs_df <- 
+    "./common_data/prs_p+t_5e-4.tsv" |>
+    read_tsv(col_type = c("subject_id" = "c"))
 
+umap_prs_df <- umap_df |>
+    filter(population %in% c("SLE", "Control")) |>
+    left_join(prs_df, join_by(subject_id)) 
 
+umap_prs <- |>
+    ggplot(umap_prs_df, aes(V1, V2, color = prs)) +
+    geom_point(size = .25) +
+    scale_color_continuous(low = "beige", high = "midnightblue",
+			   guide = guide_colorbar(barheight = .25)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+	  legend.position = "top") +
+    labs(x = "UMAP 1", y = "UMAP 2",
+	 color = "PRS:")
+    
+ggsave("./plots/umap_prs.png", umap_prs, width = 5, height = 5)
+
+admix <- 
+    "./admixture/admix_results.tsv" |>
+    read_tsv(col_types = c(subject_id = "c")) |>
+    left_join(umap_prs_df) |>
+    select(subject_id, group, race, EUR:SAS, prs) |>
+    pivot_longer(EUR:SAS, names_to = "ancestry")
+
+admix_filt <- admix |>
+    filter(value > 0.1)
+    
+continental_colors <- 
+    c("AFR" = all_cols[["MSL"]],
+      "AMR" = all_cols[["PEL"]],
+      "EAS" = all_cols[["CHS"]],
+      "EUR" = all_cols[["GBR"]],
+      "SAS" = all_cols[["BEB"]])
+
+p1 <- 
+    ggplot(data = admix_filt,
+	   aes(x = value, y = prs)) +
+	geom_point(data = filter(admix_filt, group == "Control"),
+		   aes(color = ancestry), size = .5, alpha = .25) +
+	geom_point(data = filter(admix_filt, group == "SLE"),
+		   aes(fill = ancestry), size = 1.5, alpha = 1, 
+		   shape = 21, stroke = .25) +
+	geom_smooth(se = FALSE, method = "lm", 
+		    color = "black", alpha = .5) +
+	scale_x_continuous(limits = c(.1, 1L),
+			   breaks = c(.1, .5, 1)) +
+	scale_color_manual(values = continental_colors) +
+	scale_fill_manual(values = continental_colors) +
+	facet_wrap(~ancestry, nrow = 1) +
+	theme_bw() +
+	theme(panel.grid = element_blank(),
+	      legend.position = "none") +
+	labs(x = "Proportion of ancestry", y = "PRS")
+
+ggsave("./plots/prs_ancestry.png", p1, height = 2, width = 8)
+
+prs_violin <- admix |>
+    filter(value >= .75) |>
+    ggplot(aes(x = group, y = prs, color = ancestry)) +
+	geom_quasirandom(method = "smiley", alpha = .5, size = .75) +
+	scale_color_manual(values = continental_colors) +
+	facet_wrap(~ancestry, nrow = 1) +
+	theme_bw() +
+	theme(legend.position = "none",
+	      panel.grid.major.x = element_blank(),
+	      panel.grid.minor.y = element_blank(),
+	      panel.grid.major.y = element_line(color = "grey96")) +
+	labs(x = NULL)
+     
+ggsave("./plots/prs_violin.png", prs_violin, height = 2, width = 8)
+
+prs_race_df <- admix |>
+    drop_na(race)
+
+prs_race <-
+    ggplot(data = prs_race_df, aes(x = str_wrap(race, 20), y = prs)) +
+	geom_quasirandom(method = "smiley", alpha = .5, size = .75) +
+	theme_bw() +
+	theme(panel.grid.major.x = element_blank(),
+	      panel.grid.minor.y = element_blank(),
+	      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+	labs(x = NULL, y = "PRS")
+
+ggsave("./plots/prs_race.png", prs_race, height = 5, width = 5)
+
+prs_race_df |>
+    group_by(race, ancestry) |>
+    summarise(m = mean(value)) |>
+    ungroup() |>
+    arrange(race, desc(m)) |>
+    print(n = Inf)

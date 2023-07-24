@@ -101,14 +101,16 @@ all_sentinels |>
     write_tsv("./data/regions.tsv", col_names = FALSE)
 
 # summary stats
-summ_stats_hg38 <- 
+summ_stats_hg19 <- 
     "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Khunsriraksakul/Khunsriraksakul_summstats_mamt.txt" |>
     read_tsv() |>
-    janitor::clean_names() |>
+    janitor::clean_names()
+
+summ_stats_hg38 <- 
+    summ_stats_hg19 |>
     select(rsid, effect_allele, other_allele, freq, beta, se, z, pval) |>
     inner_join(gwas_rsids_hg38, join_by(rsid == ID)) |>
     select(chr, pos = POS, rsid, ref = REF, alt = ALT, effect_allele, other_allele, freq:pval) |>
     arrange(chr, pos)
 
 write_tsv(summ_stats_hg38, "./data/Khunsriraksakul_summstats_hg38.tsv")
-

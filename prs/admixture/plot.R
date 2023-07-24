@@ -221,3 +221,11 @@ admix_p <-
 
 ggsave("./admix.png", admix_p, width = 12, height = 4)
 
+# save admixture results
+plot_df |>
+    select(subject_id = sample_name, ancestry, value) |>
+    pivot_wider(names_from = "ancestry", values_from = "value") |>
+    mutate(subject_id = sub("([^-]+-)", "", subject_id)) |>
+    write_tsv("./admix_results.tsv")
+
+
