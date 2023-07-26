@@ -228,4 +228,23 @@ plot_df |>
     mutate(subject_id = sub("([^-]+-)", "", subject_id)) |>
     write_tsv("./admix_results.tsv")
 
+# plot admixture profiles per self-reported race
+sle_data <- read_tsv("../mgb_data/sle_data.tsv", col_types = c(subject_id = "c"))
 
+admix_race_df <- plot_df |>
+    mutate(sample_name = as.character(sample_name),
+	   subject_id = sub("^[^-]+-(\\d+)$", "\\1", sample_name)) |>
+    left_join(sle_data, join_by(subject_id)) |>
+    select(subject_id, race, group, ancestry, q = value) |>
+    drop_na()
+
+race_order <- admix_race_df |> 
+    count(race, sort = TRUE) |>
+    pull(race)
+
+admix_race_df <- admix_race_df |>
+    mutate(race = factor(race, levels = race_order)) |>
+    arrange(race, ancestry, )
+
+admix_race_df |> filter(race == "Hispanic or Latino") |> count(group)
+admix_race_df |> filter(group == "SLE", ancestry == "AMR") |> arrange(desc(q))

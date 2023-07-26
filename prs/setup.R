@@ -4,12 +4,14 @@ library(readxl)
 patient_data <- 
     "./mgb_data/1. sle_biobank_nodate_n536-deidentified.xlsx" |>
     read_excel() |>
-    select(subject_id = Subject_Id, gender = Gender, race = Race1)
+    janitor::clean_names() |>
+    select(subject_id, gender, race = race1, ethnic_group)
 
 control_data <- 
     "./mgb_data/2. controls_nodate_deidentified.xlsx" |>
     read_excel() |>
-    select(subject_id = Subject_Id, gender = Gender, race = Race1)
+    janitor::clean_names() |>
+    select(subject_id, gender, race = race1, ethnic_group)
 
 sle_data <- 
     bind_rows("SLE" = patient_data, 
@@ -22,7 +24,8 @@ sle_data <-
 			     "Hawaiian" ~ "Native Hawaiian or Other Pacific Islander",
 			     .default = race))
 
-sle_data |> count(group, sort = TRUE)
+write_tsv(sle_data, "./mgb_data/sle_data.tsv")
+
 
 batches <- sprintf("04%02d", c(1:8, 10))
 
@@ -77,7 +80,3 @@ kgp_samples <-
     distinct() |>
     left_join(kgp_pops, by = "population_code") |>
     select(sample_name, population_code, super_population)
-
-
-
-
