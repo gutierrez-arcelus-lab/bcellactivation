@@ -402,9 +402,9 @@ rocs_ancestries <-
     admix |>
     filter((ancestry %in% c("AFR", "EAS", "EUR") & value >= .75) |
 	   (ancestry == "AMR" & value >= .20)) |>
-    left_join(prs_df, join_by(subject_id, group, race)) |>
+    left_join(prs_df, join_by(subject_id, group)) |>
     {function(x) split(x, x$ancestry)}() |>
-    map(function(x) roc(x$group, x$prs))
+    map(function(x) roc(x$group, x$prs, auc = TRUE, ci = TRUE))
 
 rocs_ancestries_df <- rocs_ancestries |>
     map(smooth) |>
