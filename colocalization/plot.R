@@ -3,6 +3,7 @@ library(tidytext)
 library(ggsci)
 library(ggrepel)
 library(cowplot)
+library(gridExtra)
 
 annotations <- 
     "/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens/gencode.v19.chr_patch_hapl_scaff.annotation.gtf" |> 
@@ -59,8 +60,10 @@ tissues <- c("macrophage", "monocyte", "neutrophil", "CD4+ T cell", "CD8+ T cell
              "B cell", "LCL", "T cell", "blood", "Tfh cell", "Th1 cell", "Th2 cell",
              "Treg naive", "Treg memory", "CD16+ monocyte", "NK cell")
 
-bentham_ikbke <- read_tsv("./results/bentham_region5.tsv")
-bentham_ikzf1 <- read_tsv("./results/bentham_region22.tsv")
+read_tsv("./data/bentham_tier2_hits.tsv")
+
+bentham_ikbke <- read_tsv("./results/bentham_region34.tsv")
+bentham_ikzf1 <- read_tsv("./results/bentham_region38.tsv")
 langefeld_ikbke <- read_tsv("./results/langefeld_region22.tsv")
 langefeld_ikzf1 <- read_tsv("./results/langefeld_region31.tsv")
 
@@ -69,8 +72,9 @@ study_df <- "./data/coloc_input/eqtl_catalogue_paths.tsv" |>
     rename("author" = "study") |>
     mutate(study = basename(ftp_path),
 	   study = sub("\\.all\\.tsv\\.gz$", "", study),
-	   author = sub("_", " ", author)) |>
-    select(study, author, tissue = tissue_label, condition = condition_label, method = quant_method)
+	   author = sub("_", " ", author),
+	   qtl_group = gsub("_", " ", qtl_group)) |>
+    select(study, author, tissue = tissue_label, qtl_group, method = quant_method)
 
 #IKZF1
 ikzf1_df <- 
@@ -79,8 +83,7 @@ ikzf1_df <-
 	      .id = "gwas") |>
     left_join(study_df, by = "study") |>
     filter(tissue %in% tissues) |>
-    mutate(author = sub("_", " ", author),
-	   study_label = paste0(author, " (", tissue, " ", condition, ")"),
+    mutate(study_label = paste0(author, " (", qtl_group, ")"),
 	   method = recode(method, "tx" = "transcript", "txrev" = "splicing event"),
 	   method = factor(method, levels = c("exon", "transcript", "splicing event"))) |>
     select(gwas, study = study_label, gene_id, gene_name, molecular_trait_id, method, h4)
@@ -122,8 +125,10 @@ ikbke_df <-
 	      "Bentham et al." = bentham_ikbke, 
 	      .id = "gwas") |>
     left_join(study_df, by = "study") |>
-    mutate(author = sub("_", " ", author),
-	   study_label = paste0(author, " (", tissue, " ", condition, ")")) |>
+    filter(tissue %in% tissues) |>
+    mutate(study_label = paste0(author, " (", qtl_group, ")"),
+	   method = recode(method, "tx" = "transcript", "txrev" = "splicing event"),
+	   method = factor(method, levels = c("exon", "transcript", "splicing event"))) |>
     select(gwas, study = study_label, gene_id, gene_name, molecular_trait_id, method, h4)
 
 ikbke_df_filt <- ikbke_df |>
@@ -142,7 +147,7 @@ ikbke_colors <- ikbke_df_filt |>
     mutate(gene_name = factor(gene_name),
 	   gene_name = fct_relevel(gene_name, "Other", after = Inf)) |>
     arrange(gene_name) |>
-    mutate(color = c(npg_colors[c(1:2, 5)], "black", npg_colors[c(6, 9:10)], "grey80")) |>
+    mutate(color = c(npg_colors[c(1:2)], "black", npg_colors[6], "grey80")) |>
     deframe()
 
 
@@ -163,20 +168,6 @@ ggsave("./ikbke_colocs.png", ikbke_plot)
 
 
 ## All regions in Bentham
-plot_colocs <- function(dat) {
-    ggplot(dat, aes(h4, study_id, fill = gene_name)) +
-    geom_vline(xintercept = .8, linetype = 2, size = .25) +
-    geom_point(size = 3, shape = 21, stroke = .2) +
-    scale_x_continuous(breaks = c(0.7, 1), limits = c(0.7, 1)) +
-    scale_fill_npg() +
-    facet_grid(method~., scales = "free_y", space = "free") +
-    theme(text = element_text(size = 12),
-	  panel.background = element_rect(fill = "grey96")) +
-    labs(x = "Probability of shared signal", 
-	 y = NULL, 
-	 fill = "Gene")
-}
-
 prep_data <- function(r) {
     
     "./results/bentham_region%s.tsv" |>
@@ -185,12 +176,44 @@ prep_data <- function(r) {
 	group_by(study, gene_id, gene_name) |>
 	filter(h4 == max(h4)) |>
 	ungroup() |>
-	top_n(10, h4) |>
+	top_n(20, h4) |>
 	left_join(study_df) |>
 	mutate(study_id = paste0(author, " (", tissue, " ", condition, ")")) |>
 	select(study_id, gene_id, gene_name, method, h4) |>
 	arrange(h4)
 }
+
+plot_colocs <- function(dat) {
+
+    ggplot(dat, aes(x = h4, 
+		    y = reorder_within(study_id, h4, locus, max),
+		    fill = method)) +
+    geom_vline(xintercept = .8, linetype = 2, size = .2) +
+    geom_point(size = 4, shape = 21, stroke = .2) +
+    geom_text_repel(aes(color = method, label = gene_name),
+		    size = 3, fontface = "bold",
+		    min.segment.length = 0,
+		    segment.size = .2,
+		    show.legend = FALSE) +
+    scale_x_continuous(breaks = c(0, 1), limits = c(0, 1)) +
+    scale_y_reordered() +
+    scale_color_manual(values = coloc_colors) +
+    scale_fill_manual(values = coloc_colors) +
+    facet_wrap(~locus) +
+    theme(axis.text = element_text(size = 12),
+	  panel.background = element_rect(fill = "grey96"),
+	  legend.position = "top") +
+    labs(x = "PP4", 
+	 y = NULL, 
+	 fill = "Method:")
+} 
+
+coloc_colors <- 
+    c("ge"= "tomato3", 
+      "exon" = "forestgreen", 
+      "tx" = "cornflowerblue", 
+      "txrev" = "midnightblue", 
+      microarray = "#F39B7FFF")
 
 study_df <- "./data/coloc_input/eqtl_catalogue_paths.tsv" |>
     read_tsv() |>
@@ -205,39 +228,60 @@ study_df <- "./data/coloc_input/eqtl_catalogue_paths.tsv" |>
 bentham_hits <- read_tsv("./data/bentham_top_hits.tsv")
 
 bentham_colocs <- bentham_hits |>
-    slice(1:28) |>
     select(locus, region) |>
     deframe() |>
     map_df(prep_data, .id = "locus") |>
     mutate(locus = fct_inorder(locus))
 
-plot_colocs_v2 <- function(dat) {
+plot_list <- bentham_colocs |>
+    group_split(locus) |>
+    map(plot_colocs)
 
-    ggplot(dat, aes(x = reorder_within(study_id, h4, locus),
-		    y = h4, 
-		    fill = method)) +
-    geom_hline(yintercept = .8, linetype = 2, size = .25) +
-    geom_point(size = 2, shape = 21, stroke = .2) +
-    geom_text_repel(aes(color = method, label = gene_name),
-		    size = 2.5, fontface = "bold", 
-		    angle = 90, direction = "y", nudge_y = -.2,
-		    segment.size = .1,
-		    show.legend = FALSE) +
-    scale_x_reordered() +
-    scale_y_continuous(breaks = c(0, 1), limits = c(0, 1)) +
-    scale_color_npg() +
-    scale_fill_npg() +
-    facet_wrap(~locus, scale = "free_x", nrow = 4) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
-	  panel.background = element_rect(fill = "grey96"),
-	  legend.position = "top",
-	  plot.margin = margin(0, 0, 0, 4, unit = "cm")) +
-    labs(x = NULL, 
-	 y = "PP4", 
-	 fill = "method")
-} 
+ggsave(filename = "coloc_plots.pdf", 
+       plot = marrangeGrob(plot_list, nrow = 1, ncol = 1), 
+       width = 8, height = 10)
 
-out <- bentham_colocs |>
-    plot_colocs_v2()
 
-ggsave("./bentham_colocs.png", out, height = 14, width = 16)
+bentham_colocs |>
+    select(locus, gene_name, h4) |>
+    pivot_longer(locus:gene_name, names_to = "dummy", values_to = "gene") |>
+    filter(dummy == "locus" | h4 > .5) |>
+    distinct(gene) |>
+    separate_rows(gene, sep = ",") |>
+    mutate(gene = trimws(gene)) |>
+    pull(gene) |>
+    write_lines("./coloc_genes_bentham.txt")
+    
+
+# MHC
+mhc_1 <- "./results/bentham_region%s.tsv" |>
+    sprintf(15) |>
+    read_tsv() |>
+    group_by(study, gene_id, gene_name) |>
+    filter(h4 == max(h4)) |>
+    ungroup() |>
+    filter(h4 > .8) |>
+    left_join(study_df) |>
+    mutate(study_id = paste0(author, " (", tissue, " ", condition, ")")) |>
+    select(study_id, gene_id, gene_name, method, h4) |>
+    arrange(desc(h4)) |>
+    filter(grepl("B cell|T cell|neutrophil|monocyte|macrophage|blood", study_id)) |>
+    mutate(locus = "MHC Class III")
+
+mhc_2 <- prep_data(15)
+
+mhc <- bind_rows(mhc_1, mhc_2) |> 
+    distinct() |>
+    mutate(locus = "MHC Class III") |>
+    plot_colocs()
+
+ggsave("coloc_mhc.pdf", mhc, width = 8, height = 14)
+
+
+
+
+###################
+
+
+
+

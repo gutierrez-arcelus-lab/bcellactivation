@@ -93,23 +93,35 @@ bentham_top <- "https://www.nature.com/articles/ng.3434/tables/1" |>
     as_tibble() |>
     mutate(rsid = gsub("\\s|[a-zA-Z,]+$", "", rsid),
            pos = parse_number(pos),
-           p = gsub("\\s", "", p) |>
-	    sub("^([0-9.]+)[^0-9.]10[^0-9.](\\d+)$", "\\1e-\\2", x = _) |>
-	    parse_number(),
+           p = gsub("\\s", "", p),
+	   p = sub("^([0-9.]+)[^0-9.]10[^0-9.](\\d+)$", "\\1e-\\2", x = p),
+	   p = parse_number(p),
            or = parse_number(or),
 	   chr = paste0("chr", chr))
 
 # Save a description of the region
-bentham_top |>
+top_regions <- bentham_top |>
     filter(p < 1e-5) |>
     select(chr, rsid, locus) |>
     inner_join(gwas_stats_38) |>
     select(chr, pos, locus) |>
     mutate(chr = factor(chr, levels = c(unique(chr), numeric = TRUE))) |>
     arrange(chr, pos) |>
+    rowid_to_column("region")
+
+write_tsv(top_regions, "./data/bentham_top_hits.tsv")
+
+tier2_regions <- bentham_top |>
+    filter(between(p, 1e-5, 5e-3)) |>
+    select(chr, rsid, locus) |>
+    inner_join(gwas_stats_38) |>
+    select(chr, pos, locus) |>
+    mutate(chr = factor(chr, levels = c(unique(chr), numeric = TRUE))) |>
+    arrange(chr, pos) |>
     rowid_to_column("region") |>
-    write_tsv("./data/bentham_top_hits.tsv")
-#
+    mutate(region = region + max(top_regions$region))
+
+write_tsv(tier2_regions, "./data/bentham_tier2_hits.tsv")
 
 bentham_top_pos <- bentham_top |>
     filter(p < 1e-5) |>
@@ -120,15 +132,36 @@ bentham_top_pos <- bentham_top |>
     arrange(chr, pos) |>
     rowid_to_column("region")
 
+bentham_tier2_pos <- bentham_top |>
+    filter(between(p, 1e-5, 5e-3)) |>
+    select(chr, rsid) |>
+    inner_join(gwas_stats_38) |>
+    select(chr, pos) |>
+    mutate(chr = factor(chr, levels = c(unique(chr), numeric = TRUE))) |>
+    arrange(chr, pos) |>
+    rowid_to_column("region") |>
+    mutate(region = region + max(top_regions$region))
+
 coords <- bentham_top_pos |>
+    mutate(start = pos - 5e5, end = pos + 5e5,
+	   chr = sub("chr", "", chr),
+	   coord = sprintf("%s:%d-%d", chr, start, end))
+
+coords_tier2 <- bentham_tier2_pos |>
     mutate(start = pos - 5e5, end = pos + 5e5,
 	   chr = sub("chr", "", chr),
 	   coord = sprintf("%s:%d-%d", chr, start, end))
 
 # Save region for eQTL catalogue query
 coords |>
-   select(region, coord) |>
+    select(region, coord) |>
     write_tsv("./data/coloc_input/regions_bentham.tsv")
+
+coords_tier2 |>
+    select(region, coord) |>
+    write_tsv("./data/coloc_input/regions_bentham_tier2.tsv")
+
+
 
 # Write minimum GWAS dataset for coloc
 gwas_min_df <- bentham_top_pos |>
@@ -141,6 +174,16 @@ gwas_min_df <- bentham_top_pos |>
 
 write_tsv(gwas_min_df, "./data/coloc_input/gwas_data_bentham.tsv")
 
+gwas_min_tier2_df <- bentham_tier2_pos |>
+    mutate(data = map2(chr, pos, ~filter(gwas_stats_38, chr == .x, between(pos, .y - 5e5, .y + 5e5)))) |>
+    select(region, data) |>
+    unnest(cols = data) |>
+    separate(stats, c("beta", "se", "log10p", "dummy"), sep = ":", convert = TRUE) |>
+    mutate(gwas_varbeta = se^2) |>
+    select(region, chr, pos, rsid, gwas_beta = beta, gwas_varbeta)
+
+write_tsv(gwas_min_tier2_df, "./data/coloc_input/gwas_data_bentham_tier2.tsv")
+
 
 # Select genes 
 annotations <- 
@@ -151,6 +194,10 @@ annotations <-
 
 eqtl_regions <- bentham_top_pos |>
     mutate(left = pos - 2.5e5, right = pos + 2.5e5)
+
+# increase distance
+eqtl_regions_tier2 <- bentham_tier2_pos |>
+    mutate(left = pos - 4e5, right = pos + 4e5)
 
 bed <- annotations |>
     filter(feature == "gene") |>
@@ -163,10 +210,23 @@ bed <- annotations |>
 	   gene_id = sub("^(ENSG\\d+)\\.\\d+((_PAR_Y)?)$", "\\1\\2", gene_id)) |>
     select(region, chr, start, end, gene_id, gene_name)
 
+bed_tier2 <- annotations |>
+    filter(feature == "gene") |>
+    mutate(tss = case_when(strand == "+" ~ start, 
+			   strand == "-" ~ end, 
+			   TRUE ~ NA_integer_)) |>
+    inner_join(eqtl_regions_tier2, join_by(chr, between(tss, left, right))) |>
+    mutate(gene_id = str_extract(info, "(?<=gene_id\\s\")[^\"]+"),
+	   gene_name = str_extract(info, "(?<=gene_name\\s\")[^\"]+"),
+	   gene_id = sub("^(ENSG\\d+)\\.\\d+((_PAR_Y)?)$", "\\1\\2", gene_id)) |>
+    select(region, chr, start, end, gene_id, gene_name)
+
 gene_ids <- select(bed, region, gene_id, gene_name)
+gene_ids_tier2 <- select(bed_tier2, region, gene_id, gene_name)
 
 # Save gene IDs for eQTL catalogue filtering
 write_tsv(gene_ids, "./data/coloc_input/gene_annots_bentham.tsv")
+write_tsv(gene_ids_tier2, "./data/coloc_input/gene_annots_bentham_tier2.tsv")
 
 
 # Langefeld
