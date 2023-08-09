@@ -15,3 +15,13 @@ dir.create("data")
 pt_vars |>
     pull(rsid) |>
     write_lines("./data/pt_5e-4_rsids.txt")
+
+
+pt_vars |>
+    left_join(summ_stats, join_by(variant_id, rsid)) |>
+    select(chr, pos = `pos(hg19)`, rsid) |>
+    mutate(start = pos - 2.5e5L, stop = pos + 2.5e5L,
+	   region = sprintf("%s:%d-%d", chr, start, stop)) |>
+    arrange(chr, pos) |>
+    select(rsid, region) |>
+    write_tsv("./data/pt_5e-4_regions.tsv", col_names = FALSE)
