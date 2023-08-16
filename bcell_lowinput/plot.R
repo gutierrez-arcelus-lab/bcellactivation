@@ -37,25 +37,20 @@ stim_colors <-
      "DN2_48hrs" = "#c5432a",
      "DN2_72hrs" = "#b00000")
 
-
-gene_symbols <- read_rds("./data/expression.rds") |>
-    distinct(gene_id, gene_name) |>
-    mutate(gene_id = sub("\\.\\d+$", "", gene_id))
-
 cpm_df <- 
     "./results/edger/cpm.tsv" |>
     read_tsv() |>
     group_by(sample_id, stim) |>
     nest() |>
     ungroup() |>
-    separate(sample_id, c("sample_id", "time"), sep = "_") |>
+    separate(sample_id, c("sample_id", "dummy", "time"), sep = "_") |>
     mutate(hours = parse_number(time),
 	   hours = factor(hours, levels = sort(unique(hours))),
 	   stim = recode(stim, "BCR-TLR7" = "BCR+TLR7"),
            condition = paste(stim, time, sep = "_"),
 	   stim = factor(stim, levels = c("CD40L", "TLR7", "TLR9", "BCR", "BCR+TLR7", "DN2"))) |>
     unnest(cols = data) |>
-    select(sample_id, condition, stim, hours, gene_id, obs_cpm, fit_cpm)
+    select(sample_id, condition, stim, hours, gene_id, gene_name, obs_cpm, fit_cpm)
 
 sle_genes <- read_tsv("../bcell_scrna/reported_genes.tsv")
 
@@ -69,11 +64,9 @@ selected_genes <-
       "SOCS1", "STAT1", "TNFSF4", "WDFY4", "IL10")
 
 cpm_plot_df <- cpm_df |>
-    left_join(gene_symbols, join_by(gene_id)) |>
     filter(gene_name %in% selected_genes)
 
 p_vals <- edger_results |>
-    left_join(gene_symbols, join_by(gene_id)) |>
     inner_join(distinct(cpm_plot_df, stim, gene_id, gene_name)) |>
     select(gene_id, gene_name, stim, p = PValue, fdr = FDR) |>
     arrange(gene_name, stim) |>
@@ -113,5 +106,45 @@ out_plot <-
 ggsave("./plots/timecourse_topgenes.png",
        out_plot[[1]] + out_plot[[2]] + plot_layout(widths = c(1, 1)),
        width = 19, height = 7, dpi = 600)
+
+
+
+# T-bet and ZEB2
+selected_genes <- c("TBX21", "ZEB2") 
+
+cpm_plot_df <- cpm_df |>
+    filter(gene_name %in% selected_genes)
+
+p_vals <- edger_results |>
+    inner_join(distinct(cpm_plot_df, stim, gene_id, gene_name)) |>
+    select(gene_id, gene_name, stim, p = PValue, fdr = FDR) |>
+    arrange(gene_name, stim) |>
+    left_join(summarise(cpm_plot_df, cpm = max(obs_cpm), .by = c(gene_id, gene_name))) |>
+    mutate(p_lab = format(p, format = "e", digits = 2),
+	   p_lab = paste("p =", p_lab),
+	   p_lab = ifelse(fdr < 0.05, paste(p_lab, "*"), p_lab))
+
+b_tfs_plot <-
+    ggplot(data = cpm_plot_df) +
+    geom_quasirandom(aes(x = hours, y = obs_cpm, fill = condition),
+		     method = "smiley", width = .2, 
+		     shape = 21, stroke = .2, size = 3.5) +
+    geom_text(data = p_vals, 
+	      aes(x = 0.5, y = cpm * 1.25, label = p_lab),
+	      hjust = "inward", vjust = "inward", size = 4) +
+    scale_fill_manual(values = stim_colors) + 
+    facet_grid(gene_name~fct_relevel(stim, levels(cpm_plot_df)),
+	       scale = "free_y") +
+    theme(panel.grid.minor = element_blank(),
+	  panel.grid.major.x = element_blank(),
+	  panel.background = element_rect(fill = "grey96"),
+	  strip.text.x = element_text(size = 12),
+	  strip.text.y = element_text(angle = 0, size = 12),
+	  axis.text = element_text(size = 12),
+	  axis.title = element_text(size = 14),
+	  legend.position = "none") +
+    labs(x = NULL, y = "Normalized counts")
+
+ggsave("./plots/tbet_zeb2.png", b_tfs_plot, height = 4, width = 10)
 
 
