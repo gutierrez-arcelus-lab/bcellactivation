@@ -21,7 +21,11 @@ run_edger <- function(stim, dge) {
     dge_s$samples$group <- factor(time_vector, levels = sort(unique(time_vector)))
 
     # Create design matrix
-    X <- ns(time_vector, df = 3)
+    degrees <- case_when(n_distinct(time_vector) <= 3 ~ 2L,
+			 n_distinct(time_vector) > 3 ~ 3L,
+			 TRUE ~ NA_integer_)
+
+    X <- ns(time_vector, df = degrees)
     design <- model.matrix(~X)
 
     # Estimate dispersion
@@ -30,7 +34,7 @@ run_edger <- function(stim, dge) {
     # Time course trend analysis
     fit <- dge_s |>
 	glmQLFit(design, robust = TRUE) |>
-	glmQLFTest(coef = 2:4)
+	glmQLFTest(coef = 2:ncol(design))
 
     # Obtain results
     res_df <- topTags(fit, n = Inf) |>
@@ -39,29 +43,14 @@ run_edger <- function(stim, dge) {
 
     # Obtain observed and fitted CPM values
     obs_cpm <- 
-	cpm(dge_s, offset = dge_s$offset, log = FALSE) |>
+	cpm(dge_s, offset = dge_s$offset, log = TRUE) |>
 	as_tibble(rownames = "gene_id") |>
-	pivot_longer(-gene_id, names_to = "sample_id", values_to = "obs_cpm")
+	pivot_longer(-gene_id, names_to = "sample_id", values_to = "obs_logcpm")
    
-    # this fit cpm is not on the same scale as the observed cpm
-    # try to fix it
-    fit_cpm <- 
-	cpm(fit, log = FALSE, lib.size = exp(getOffset(dge_s))) |>
-	`colnames<-`(colnames(dge_s$counts)) |>
-	as_tibble(rownames = "gene_id") |>
-	pivot_longer(-gene_id, names_to = "sample_id", values_to = "fit_cpm")
-
-    cpm_df <- left_join(obs_cpm, fit_cpm, join_by(gene_id, sample_id))
-
     # Return results
-    list("results" = res_df, "cpm" = cpm_df)
+    list("results" = res_df, "cpm" = obs_cpm)
 }
 
-# Sample meta data
-meta_data <- read_tsv("./data/sample_decode.tsv") |>
-    separate(sample_name, c("name", "stim", "time"), sep = "_", remove = FALSE) |>
-    mutate(time = factor(time, levels = str_sort(unique(time), numeric = TRUE))) |>
-    arrange(stim, time, name)
 
 # Transcript to Gene map
 tx_to_gene <- 
@@ -75,8 +64,10 @@ tx_to_gene <-
     select(tx_id, gene_id, gene_name)
 
 # Import expression data
+meta_data <- read_tsv("./data/metadata_pooledreps.tsv", col_names = c("sample_id", "f1", "f2"))
+
 salmon_files <- 
-    sprintf("./results/salmon/%s/quant.sf", meta_data$sample_id) |>
+    sprintf("./results/salmon_pooledreps/%s/quant.sf", meta_data$sample_id) |>
     setNames(meta_data$sample_id)
 
 txi <- tximport(salmon_files, 
@@ -104,9 +95,13 @@ normMat <- log(normMat)
 y <- DGEList(cts)
 y <- scaleOffset(y, normMat)
 
+# Remove samples that failed
+y <- y[, y$samples$lib.size > 2e6]
+
 # Filtering using the design information
-sample_table <- meta_data |>
-    unite("group", c(stim, time), sep = ".") |>
+sample_table <- y$samples |>
+    as_tibble(rownames = "sample_id") |>
+    extract(sample_id, "group", "[^_]+_([^_]+_[^_]+)", remove = FALSE) |>
     select(sample_id, group) |>
     column_to_rownames("sample_id")
 
@@ -114,37 +109,11 @@ design <- model.matrix(~group, data = sample_table)
 keep_y <- filterByExpr(y, design)
 y <- y[keep_y, ]
 
-# For samples with technical replicates, 
-# keep only the one with highest library size.
-# I could pooled technical replicates with sumTechReps,
-# but need to verify its behavior when combining offsets.
-#pooled <- sumTechReps(y, ID = meta_data$sample_name)
-reps_to_rm <- y$samples |>
-    as_tibble(rownames = "sample_id") |>
-    left_join(meta_data) |>
-    add_count(sample_name) |>
-    filter(n > 1) |>
-    group_by(sample_name) |>
-    slice(-which.max(lib.size)) |>
-    ungroup() |>
-    pull(sample_id)
-
-y$counts <- y$counts[, !colnames(y$counts) %in% reps_to_rm]
-y$samples <- y$samples[colnames(y$counts), ]
-y$offset <- y$offset[, colnames(y$counts)]
-
-# Rename samples
-sample_names <- 
-    tibble(sample_id = colnames(y$counts)) |>
-    left_join(meta_data) |>
-    pull(sample_name)
-
-colnames(y$counts) <- rownames(y$samples) <- colnames(y$offset) <- sample_names
-
 # Run edgeR
 stims <- meta_data |>
+    extract(sample_id, "stim", "[^_]+_([^_]+)_") |>
     distinct(stim) |>
-    filter(! stim %in% c("Unstim", "IL4")) |>
+    filter(! stim %in% c("Unstim")) |>
     pull() |>
     {function(x) setNames(x, x)}()
 

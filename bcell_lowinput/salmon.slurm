@@ -1,18 +1,18 @@
 #!/usr/bin/bash
 
 #SBATCH -N 1
-#SBATCH -c 4
+#SBATCH -c 6
 #SBATCH --mem=24gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
-#SBATCH --array=1-183
-#SBATCH --job-name=Salmon-low
+#SBATCH --array=1-174
+#SBATCH --job-name=Salmon
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /temp_work/ch229163/log/Salmon-quant-low.%A-%a
+#SBATCH -o /temp_work/ch229163/log/Salmon-low.%A-%a
 
 source /programs/biogrids.shrc
-export SALMON_X=1.5.1
+export SALMON_X=1.10.1
 
 # INPUT
 SAMPLELIST=/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_lowinput/metadata/description_hsapiens_qc.tsv
