@@ -56,7 +56,7 @@ cpm_df <-
            condition = paste(stim, time, sep = "_"),
 	   stim = factor(stim, levels = all_stims)) |>
     unnest(cols = data) |>
-    select(sample_id, condition, stim, hours, gene_id, gene_name, obs_logcpm)
+    select(sample_id, condition, stim, hours, gene_id, gene_name, obs_cpm, obs_logcpm)
 
 sle_genes <- read_tsv("../bcell_scrna/reported_genes.tsv")
 
@@ -66,8 +66,7 @@ edger_results <-
 	   stim = factor(stim, levels = all_stims))
 
 selected_genes <- 
-    c("BACH2", "BANK1", "IRF5", "IRF8", "JAZF1", "PTPN22", "PXK", 
-      "SOCS1", "STAT1", "TNFSF4", "WDFY4", "IL10")
+    c("BACH2", "IL10", "BLK", "SOCS1", "STAT1", "TNFSF4")
 
 cpm_plot_df <- cpm_df |>
     filter(gene_name %in% selected_genes)
@@ -76,18 +75,18 @@ p_vals <- edger_results |>
     inner_join(distinct(cpm_plot_df, stim, gene_id, gene_name)) |>
     select(gene_id, gene_name, stim, p = PValue, fdr = FDR) |>
     arrange(gene_name, stim) |>
-    left_join(summarise(cpm_plot_df, cpm = max(obs_logcpm), .by = c(gene_id, gene_name))) |>
+    left_join(summarise(cpm_plot_df, cpm = max(obs_cpm), .by = c(gene_id, gene_name))) |>
     mutate(p_lab = format(p, format = "e", digits = 2),
 	   p_lab = ifelse(fdr < 0.05, paste(p_lab, "*"), p_lab))
 
 out_plot <-
     ggplot(data = cpm_plot_df) +
-	geom_quasirandom(aes(x = hours, y = obs_logcpm, fill = condition),
+	geom_quasirandom(aes(x = hours, y = obs_cpm, fill = condition),
 			 method = "smiley", width = .2, 
-			 shape = 21, stroke = .2, size = 3) +
+			 shape = 21, stroke = .2, size = 4) +
 	geom_text(data = p_vals, 
 		  aes(x = 0.5, y = cpm * 1.25, label = p_lab),
-		  hjust = "inward", vjust = "inward", size = 3.5) +
+		  hjust = "inward", vjust = "inward", size = 4) +
 	scale_fill_manual(values = stim_colors) + 
 	facet_grid(gene_name~fct_relevel(stim, levels(cpm_plot_df)),
 		   scale = "free", space = "free_x") +
@@ -101,7 +100,7 @@ out_plot <-
 	      legend.position = "none") +
 	labs(x = NULL, y = "Normalized counts")
 
-ggsave("./plots/timecourse_topgenes.png", out_plot, width = 12, height = 16, dpi = 300)
+ggsave("./plots/timecourse_topgenes.png", out_plot, width = 12, height = 8, dpi = 300)
 
 
 

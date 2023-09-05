@@ -42,13 +42,18 @@ run_edger <- function(stim, dge) {
 	as_tibble(rownames = "gene_id")
 
     # Obtain observed and fitted CPM values
-    obs_cpm <- 
+    obs_logcpm <- 
 	cpm(dge_s, offset = dge_s$offset, log = TRUE) |>
 	as_tibble(rownames = "gene_id") |>
 	pivot_longer(-gene_id, names_to = "sample_id", values_to = "obs_logcpm")
+    
+    obs_cpm <- 
+	cpm(dge_s, offset = dge_s$offset, log = FALSE) |>
+	as_tibble(rownames = "gene_id") |>
+	pivot_longer(-gene_id, names_to = "sample_id", values_to = "obs_cpm")
    
     # Return results
-    list("results" = res_df, "cpm" = obs_cpm)
+    list("results" = res_df, "cpm" = left_join(obs_cpm, obs_logcpm, join_by(gene_id, sample_id)))
 }
 
 
