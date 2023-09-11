@@ -22,6 +22,26 @@ library(patchwork)
 count <- dplyr::count
 select <- dplyr::select
 
+
+png("./plots/test.png")
+plot(1:10, pch = 19, cex = 4, col = ggsci::pal_npg()(10))
+dev.off()
+
+
+# Set colors
+npg_colors <- ggsci::pal_npg()(10)
+
+recolor <- function(x) { 
+    case_when(x == "turquoise" ~ npg_colors[2],
+	      x == "blue" ~ npg_colors[4],
+	      x == "brown" ~ npg_colors[9],
+	      x == "green" ~ npg_colors[3],
+	      x == "red" ~ npg_colors[8],
+	      x == "yellow" ~ "goldenrod1",
+	      TRUE ~ x)
+}
+
+
 # Expression data
 dat <- read_rds("./data/gene_expression.rds")
 
@@ -32,10 +52,7 @@ sample_table <-
 
 edger_res <- read_tsv("../results/edger/results.tsv")
 
-# Run WGCNA
-allowWGCNAThreads()
-
-stim_i <- "BCR-TLR7"
+stim_i <- "DN2"
 plot_counter <- 0
 
 ## Use genes that are significant in the time course
@@ -59,6 +76,9 @@ dds <-
 
 ## Transpose expression matrix to use with WGCNA
 count_matrix <- t(assay(dds))
+
+# Run WGCNA
+allowWGCNAThreads()
 
 ## Explore multiple values of Beta (power) to find the one that satisfies scale-free topology
 betas <- c(1:10, seq(12, 30, by = 2))
@@ -102,6 +122,7 @@ ggsave(glue("./plots/wgcna_{stim_i}_{plot_counter}_sft.png"),
 ## Build WGCNA network 
 ## we need to reassing the 'cor()' function to avoid a bug in WGCNA
 cut_height <- 0.3
+beta_power <- ifelse(is.na(sft$powerEstimate), 30L, sft$powerEstimate)
 
 cor <- WGCNA::cor
 
@@ -110,7 +131,7 @@ network <-
 		     corType = "bicor",
 		     networkType = "signed",
 		     TOMType = "signed",
-		     power = sft$powerEstimate, 
+		     power = beta_power, 
 		     maxBlockSize = ncol(count_matrix),
 		     minModuleSize = 30,
 		     mergeCutHeight = cut_height,
@@ -138,7 +159,7 @@ plot_counter <- plot_counter + 1L
 png(glue("./plots/wgcna_{stim_i}_{plot_counter}_dendro.png"), 
     width = 10, height = 6, unit = "in", res = 200)
 plotDendroAndColors(network$dendrograms[[1]], 
-		    network$colors,
+		    recolor(network$colors),
 		    "merged",
 		    dendroLabels = FALSE,
 		    addGuide = TRUE,
@@ -159,14 +180,21 @@ abline(h = cut_height, col = "red")
 dev.off()
 
 # plot TOM
-diss_tom <- 1 - TOMsimilarityFromExpr(count_matrix, power = sft$powerEstimate, networkType = "signed")
-gene_tree <- hclust(as.dist(diss_tom), method = "average" )
+sim_tom <- 
+    TOMsimilarityFromExpr(count_matrix, 
+			  corType = "bicor",
+			  networkType = "signed",
+			  power = beta_power,
+			  nThreads = 4)
+	
+diss_tom <- 1 - sim_tom
+gene_tree <- hclust(as.dist(diss_tom), method = "average")
 diag(diss_tom) <- NA
 
 plot_counter <- plot_counter + 1L
 png(glue("./plots/wgcna_{stim_i}_{plot_counter}_tom.png"), 
-    unit = "in", height = 6, width = 6, res = 300)
-TOMplot(diss_tom^sft$powerEstimate, gene_tree, Colors = network$colors, col = heat.colors(256))
+    unit = "in", height = 6, width = 6, res = 200)
+TOMplot(diss_tom^8, gene_tree, Colors = network$colors, col = heat.colors(256))
 dev.off()
 
 
@@ -191,7 +219,7 @@ kme_df <-
     pivot_longer(-gene_id, names_to = "module")
 
 top_kme <- kme_df |>
-    filter(value > .3) |>
+    filter(value > .7) |>
     group_by(gene_id) |>
     slice_max(value) |>
     group_by(module) |>
@@ -232,7 +260,7 @@ trends_plot <-
 	      aes(x = timep, y = value, group = module)) +
     geom_vline(xintercept = unique(top_kme_counts$timep), 
 	       linetype = 2, linewidth = .1) +
-    scale_color_manual(values = module_colors) +
+    scale_color_manual(values = recolor(module_colors)) +
     facet_wrap(~module, scale = "free", nrow = 2) +
     theme_bw() +
     theme(panel.grid = element_blank(),
@@ -267,6 +295,7 @@ go_res <-
     map("gene_id") |>
     map(run_enrichment)
 
+# Use module classification for GO instead of correlation between genes and MEs
 #go_res2 <- 
 #    module_genes |>
 #    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
@@ -281,75 +310,41 @@ go_res <-
 #    separate_rows(gene_id, sep = "/") |>
 #    filter(gene_id == "STAT1")
 
-## Format for plotting and select top 25 most significant biological processes
-go_res_top25 <- go_res |>
+go_res_top50 <- go_res |>
     map_df(as_tibble, .id = "module") |>
-    mutate(Description = str_trunc(Description, width = 36)) |>
+    mutate(Description = str_trunc(Description, width = 50)) |>
     group_by(module, Description) |>
     slice_max(-log10(pvalue)) |>
     group_by(module) |>
-    top_n(25, -log10(pvalue)) |>
-    ungroup() |>
-    filter(module != "grey")
+    top_n(50, -log10(pvalue)) |>
+    ungroup()
 
 go_plot <- 
-    ggplot(data = go_res_top25, 
-       aes(x = module, 
+    ggplot(data = go_res_top50, 
+       aes(x = -log10(pvalue), 
 	   y = reorder_within(Description, by = -log10(pvalue), within = module))) +
-    geom_point(aes(fill = -log10(pvalue), size = Count), shape = 21, stroke = .1) +
+    geom_col(aes(fill = -log10(pvalue))) +
+    scale_x_continuous(limits = c(0, max(-log10(go_res_top50$pvalue)))) +
     scale_y_reordered() +
-    scale_size(range = c(0.4, 8)) +
-    scale_fill_viridis_c(option = "magma") +
+    scale_fill_gradient(low = "goldenrod1", high = "red") +
     facet_wrap(~module, nrow = 2, scale = "free") +
-    theme_minimal() +
-    theme(axis.text.x = element_blank(),
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 14),
 	  axis.text.y = element_text(size = 12),
 	  axis.title = element_blank(),
 	  panel.grid = element_blank(),
-	  legend.position = "top",
+	  legend.position = "none",
+	  legend.text = element_text(size = 14),
 	  plot.background = element_rect(fill = "white", color = "white"),
 	  strip.text = element_text(size = 14),
 	  strip.clip = "off") +
-    labs(size = "Number of Genes:", 
-	 fill = expression("-log"["10"]("p"))) +
-    guides(size = guide_legend(override.aes = list(stroke = 1)),
-	   fill = guide_colorbar(barheight = .5, barwidth = 7)) +
+    labs(fill = expression("-log"["10"]("p"))) +
+    guides(fill = guide_colorbar(barheight = 1, barwidth = 10)) +
     coord_cartesian(clip = "off")
 
-# For presentation
-#go_res_top50 <- go_res |>
-#    map_df(as_tibble, .id = "module") |>
-#    mutate(Description = str_trunc(Description, width = 50)) |>
-#    group_by(module, Description) |>
-#    slice_max(-log10(pvalue)) |>
-#    group_by(module) |>
-#    top_n(50, -log10(pvalue)) |>
-#    ungroup()
-#
-#go_plot_pres <- 
-#    ggplot(data = go_res_top50, 
-#       aes(x = -log10(pvalue), 
-#	   y = reorder_within(Description, by = -log10(pvalue), within = module))) +
-#    geom_col(aes(fill = -log10(pvalue))) +
-#    scale_x_continuous(limits = c(0, 61)) +
-#    scale_y_reordered() +
-#    scale_fill_gradient(low = "goldenrod1", high = "red") +
-#    facet_wrap(~module, nrow = 2, scale = "free") +
-#    theme_bw() +
-#    theme(axis.text.x = element_text(size = 14),
-#	  axis.text.y = element_text(size = 12),
-#	  axis.title = element_blank(),
-#	  panel.grid = element_blank(),
-#	  legend.position = "none",
-#	  legend.text = element_text(size = 14),
-#	  plot.background = element_rect(fill = "white", color = "white"),
-#	  strip.text = element_text(size = 14),
-#	  strip.clip = "off") +
-#    labs(fill = expression("-log"["10"]("p"))) +
-#    guides(fill = guide_colorbar(barheight = 1, barwidth = 10)) +
-#    coord_cartesian(clip = "off")
-#
-#ggsave(glue("./plots/{stim_i}_go.png"), go_plot_pres, width = 18, height = 18, dpi = 300)
+plot_counter <- plot_counter + 1L
+ggsave(glue("./plots/wgcna_{stim_i}_{plot_counter}_go.png"), 
+       go_plot, width = 26, height = 18, dpi = 300)
 #
 #
 #
@@ -365,7 +360,7 @@ sle_genes <-
       "IKZF1", "IKZF2", "IKZF3", "PXK", "IL12A", "BANK1", "BLK", "TCF7", "SKP1",
       "TNIP1", "MIR3142HG", "C4A", "C4B", "PRDM1", "TNFAIP3", "IRF5", "IRF7", "IRF8",
       "WDFY4", "ARID5B", "CD44", "ETS1", "SH2B3", "SLC15A4", "CSK", "CIITA", "SOCS1", 
-      "CLEC16A", "ITGAM", "ITGAX", "GSDMB", "ORMDL3", "TYK2", "UBE2L3")
+      "CLEC16A", "ITGAM", "ITGAX", "GSDMB", "ORMDL3", "TYK2", "UBE2L3", "NR4A1", "MYC")
 
 gene_names <- distinct(edger_res, gene_id, gene_name)  
 
@@ -438,23 +433,19 @@ dev.off()
 
 
 
-
-
-
 ## Hub genes
 #hub_genes <- 
-#    chooseTopHubInEachModule(counts_dn2, 
-#			     dn2_network$colors, 
-#			     power = chosen_beta, 
+#    chooseTopHubInEachModule(count_matrix, 
+#			     network$colors, 
+#			     power = beta_power, 
 #			     type = "signed") |>
 #    enframe("module", "gene_id") |>
 #    left_join(distinct(edger_res, gene_id, gene_name), join_by(gene_id))
 #
-#
 #gene_adj <-
-#    map_df(setNames(mod_order, mod_order),
-#	   ~adjacency(counts_dn2[, dn2_network$colors == .x],
-#		      power = chosen_beta, 
+#    map_df(setNames(unique(module_genes$module), unique(module_genes$module)),
+#	   ~adjacency(count_matrix[, network$colors == .x],
+#		      power = beta_power, 
 #		      type = "signed") |>
 #	   rowSums() |>
 #	   enframe("gene_id", "sum_a") |>
@@ -505,6 +496,15 @@ dev.off()
 #                  dendroLabels = FALSE, hang = 0.03,
 #                  addGuide = TRUE, guideHang = 0.05)
 #dev.off()
+
+
+# Network visualization
+green_genes <- module_genes |>
+    filter(module == "green") |>
+    pull(gene_id)
+
+adj_green <- adjacency(count_matrix[, green_genes], power = beta_power, type = "signed")
+tom_green = TOMsimilarity(adj_green, TOMType = "signed")
 
 
 
