@@ -24,8 +24,8 @@ FQDIR=${LABSHR}/External_datasets/Scharer/RNAseq/fastq
 FQ1=$FQDIR/${SAMPLE}_1.fastq.gz
 FQ2=$FQDIR/${SAMPLE}_2.fastq.gz
 
-INDEX=${SLURM_SUBMIT_DIR}/starindex_51bp
-OUTDIR=${SLURM_SUBMIT_DIR}/mapping/scharer
+INDEX=${LABSHR}/vitor/lupus/indices/starindex_50
+OUTDIR=${SLURM_SUBMIT_DIR}/mapping
 OUT=${OUTDIR}/${SAMPLE}
 
 mkdir -p $OUTDIR
@@ -49,5 +49,5 @@ samtools view -@ $SLURM_CPUS_PER_TASK -b -h -q 255 $BAM `(seq 1 22; echo X) | se
 samtools index -@ $SLURM_CPUS_PER_TASK ${OUT}.uniq.bam
 regtools junctions extract -s 0 -a 8 -m 50 -M 500000 ${OUT}.uniq.bam -o ${OUT}.junc
 
-rm ${OUT}.uniq.bam
+rm ${OUT}.uniq.bam*
 rm -r ${OUT}__*

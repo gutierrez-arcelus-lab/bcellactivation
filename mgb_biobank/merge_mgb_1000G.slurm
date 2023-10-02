@@ -4,7 +4,7 @@
 #SBATCH -c 4
 #SBATCH --mem=8gb
 #SBATCH --time=24:00:00
-#SBATCH -p bch-compute
+#SBATCH -p bch-compute-pe
 #SBATCH --array=1-22
 #SBATCH --job-name=vcf_merge
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
@@ -30,7 +30,7 @@ NVCF=$(echo "${#ALLVCF[@]}" )
 OUTINTER=${OUTDIR}/chr${CHR}_intersect
 
 # Intersect MGB and 1000G VCFs for the same set of variants
-bcftools isec -p $OUTINTER -n=$NVCF -c snps -O z "${ALLVCF[@]}"
+bcftools isec -p $OUTINTER -n=$NVCF -c none -O z "${ALLVCF[@]}"
 
 # Merge files
 VCFMERGED=${OUTDIR}/chr${CHR}.isec.merged.vcf.gz

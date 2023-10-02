@@ -45,14 +45,10 @@ quants <- read_tsv("./geuvadis_salmon_quants_ebv.bed") %>%
 
 expressed_genes <- quants %>%
     group_by(id, gid) %>%
-    filter(mean(tpm > 10) >= 0.5) %>%
+    filter(mean(tpm > 5) >= 0.75) %>%
+    mutate(normexp = GenABEL::rntransform(tpm)) %>%
     ungroup()
 
-#human <- filter(quants, grepl("^chr", chr))
-#
-#ebv <- filter(quants, chr == "ebv") %>%
-#    mutate(id = str_extract(id, "NC.+$"))
-#
 human <- filter(expressed_genes, grepl("^chr", chr))
 
 ebv <- filter(expressed_genes, chr == "ebv") %>%
@@ -62,7 +58,7 @@ cor_df <- ebv %>%
     split(.$id) %>%
     map_df(~left_join(., human, by = "sampleid") %>%
 	   group_by(id.y, gid.y) %>%
-	   summarise(corr = broom::tidy(cor.test(tpm.x, tpm.y, method = "spearman", exact = FALSE))) %>%
+	   summarise(corr = broom::tidy(cor.test(normexp.x, normexp.y, method = "pearson", exact = FALSE))) %>%
 	   ungroup() %>%
 	   unnest(cols = c(corr)) %>%
 	   select(gene_id_human = id.y, estimate, p = p.value), .id = "id") 
@@ -72,4 +68,25 @@ cor_annot_df <- left_join(cor_df, distinct(human, gene_id_human = id, gene_name_
     select(id, gene_id_human, gene_name_human, gene_name_ebv = gene, protein_name_ebv = protein, estimate, p)
 
 #write_tsv(cor_annot_df, "./human_ebv_correlations.tsv")
-write_tsv(cor_annot_df, "./human_ebv_correlations_tpm10.tsv")
+#write_tsv(cor_annot_df, "./human_ebv_correlations_tpm10.tsv")
+write_tsv(cor_annot_df, "./human_ebv_correlations_tpm5in75.tsv")
+
+# correlation with copy number
+
+ebv_copies <- readxl::read_excel("./ebv_copynumbers_pone.0179446.xlsx")
+
+copies_df <- inner_join(human, ebv_copies, by = c("sampleid" = "samples")) %>%
+    group_by(id, gid) %>%
+    summarise(corr = broom::tidy(cor.test(normexp, `EBV load`, method = "pearson", exact = FALSE))) %>%
+    ungroup() %>%
+    unnest(cols = c(corr)) %>%
+    select(id, gid, estimate, p = p.value)
+
+write_tsv(copies_df, "./human_expression_ebvcopies_corr.tsv")
+
+
+
+
+
+
+

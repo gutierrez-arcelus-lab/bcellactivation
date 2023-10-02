@@ -56,3 +56,22 @@ p <- ggplot(plot_df, aes(x = group, y = prs, fill = group)) +
 
 
 ggsave("./plots/prs.png", p, width = 4, height = 4)
+
+
+plot_df |> 
+    group_by(group) |>
+    summarise(mean = round(mean(prs), 2),
+	      sd = round(sd(prs), 2)) |>
+    ungroup() |>
+    write_tsv("mean_sd_prs.tsv")
+
+
+
+
+
+
+
+
+
+
+

@@ -22,14 +22,14 @@ library(ggrepel)
 ```{r functions}
 parse_pvalues <- function(p) {
 
-    p %>%
-        gsub("\\s", "", .) %>%
-        sub("^([0-9.]+)[^0-9.]10[^0-9.](\\d+)$", "\\1e-\\2", .) %>%
-        parse_number()
+    p <- gsub("\\s", "", p)
+    p <- sub("^([0-9.]+)[^0-9.]10[^0-9.](\\d+)$", "\\1e-\\2", p)
+    parse_number(p)
 }
 
 read_langefeld <- function(tab_path, sheet_number) {
-    read_excel(tab_path, sheet_number, skip = 2) %>%
+    
+    read_excel(tab_path, sheet_number, skip = 2) |>
     select(snp_id = 1, 
            chr = 2, 
            pos = 3, 
@@ -38,23 +38,23 @@ read_langefeld <- function(tab_path, sheet_number) {
            ref_allele = 6, 
            p = `P-value`,
            or = `OR (95% CI)`,
-           p_stepwise = `Regional Stepwise  P-value`) %>% 
-    filter(!is.na(pos)) %>%
+           p_stepwise = `Regional Stepwise  P-value`) |>
+    filter(!is.na(pos)) |>
     mutate(snp_id = gsub("\\s|[a-zA-Z,]+$", "", snp_id),  
            p = parse_pvalues(p),
            p_stepwise = parse_pvalues(p_stepwise),
-           or = parse_number(or)) %>%
+           or = parse_number(or)) |>
     select(snp_id, chr, pos, gene_region, region_rank, ref_allele, p, p_stepwise, or)
 }
 
 read_bentham <- function(url_address) {
 
-    read_html(url_address) %>%
-    html_node("table") %>%
-    html_table(header = TRUE, fill = TRUE) %>%
-    select(snp_id = 1, chr = 2, pos = 3, locus = 4, p = 5, or = 6) %>%
-    slice(-1) %>%
-    as_tibble() %>%
+    read_html(url_address) |>
+    html_node("table") |>
+    html_table(header = TRUE, fill = TRUE) |>
+    select(snp_id = 1, chr = 2, pos = 3, locus = 4, p = 5, or = 6) |>
+    slice(-1) |>
+    as_tibble() |>
     mutate(snp_id = gsub("\\s|[a-zA-Z,]+$", "", snp_id),
            pos = parse_number(pos),
            p = parse_pvalues(p),
@@ -80,15 +80,17 @@ langefeld_df
 ### Import Bentham et al. data
 
 ```{r}
-bentham_df <- read_bentham("https://www.nature.com/articles/ng.3434/tables/1") %>%
+bentham_df <- 
+    read_bentham("https://www.nature.com/articles/ng.3434/tables/1") |>
     mutate(chr = factor(chr, levels = c(1:22, "X")))
 
-bentham_df
+write_tsv(bentham_df, "./paper_data/bentham_tab1.tsv")
 ```
 
 ### Get p-values and GRCh38 positions from summary statistics
 ```{r}
-bentham_stats <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/bentham_GRCh38.tsv.gz" |>
+bentham_stats <- 
+    "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/bentham_GRCh38.tsv.gz" |>
     read_tsv() |>
     drop_na(hm_odds_ratio) |>
     select(chr = hm_chrom, rsid = hm_rsid, pos = hm_pos, 
@@ -173,23 +175,47 @@ langefeld1 <- read_excel("./paper_data/langefeld_tableS2.xlxs", 1, skip = 2) |>
     group_by(`Region Rank`) |>
     slice(which.min(`P-value`)) |>
     ungroup() |>
-    select(rsid = 1, locus = `Gene Region*`, cases = `RAF Case`, controls = `RAF Control`) |>
+    select(rsid = 1, locus = `Gene Region*`, cases = `RAF Case`, controls = `RAF Control`, or = `OR (95% CI)`) |>
     mutate(rsid = sub("^(rs\\d+).*$", "\\1", rsid),
 	   locus = paste0(rsid, " (", locus, ")")) |>
     arrange(controls) |>
     mutate(locus = fct_inorder(locus)) |>
-    select(locus, cases, controls) |>
-    pivot_longer(-locus, names_to = "group", values_to = "f")
+    select(locus, cases, controls, or) |>
+    pivot_longer(cases:controls, names_to = "group", values_to = "f")
     
 freq_plot <- ggplot(langefeld1, aes(x = f, y = locus, fill = group)) +
     geom_line(aes(group = locus)) +
     geom_point(shape = 21, size = 3) +
+    geom_text(data = langefeld1 |> 
+		  group_by(locus) |> 
+		  filter(max(f) <= 0.25) |>
+		  slice_max(f) |> 
+		  ungroup(),
+	      aes(x = f, y = locus, label = or),
+	      hjust = -.1, size = 3) +
+    geom_text(data = langefeld1 |> 
+		  group_by(locus) |> 
+		  filter(max(f) > 0.25) |>
+		  slice_min(f) |> 
+		  ungroup(),
+	      aes(x = f, y = locus, label = or),
+	      hjust = 1.1, size = 3) +
+    annotate("text", x = 0, y = 39, label = "OR (95% CI)", hjust = 0.1, size = 3.5) +
     scale_fill_manual(values = c("cases" = "black", "controls" = "white")) +
-    theme(panel.background = element_rect(fill = "grey96")) +
-    labs(x = "Allele frequency", y = NULL,
+    coord_cartesian(ylim = c(1, 38), clip = "off") +
+    theme(panel.background = element_rect(fill = "grey96"),
+	  legend.position = "top") +
+    labs(x = "Allele frequency", y = NULL, fill = "Group:",
 	 title = "Minor allele frequencies for the 38 genome-wide\nsignificant variants in Langefeld et al. 2017\n(European set)")
 
-ggsave("./freq_langefeld.png", freq_plot)
+ggsave("./freq_langefeld.png", freq_plot, width = 7, height = 8)
+
+langefeld1 |>
+    distinct(locus, or) |>
+    separate(or, c("or", "ci"), sep = " ", convert = T) |>
+    mutate(or = ifelse(or < 1, 1/or, or)) |>
+    arrange(or)
+
 
 
 
@@ -208,4 +234,7 @@ read_excel("./paper_data/langefeld_tableS2.xlxs", 1, skip = 2) |>
     arrange(chr, pos) |>
     write_tsv("./paper_data/langefeld_top.tsv")
 ```
+
+
+
 

@@ -6,8 +6,6 @@ scharer_meta <- "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Scharer/RNA
     mutate(type = str_extract(type, "\\(.+\\)"),
 	   type = gsub("[\\(\\)]", "", type))
 
-
-
 bams <- read_lines("./bam_list.txt")
 
 bam_df <- tibble(path = bams) %>%
@@ -159,37 +157,32 @@ scharer_tpm <-
     
 scharer_plot_df <- scharer_tpm %>%
     filter(type == "DN2") %>%
-    group_by(sampleid, type, status, transcript_type) %>%
+    group_by(sampleid, status, transcript_type) %>%
     summarise(tpm = sum(tpm)) %>%
-    group_by(sampleid, type, status) %>%
-    mutate(prop = tpm/sum(tpm)) %>%
-    group_by(type, status, transcript_type) %>%
-    summarise(m = mean(prop)) %>%
     ungroup() %>%
-    arrange(status, desc(m)) %>%
     group_by(transcript_type) %>%
-    mutate(i = ifelse(any(m > 0.01), transcript_type, "other")) %>%
-    ungroup() %>%
-    select(type, status, transcript_type = i, m) %>%
-    arrange(type, status, desc(m)) %>%
-    mutate(transcript_type = fct_inorder(transcript_type),
-	   transcript_type = factor(transcript_type, levels = rev(levels(transcript_type))),
-	   transcript_type = fct_relevel(transcript_type, "other", after = 0))
-
-library(ggsci)
-
+    mutate(txitype = ifelse(mean(tpm) > 1000, transcript_type, "Other")) %>%
+    ungroup()
 
 
 out3 <- scharer_plot_df %>%
-    ggplot(aes(x = status, y = m, fill = transcript_type)) +
-    geom_col() +
-    scale_fill_manual(values = c("grey", pal_npg()(9))) +
-    scale_y_continuous(labels = scales::percent) +
-    theme_minimal() +
-    theme(plot.background = element_rect(color = "white", fill = "white"),
-	  panel.grid = element_blank()) +
-    labs(y = "Average % of total expression",
-	 title = "Transcriptome composition in DN2 cells\nfrom Scharer et al. dataset")
+    filter(txitype != "Other") %>%
+    ggplot(aes(y = reorder(txitype, tpm, "median"),
+	       x = tpm)) +
+    geom_point(aes(fill = status), 
+	       size = 2, shape = 21, stroke = .25,
+	       position = position_dodge(width = 0.75)) +
+    geom_boxplot(aes(fill = status), outlier.color = NA, alpha = .25, size = .25) +
+    scale_x_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+		       breaks = scales::log_breaks(base = 10),
+		       labels = scales::comma) +
+    scale_fill_manual(values = c("Healthy" = "cornflowerblue", "SLE" = "tomato3")) +
+    theme(panel.background = element_rect(fill = "grey98"),
+	  legend.position = "top") +
+    labs(x = "Total TPM per category", 
+	 y = "Transcript category", 
+	 fill = "Status:",
+	 title = "Scharer et al. data (DN2 cells)")
 
 ggsave("./transcriptome_composition.png", out3)
 

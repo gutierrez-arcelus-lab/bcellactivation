@@ -15,18 +15,18 @@ datasets <- excel_sheets(coloc_file)[-7]
 coloc_eqtl <- grep("eQTL", datasets, value = TRUE) %>%
     map_df(~read_excel(coloc_file, ., skip = 1)) %>%
     filter(trait == "SLE") %>%
-    separate(colocSnp, c("chr", "coloc_var_pos"), sep = ":", convert = TRUE) %>%
-    select(study, cell, chr, gene, gwas_var = colocLoci, coloc_var_pos, pp4 = PP.H4.abf) %>%
+    separate(colocSnp, c("chr", "qtl_pos"), sep = ":", convert = TRUE) %>%
+    select(study, cell, chr, gwas_var = colocLoci, qtl_pos, gene, pp4 = PP.H4.abf) %>%
     group_by(gwas_var) %>%
     filter(pp4 == max(pp4)) %>%
     ungroup() %>%
-    arrange(chr, coloc_var_pos)
+    arrange(chr, qtl_pos)
 
 coloc_sqtl <- grep("sQTL", datasets, value = TRUE) %>%
     map_df(~read_excel(coloc_file, ., skip = 1)) %>%
     filter(trait == "SLE") %>%
-    separate(colocSnp, c("chr", "coloc_var_pos"), sep = ":", convert = TRUE) %>%
-    select(study, cell, chr, intron, gwas_var = colocLoci, coloc_var_pos, pp4 = PP.H4.abf) %>%
+    separate(colocSnp, c("chr", "qtl_pos"), sep = ":", convert = TRUE) %>%
+    select(study, cell, chr, intron, gwas_var = colocLoci, qtl_pos, pp4 = PP.H4.abf) %>%
     left_join(intron_gene, by = "intron") %>%
     filter(!is.na(gene)) %>%
     arrange(chr, coloc_var_pos) %>%

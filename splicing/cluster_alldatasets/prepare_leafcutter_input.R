@@ -2,6 +2,7 @@ library(tidyverse)
 
 labshr <- "/lab-share/IM-Gutierrez-e2/Public/External_datasets"
 datasets <- c("Andreoletti", "Barnas", "Scharer")
+outdir <- "./results_p1"
 
 # Check sequence depth and remove samples with very low 
 mapping_stats <- 
@@ -80,19 +81,19 @@ metadata_andre <- "../../read_mapping/andreoletti/clusters_IFNg.tsv" %>%
 metadata_scharer %>%
     pull(cellid) %>%
     unique() %>%
-    file.path("./results/scharer", .) %>%
+    file.path(outdir, "scharer", .) %>%
     walk(~dir.create(., recursive = TRUE))
 
 metadata_barnas %>%
     pull(cellid) %>%
     unique() %>%
-    file.path("./results/barnas", .) %>%
+    file.path(outdir, "barnas", .) %>%
     walk(~dir.create(., recursive = TRUE))
 
 metadata_andre %>%
     pull(cellid) %>%
     unique() %>%
-    file.path("./results/andreoletti", .) %>%
+    file.path(outdir, "andreoletti", .) %>%
     walk(~dir.create(., recursive = TRUE))
 
 
@@ -101,21 +102,21 @@ metadata_scharer %>%
     group_by(cellid) %>%
     nest() %>%
     {walk2(.$cellid, .$data, 
-           ~write_tsv(.y, file.path("./results/scharer", .x, "groups_file.txt"), col_names = FALSE))}
+           ~write_tsv(.y, file.path(outdir, "scharer", .x, "groups_file.txt"), col_names = FALSE))}
 
 metadata_barnas %>%
     arrange(cellid, status, run) %>%
     group_by(cellid) %>%
     nest() %>%
     {walk2(.$cellid, .$data, 
-           ~write_tsv(.y, file.path("./results/barnas", .x, "groups_file.txt"), col_names = FALSE))}
+           ~write_tsv(.y, file.path(outdir, "barnas", .x, "groups_file.txt"), col_names = FALSE))}
 
 metadata_andre %>%
     arrange(cellid, status, run) %>%
     group_by(cellid) %>%
     nest() %>%
     {walk2(.$cellid, .$data, 
-           ~write_tsv(.y, file.path("./results/andreoletti", .x, "groups_file.txt"), col_names = FALSE))}
+           ~write_tsv(.y, file.path(outdir, "andreoletti", .x, "groups_file.txt"), col_names = FALSE))}
 
 # Create file for slurm batch jobs
 bind_rows(
@@ -129,20 +130,20 @@ bind_rows(
 
 # Junction files
 juncfiles_scharer <- 
-    "../read_mapping/scharer/mapping/%s.junc" %>%
+    "../../read_mapping/scharer/mapping/%s.junc" %>%
     sprintf(metadata_scharer$run)
 
 juncfiles_barnas <- 
-    "../read_mapping/barnas/mapping/%s.junc" %>%
+    "../../read_mapping/barnas/mapping/%s.junc" %>%
     sprintf(metadata_barnas$run)
 
 juncfiles_andre <- 
-    "../read_mapping/andreoletti/mapping/%s.junc" %>%
+    "../../read_mapping/andreoletti/mapping/%s.junc" %>%
     sprintf(metadata_andre$run)
 
 junctionfiles <- c(juncfiles_scharer, juncfiles_barnas, juncfiles_andre)
 
-if (all(file.exists(junctionfiles)) ) {
+if ( all(file.exists(junctionfiles)) ) {
     write_lines(junctionfiles, "./juncfiles.txt")
     cat("Done!\n")
 } else {

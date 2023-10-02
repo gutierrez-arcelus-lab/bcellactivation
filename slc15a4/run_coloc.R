@@ -66,3 +66,53 @@ out <- left_join(coloc_results_summary, gene_info, join_by(gene_id)) |>
     select(dataset_id, study, tissue, mol_phenotype, gene_id, gene_name, everything())
 
 write_tsv(out, "./data/coloc_results.tsv")
+
+### Write data for Liyoung
+dir.create("data/liyoung")
+
+# eqtl data
+min_df |>
+    left_join(distinct(eqtl_cat, dataset_id, study, tissue, mol_phenotype), join_by(dataset_id)) |>
+    filter(study %in% c("GEUVADIS", "TwinsUK", "GTEx"),
+	   tissue %in% c("LCL", "blood"),
+	   mol_phenotype == "leafcutter") |>
+    select(dataset_id, study, gene_id, molecular_trait_id, rsid) |>
+    left_join(select(eqtl_cat, dataset_id, molecular_trait_id, gene_id, rsid, nlog10p)) |>
+    mutate(pval = 10^-nlog10p) |>
+    select(-nlog10p) |>
+    left_join(gene_info) |>
+    filter(gene_name == "SLC15A4") |>
+    select(study, molecular_trait_id, rsid, pval) |>
+    group_by(study, molecular_trait_id) |>
+    nest() |>
+    ungroup() |>
+    mutate_at(vars(molecular_trait_id), ~str_remove(., "_-$")) |>
+    mutate(f = sprintf("data/liyoung/%s-%s.tsv", study, molecular_trait_id)) |>
+    select(data, f) |>
+    pwalk(~write_tsv(.x, .y))
+
+bentham_stats |>
+    mutate(pval = 10^-logp) |>
+    select(rsid, pval) |>
+    write_tsv("./data/liyoung/gwas.tsv")
+
+# test
+min_df |>
+    left_join(distinct(eqtl_cat, dataset_id, study, tissue, mol_phenotype), join_by(dataset_id)) |>
+    filter(study %in% c("GEUVADIS", "TwinsUK", "GTEx"),
+	   tissue %in% c("LCL", "blood"),
+	   mol_phenotype == "leafcutter") |>
+    select(dataset_id, study, gene_id, molecular_trait_id, rsid) |>
+    left_join(select(eqtl_cat, dataset_id, molecular_trait_id, gene_id, rsid, nlog10p)) |>
+    mutate(pval = 10^-nlog10p) |>
+    select(-nlog10p) |>
+    left_join(gene_info) |>
+    filter(gene_name == "SLC15A4") |>
+    select(study, molecular_trait_id, rsid, pval) |>
+    group_by(study, molecular_trait_id) |>
+    filter(pval == min(pval)) |>
+    ungroup() |>
+    filter(study == "GEUVADIS")
+
+
+

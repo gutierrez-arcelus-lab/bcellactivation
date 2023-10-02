@@ -1,21 +1,34 @@
 # Code borrowed from the featurecounts_deseq2.r script in 
 # nf-core atacseq pipeline v1.2.2
 
-
 library(DESeq2)
 library(vsn)
 library(BiocParallel)
 
-count.table <- read.delim("./results/bwa/merged_library/macs2/narrow_peak/consensus/consensus_peaks.mLb.clN.featureCounts.txt", header = TRUE, skip = 1)
-colnames(count.table) <- gsub("\\.mLb\\.\\clN\\.sorted\\.bam", "", colnames(count.table))
 outprefix <- "consensus_peaks.mLb.clN"
 opt <- data.frame(outsuffix = '', outprefix = outprefix, 
 		  outdir = "./results_deseq2", cores = 4, 
 		  vst = FALSE)
 
+count.table <- 
+    "./results/bwa/merged_library/macs2/narrow_peak/consensus/consensus_peaks.mLb.clN.featureCounts.txt" |>
+    read.delim(header = TRUE, skip = 1)
+
+colnames(count.table) <- gsub("\\.mLb\\.\\clN\\.sorted\\.bam", "", colnames(count.table))
 rownames(count.table) <- count.table$Geneid
 interval.table <- count.table[,1:6]
 count.table <- count.table[,7:ncol(count.table),drop=FALSE]
+
+# Remove 3 donors for now
+#samplesheet <- read.csv("./samplesheet.csv")
+#samplesheet$donor_id <- sub("^\\d+_([^_]+).*$", "\\1", basename(samplesheet$fastq_1))
+#samplesheet$replicate <- paste0("REP", samplesheet$replicate)
+#samplesheet$sample_id <- paste(samplesheet$sample, samplesheet$replicate, sep = "_") 
+#samplesheet <- samplesheet[, c("donor_id", "sample_id")]
+#samplesheet <- samplesheet[samplesheet$donor_id != "3donors", ]
+#samplesheet <- unique(samplesheet)
+#
+#count.table <- count.table[, samplesheet$sample_id]
 
 ## RUN DESEQ2
 
@@ -34,6 +47,7 @@ if (length(unique(groups)) == 1) {
 }
 
 DDSFile <- paste(opt$outprefix,".dds.rld.RData",sep="")
+#DDSFile <- paste(opt$outprefix,".rm3donors.dds.rld.RData",sep="")
 
 if ( !file.exists(DDSFile) ) {
     counts <- count.table[,samples.vec,drop=FALSE]

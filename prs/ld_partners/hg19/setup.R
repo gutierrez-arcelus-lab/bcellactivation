@@ -88,3 +88,12 @@ summ_stats |>
     select(chr, pos) |>
     arrange(chr, pos) |>
     write_tsv("./data/gwas_positions.tsv", col_names = FALSE)
+
+
+# Only original sentinels
+
+
+
+
+
+

@@ -2,9 +2,9 @@
 
 #SBATCH -N 1
 #SBATCH -c 8
-#SBATCH --mem=32gb
+#SBATCH --mem=48gb
 #SBATCH --time=48:00:00
-#SBATCH -p bch-compute
+#SBATCH -p bch-compute,bch-compute-pe
 #SBATCH --array=1-120
 #SBATCH --job-name=STAR
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
@@ -20,12 +20,12 @@ LABSHR=/lab-share/IM-Gutierrez-e2/Public
 SAMPLELIST=${LABSHR}/External_datasets/Andreoletti/SRR_Acc_List_Bcells.txt
 SAMPLE=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $SAMPLELIST )
 
-FQDIR=${LABSHR}/External_datasets/Andreoletti/fastq 
-FQ1=$FQDIR/${SAMPLE}_1.fastq.gz
-FQ2=$FQDIR/${SAMPLE}_2.fastq.gz
+FQDIR=${LABSHR}/External_datasets/Andreoletti/qc 
+FQ1=$FQDIR/${SAMPLE}_1_val_1.fq.gz
+FQ2=$FQDIR/${SAMPLE}_2_val_2.fq.gz
 
-INDEX=${SLURM_SUBMIT_DIR}/starindex_151bp
-OUTDIR=${SLURM_SUBMIT_DIR}/mapping/andreoletti
+INDEX=${LABSHR}/vitor/lupus/indices/starindex_100
+OUTDIR=${SLURM_SUBMIT_DIR}/mapping
 OUT=${OUTDIR}/${SAMPLE}
 
 mkdir -p $OUTDIR
@@ -50,5 +50,5 @@ samtools view -@ $SLURM_CPUS_PER_TASK -b -h -q 255 $BAM `(seq 1 22; echo X) | se
 samtools index -@ $SLURM_CPUS_PER_TASK ${OUT}.uniq.bam
 regtools junctions extract -s 0 -a 8 -m 50 -M 500000 ${OUT}.uniq.bam -o ${OUT}.junc
 
-rm ${OUT}.uniq.bam
+rm ${OUT}.uniq.bam*
 rm -r ${OUT}__*

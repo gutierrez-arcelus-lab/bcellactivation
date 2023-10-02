@@ -1,0 +1,364 @@
+---
+title: "temp"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Extracting B cells
+
+```{r}
+filt_stims <- 
+  c("day0", "IL4 24hr", "BCR 24hr", "TLR7 24hr", "BCR+TLR7 24hr", "DN2 24hr")
+
+Idents(bcells_singlet) <- "seurat_clusters"
+bcells_filt <- subset(bcells_singlet, idents = c(1, 3, 4, 5, 7, 9, 10))
+
+Idents(bcells_filt) <- "HTO_maxID"
+bcells_filt <- subset(bcells_filt, idents = filt_stims)
+```
+
+### PCA
+
+```{r}
+bcells_filt <- bcells_filt %>%
+    FindVariableFeatures(nfeatures = 1000, selection.method = "vst") %>%
+    ScaleData(., features = rownames(.)) %>%
+    RunPCA(., features = VariableFeatures(.))
+```
+
+### UMAP and clustering
+
+```{r}
+bcells_filt <- bcells_filt %>%
+  RunUMAP(dims = 1:20, verbose = FALSE) %>%
+  FindNeighbors(dims = 1:20, verbose = FALSE) %>%
+  FindClusters(resolution = 0.5, verbose = FALSE)
+```
+
+```{r, echo = FALSE, fig.height=3, fig.width=10}
+meta_data_filt <- bcells_filt@meta.data %>%
+  rownames_to_column("barcode") %>%
+  as_tibble() %>%
+  select(barcode, cluster = seurat_clusters, stim = HTO_maxID, 
+         percent_mt, percent_ribo, n_genes = nFeature_RNA, umi = nCount_RNA) %>%
+  mutate(stim = factor(stim, levels = stims))
+
+umap_filt_df <- as.data.frame(bcells_filt@reductions$umap@cell.embeddings) %>%
+    rownames_to_column("barcode") %>%
+    as_tibble() %>%
+    left_join(meta_data_filt)
+
+ggplot(umap_filt_df, aes(UMAP_1, UMAP_2, color = stim)) +
+    geom_point(size = 1) +
+    scale_color_manual(values = rev(ggsci::pal_npg()(6))) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    guides(color = guide_legend(override.aes = list(size = 2)))
+
+ggsave("./umap_pilot2_stims.png", width = 5, height = 2.5)
+```
+
+```{r}
+ggplot(umap_filt_df, aes(UMAP_1, UMAP_2, color = n_genes, fill = n_genes)) +
+    geom_point(size = 1, shape = 19) +
+    scale_color_viridis_c(guide = "none") +
+    scale_fill_viridis_c(guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines"))
+
+ggsave("./umap_pilot2_genes.png", width = 5, height = 2.5)
+```
+
+```{r}
+Idents(bcells_filt) <- "HTO_maxID"
+
+cluster_markers_filt <- 
+    FindAllMarkers(bcells_filt, 
+                   only.pos = TRUE,
+                   min.pct = 0.05,
+                   logfc.threshold = 1) %>%
+    as_tibble() %>%
+    filter(p_val_adj < 0.05)
+
+sle_genes <- read_tsv("../reported_genes.tsv")
+
+sle_genes_de <- cluster_markers_filt %>%
+  as_tibble() %>%
+  left_join(filter(features_df, phenotype == "Gene Expression") %>%
+              select(gene_id, gene_name), by = c("gene" = "gene_id")) %>%
+  filter(gene_name %in% sle_genes$gene) %>%
+  distinct(stim = cluster, gene_id = gene, gene_name)
+
+sle_genes_df <- bcells_filt@assays$RNA@data[sle_genes_de$gene_id, ] %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  as_tibble() %>%
+  left_join(select(sle_genes_de, gene_id, gene_name)) %>%
+  select(gene_id, gene_name, everything()) %>%
+  pivot_longer(-(gene_id:gene_name), names_to = "barcode")
+  
+umap_filt_df %>%
+  select(barcode, UMAP_1, UMAP_2) %>%
+  left_join(sle_genes_df) %>%
+  split(.$gene_name) %>%
+  map(~ggplot(., aes(UMAP_1, UMAP_2, color = value)) +
+    geom_point(size = .2, shape = 19) +
+    scale_color_viridis_c(guide = guide_colorbar(barwidth = .5, barheight = 3)) +
+    facet_wrap(~gene_name) +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          axis.text = element_blank(),
+          panel.background = element_rect(fill = "white")) +
+      labs(color = "RNA")) %>%
+  plot_grid(plotlist = ., ncol = 4) +
+  theme(plot.background = element_rect(fill = "white"))
+
+ggsave("/home/ch229163/umap_slegenes.png", height = 8)
+  
+```
+
+
+```{r}
+bcell_genes <- 
+    c("IGHD", "IGHM", 
+      "CD19", "CD69", "CD83", "CD274")
+
+bcell_genes_df <- features_df %>%
+    filter(phenotype == "Gene Expression", 
+           gene_name %in% bcell_genes) %>%
+    select(gene_id, gene_name)
+
+bcell_genes_quant <- bcells_filt@assays$RNA@data %>% 
+    .[bcell_genes_df$gene_id, ] %>%
+    as.data.frame() %>%
+    rownames_to_column("gene_id") %>%
+    as_tibble() %>%
+    left_join(bcell_genes_df, by = "gene_id") %>%
+    pivot_longer(-c("gene_id", "gene_name"), 
+                 names_to = "barcode", values_to = "gene_exp") %>%
+    mutate(gene_name = factor(gene_name, levels = bcell_genes))
+
+bcell_genes_quant_norm <- bcell_genes_quant %>%
+  group_by(gene_id) %>%
+  mutate(q01 = quantile(gene_exp, 0.01),
+         q99 = quantile(gene_exp, 0.99),
+         gene_exp = case_when(gene_exp < q01 ~ q01,
+                              gene_exp > q99 ~ q99,
+                              TRUE ~ gene_exp)) %>%
+  ungroup()
+
+
+bcell_prots <- c("IgD", "IgM", "CD19", "CD69", "CD83", "CD274.or.B7-H1.PD-L1")
+
+adt_quants <- bcells_filt@assays$ADT@data[bcell_prots, ] %>%
+    as.data.frame() %>%
+    rownames_to_column("ab") %>%
+    as_tibble() %>%
+    pivot_longer(-ab, names_to = "barcode", values_to = "ab_level") %>%
+    mutate(ab = factor(ab, levels = bcell_prots))
+
+adt_quants_norm <- adt_quants %>%
+  group_by(ab) %>%
+  mutate(q01 = quantile(ab_level, 0.01),
+         q99 = quantile(ab_level, 0.99),
+         ab_level = case_when(ab_level < q01 ~ q01,
+                              ab_level > q99 ~ q99,
+                              TRUE ~ ab_level)) %>%
+  ungroup()
+
+bcells_genes_wide <- bcell_genes_quant_norm %>%
+    select(barcode, gene_name, gene_exp) %>%
+    pivot_wider(names_from = gene_name, values_from = gene_exp)
+
+bcells_adt_wide <- adt_quants_norm %>%
+    select(barcode, ab, ab_level) %>%
+    mutate(ab = paste0(ab, "_prot")) %>%
+    pivot_wider(names_from = ab, values_from = ab_level)
+    
+umap_filt_genes <- umap_filt_df %>%
+    select(barcode, UMAP_1, UMAP_2) %>%
+    left_join(bcells_genes_wide) %>%
+    left_join(bcells_adt_wide)
+
+
+#Cd83
+cd83_g <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = CD83)) +
+    geom_point(size = 1) +
+    scale_color_viridis_c(guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "RNA", title = "CD83")
+
+cd83_p <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = CD83_prot)) +
+    geom_point(size = 1) +
+    scico::scale_color_scico(palette = "lajolla", guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "Protein", title = " ")
+
+plot_grid(cd83_g, cd83_p)
+ggsave("./umap_pilot2_cd83.png", width = 8, height = 2.5)
+
+# CD274
+cd274_g <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = CD274)) +
+    geom_point(size = 1) +
+    scale_color_viridis_c(guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "RNA", title = "CD274")
+
+cd274_p <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = `CD274.or.B7-H1.PD-L1_prot`)) +
+    geom_point(size = 1) +
+    scico::scale_color_scico(palette = "lajolla", guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "Protein", title = " ")
+
+plot_grid(cd274_g, cd274_p)
+ggsave("./umap_pilot2_cd274.png", width = 8, height = 2.5)
+
+
+# CD69
+cd69_g <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = CD69)) +
+    geom_point(size = 1) +
+    scale_color_viridis_c(guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "RNA", title = "CD69")
+
+cd69_p <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = CD69_prot)) +
+    geom_point(size = 1) +
+    scico::scale_color_scico(palette = "lajolla", guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "Protein", title = " ")
+
+plot_grid(cd69_g, cd69_p)
+ggsave("./umap_pilot2_cd69.png", width = 8, height = 2.5)
+
+
+# IgD
+igd_g <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = IGHD)) +
+    geom_point(size = 1) +
+    scale_color_viridis_c(guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "RNA", title = "IgD")
+
+igd_p <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = IgD_prot)) +
+    geom_point(size = 1) +
+    scico::scale_color_scico(palette = "lajolla", guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "Protein", title = " ")
+
+plot_grid(igd_g, igd_p)
+ggsave("./umap_pilot2_IgD.png", width = 8, height = 2.5)
+
+
+# IgM
+igm_g <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = IGHM)) +
+    geom_point(size = 1) +
+    scale_color_viridis_c(guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "RNA", title = "IgM")
+
+igm_p <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = IgM_prot)) +
+    geom_point(size = 1) +
+    scico::scale_color_scico(palette = "lajolla", guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "Protein", title = " ")
+
+plot_grid(igm_g, igm_p)
+ggsave("./umap_pilot2_IgM.png", width = 8, height = 2.5)
+
+
+# CD19
+cd19_g <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = CD19)) +
+    geom_point(size = 1) +
+    scale_color_viridis_c(guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "RNA", title = "CD19")
+
+cd19_p <- ggplot(umap_filt_genes, aes(UMAP_1, UMAP_2, color = CD19_prot)) +
+    geom_point(size = 1) +
+    scico::scale_color_scico(palette = "lajolla", guide = guide_colorbar(barwidth = .5)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          legend.key.height = unit(.75, "lines")) +
+    labs(color = "Protein", title = " ")
+
+plot_grid(cd19_g, cd19_p)
+ggsave("./umap_pilot2_cd19.png", width = 8, height = 2.5)
+
+```
+
+
+
+
+

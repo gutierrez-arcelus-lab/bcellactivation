@@ -184,15 +184,13 @@ kmeans_df %>%
     tibble(eigenval = as.numeric(.)) %>%
     select(eigenval) %>%
     mutate(var_exp = eigenval/sum(eigenval) * 100)
-    
 
-
-mgb_umap <- select(pca_df, PC1:PC10) %>%
+mgb_umap <- select(pca_df, PC1:PC6) %>%
     umap()
 
 umap_df <- bind_cols(select(pca_df, sample_id, dataset, population), as.data.frame(mgb_umap))
 
-umap_df %>%
+plot_umap_pc6 <- umap_df %>%
     ggplot(aes(V1, V2, color = population)) +
     geom_point(size = .5) +
     scale_color_manual(values = all_cols[-(2:4)]) +
@@ -202,6 +200,6 @@ umap_df %>%
            alpha = "none") +
     labs(x = "UMAP 1", y = "UMAP 2")
 
-ggsave("./plots/umap.png", width = 8, height = 6)
+ggsave("./plots/umap_6pcs.png", plot_umap_pc6, width = 8, height = 6)
 
 

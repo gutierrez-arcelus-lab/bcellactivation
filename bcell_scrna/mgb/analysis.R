@@ -6,7 +6,6 @@ unix::rlimit_as(1e12)
 library(Seurat)
 #library(scSHC)
 
-
 # Data wrangling
 library(tidyverse)
 
@@ -65,8 +64,17 @@ stims <-
       "Hashtag15" = "DN2 72h"
     )
 
-stim_colors <- c("grey80", "grey40", "black", brewer.pal(n = 6, "Paired"))
-names(stim_colors) <- stims
+stim_colors <- 
+    c("unstim 0h" = "#dbdbdb", 
+      "IL4 24h" = "#3b3b3b", 
+      "IL4 72h" = "#000000", 
+      "BCR 24h" = "#6996e3", 
+      "BCR 72h" = "#0404bf",
+      "TLR7 24h" =  "#748f46",
+      "TLR7 72h" = "#275024", 
+      "DN2 24" = "#d76b51", 
+      "DN2 72h" = "#b00000")
+
 
 # Cell ranger data
 libraries <- c("1984", "1988", "1990")

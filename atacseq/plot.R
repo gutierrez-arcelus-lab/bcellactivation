@@ -1,3 +1,4 @@
+library(DESeq2)
 library(dplyr)
 library(readr)
 library(purrr)
@@ -7,6 +8,7 @@ library(forcats)
 library(ggplot2)
 library(ggrepel)
 library(RColorBrewer)
+library(cowplot)
 
 stim_order <- 
     c(sprintf("unst %s", c(0, 24)), 
@@ -41,7 +43,6 @@ pca_df <-
     mutate(stim = sub("_", " ", stim)) |>
     left_join(donor_ids) |>
     mutate(stim = factor(stim, levels = stim_order))
-
 
 pca_plot <- ggplot(pca_df, aes(`PC1: 26% variance`, `PC2: 15% variance`)) +
     geom_point(aes(fill = stim), shape = 21, size = 4) +
@@ -150,19 +151,15 @@ ggsave("./plots/pca_5000VarPeaks.png", pca_5000_plot, width = 6, height = 5)
 # DESeq2 PCA
 library(DESeq2)
 load("./results_deseq2/consensus_peaks.mLb.clN.dds.rld.RData")
-str(rld)
-str(dds)
-
-rld <- rlog(dds)
 
 # calculate the variance for each gene
 rv <- rowVars(assay(rld))
 
 # select the ntop genes by variance
-select_top <- order(rv, decreasing=TRUE)[seq_len(min(500, length(rv)))]
+select_top <- order(rv, decreasing = TRUE)[1:5000]
 
 # perform a PCA on the data in assay(x) for the selected genes
-pca_df <- as.data.frame(t(assay(rld)[select_top,]))
+pca_df <- as.data.frame(t(assay(rld)[select_top, ]))
 pca <- prcomp(pca_df)
 
 # the contribution to the total variance for each component
@@ -229,7 +226,7 @@ coloc_res <- "../colocalization/results/bentham_region%d.tsv" |>
 
 da_files <- 
     list.files("./results_deseq2", 
-	       pattern = "\\.deseq2\\.FDR0\\.01\\.results\\.txt",
+	       pattern = "\\.deseq2\\.FDR0\\.05\\.results\\.txt",
 	       full.names = TRUE)
 
 da_names <- 
@@ -243,7 +240,7 @@ da_all <- da_files |>
     map_dfr(~read_tsv(.) |> select(Geneid:padj), .id = "contrast")
 
 da_all_tmp <- da_all |>
-    count(contrast) |>
+    dplyr::count(contrast) |>
     separate(contrast, c("c0", "c1"), sep = "vs")
 
 stims <- c("unst_0", "unst_24", "IL4_24", "TLR7_24", "BCR_24", "DN2_24")
@@ -264,21 +261,36 @@ da_all_summ <-
     mutate_at(vars(c0:c1), fct_inorder) |>
     mutate(n = ifelse(n == 0 & c0 == c1, NA, n))
 
-
-da_summ_plot <- ggplot(da_all_summ, aes(c0, c1)) +
+da_summ_plot <- 
+    ggplot(da_all_summ, aes(c0, c1)) +
     geom_tile(aes(fill = n)) +
-    geom_text(aes(label = n)) +
+    geom_text(aes(label = scales::comma(n)), 
+	      color = "white", fontface = "bold") +
     scale_x_discrete(labels = function(x) sub("_", " ", x)) +
     scale_y_discrete(labels = function(x) sub("_", " ", x)) +
-    scale_fill_gradient(low = "white", high = "tomato3", na.value = "white") +
+    scale_fill_gradient(low = "midnightblue", high = "tomato3", 
+			na.value = "white") +
     theme_minimal() +
     theme(plot.background = element_rect(fill = "white", color = "white"),
+	  plot.margin = margin(1, 1, 1, 1, unit = "cm"),
 	  panel.grid = element_blank(),
 	  axis.title = element_blank(),
-	  axis.text = element_text(size = 12),
+	  axis.text.x = element_text(size = 12, angle = 90, hjust = 1, vjust = 1),
+	  axis.text.y = element_text(size = 12),
 	  legend.position = "none")
 
-ggsave("./plots/diffaccess_summ.png", da_summ_plot, height = 6, width = 6)
+ggsave("./plots/diffaccess_summ.png", da_summ_plot, 
+       height = 5.5, width = 5.5, dpi = 600)
+
+pca_out <- 
+    plot_grid(pca_5000_plot, NULL, da_summ_plot,
+	      nrow = 1, rel_widths = c(1, .1, 1),
+	      labels = c("A)", "", "B)")) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/pca_da.png", width = 10, height = 5)
+
+
 
 
 

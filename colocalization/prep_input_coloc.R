@@ -43,7 +43,7 @@ read_tsv(paths_df$ftp_path[1], n_max = 1) |>
 # GWAS summ stats
 # in both the GWAS catalog and OpenGWAS data there are variants with same rsid and different stats 
 # From OpenGWAS
-gwas_stats <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/ebi-a-GCST003156.vcf.gz" |>
+gwas_stats <- "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/opengwas/ebi-a-GCST003156.vcf.gz" |>
     read_tsv(comment = "##") |>
     mutate(`#CHROM` = paste0("chr", `#CHROM`)) |>
     add_count(`#CHROM`, ID) |>
@@ -103,7 +103,7 @@ bentham_top <- "https://www.nature.com/articles/ng.3434/tables/1" |>
 top_regions <- bentham_top |>
     filter(p < 1e-5) |>
     select(chr, rsid, locus) |>
-    inner_join(gwas_stats_38) |>
+    inner_join(gwas_stats_38) |> distinct(chr)
     select(chr, pos, locus) |>
     mutate(chr = factor(chr, levels = c(unique(chr), numeric = TRUE))) |>
     arrange(chr, pos) |>

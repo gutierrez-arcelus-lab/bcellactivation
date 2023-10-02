@@ -19,7 +19,8 @@ LABSHARE=/lab-share/IM-Gutierrez-e2/Public
 FQDIR=$LABSHARE/B_cells/bulkTCpilot_1/34.198.31.178/210618_MG8989_fastq
 
 # Alignment index
-INDEX=$HOME/lupus/indices/SALMON
+#INDEX=$HOME/lupus/indices/SALMON
+INDEX=$HOME/lupus/indices/SALMON_HUMAN_EBV
 
 # Defining the samples
 SAMPLELIST=/home/ch229163/lupus/bcell_bulk/bcell_samples.txt
@@ -30,7 +31,8 @@ FQ1=${FQDIR}/${SAMPLE}_R1_001.fastq.gz
 FQ2=${FQDIR}/${SAMPLE}_R2_001.fastq.gz 
 
 # Results
-OUT=$HOME/lupus/bcell_bulk/results/salmon/${SAMPLE}
+#OUT=$HOME/lupus/bcell_bulk/results/salmon/${SAMPLE}
+OUT=$HOME/lupus/bcell_bulk/results/salmon-ebv/${SAMPLE}
 mkdir -p $OUT
 
 # Run Salmon quantification

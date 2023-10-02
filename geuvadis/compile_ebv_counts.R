@@ -29,12 +29,25 @@ ebv_annots <-
     summarise(start = min(start), end = max(end)) %>%
     ungroup()
 
-
-samples <- read_lines("./geuvadis_samples.txt")
-
-quant_df <- sprintf("./results/salmon/%s/quant.sf", samples) %>%
-    setNames(samples) %>%
+quant_df <- 
+    list.files("./results/salmon", pattern = "quant\\.sf", full.names=TRUE, recursive = TRUE) %>%
+    setNames(str_extract(., "ERR\\d+")) %>%
     map_df(read_tsv, .id = "sampleid")
+
+
+#### CR2
+cr2_ids <- gene_annots %>%
+    filter(gene_name == "CR2") %>%
+    left_join(transcript_annots) %>%
+    pull(transcript_id)
+
+cr2_df <- quant_df %>%
+    filter(Name %in% cr2_ids) %>%
+    select(sampleid, transcript_id = Name, tpm = TPM)
+
+write_tsv(cr2_df, "./results/salmon/cr2_quants.tsv")
+####
+
 
 human_genes_df <- quant_df %>%
     filter(!grepl("^HHV", Name))

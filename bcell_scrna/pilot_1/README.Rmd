@@ -343,6 +343,16 @@ bcells_markers %>%
 ### DE genes between each condition and day 0
 
 ```{r}
+res24_markers <- 
+    FindMarkers(bcells_singlet, 
+                   ident.1 = "Res 24hr",
+                   ident.2 = "Res 0hr",
+                   only.pos = TRUE,
+                   min.pct = 0.1,
+                   logfc.threshold = .5) %>%
+    rownames_to_column("gene") %>%
+    as_tibble()
+
 bcr24_markers <- 
     FindMarkers(bcells_singlet, 
                    ident.1 = "BCR 24hr",
@@ -384,7 +394,8 @@ tlr72_markers <-
     as_tibble()
 
 markers_day0_df <-
-  bind_rows("BCR 24hr" = bcr24_markers,
+  bind_rows("Res 24hr" = res24_markers,
+	    "BCR 24hr" = bcr24_markers,
             "TLR7 24hr" = tlr24_markers,
             "BCR 72hr" = bcr72_markers,
             "TLR7 72hr" = tlr72_markers,
@@ -394,7 +405,7 @@ markers_day0_df <-
 ```
 
 
-```{r, echo = FALSE, fig.height=5}
+```{r, echo = FALSE, fig.height=5, fig.width = 7}
 top30_markers <- markers_day0_df %>%
   group_by(stim) %>%
   top_n(30, avg_log2FC) %>%
@@ -418,13 +429,13 @@ marker_gene_expr <- bcells_singlet@assays$RNA@data[unique(top30_markers$gene), ]
 markers_plot_df <- top30_markers %>%
   left_join(marker_gene_expr, by = c("condition" = "stim", "gene")) %>%
   left_join(gene_ids, by = c("gene" = "gene_id")) %>%
+  mutate_at(vars(stim, condition), ~factor(., levels = grep("72", stims, invert = TRUE, value = TRUE))) %>%
   mutate(condition = fct_relevel(condition, "Res 0hr", after = Inf))
-
 
 ggplot(markers_plot_df, aes(x = condition, y = reorder_within(gene_name, avg_log2FC, stim))) +
     geom_point(aes(size = perc, fill = value), 
                color = "black", shape = 21) +
-    scale_size(range = c(0.1, 4), labels = scales::percent) +
+    scale_size(range = c(0.1, 3.5), labels = scales::percent) +
     scale_fill_viridis_c(option = "magma") +
     scale_y_discrete(labels = function(x) sub("^([^_]+).*$", "\\1", x)) +
     facet_wrap(~stim, scales = "free", nrow = 1) +

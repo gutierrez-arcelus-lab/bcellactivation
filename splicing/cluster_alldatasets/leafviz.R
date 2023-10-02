@@ -10,3 +10,6 @@ leafviz("./results/scharer/DN/DN.Rdata")
 
 leafviz("./results/barnas/DN/DN.Rdata")
 leafviz("./results/andreoletti/B/B.Rdata")
+
+
+leafviz("./results_p1/scharer/DN/DN.Rdata")

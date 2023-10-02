@@ -22,12 +22,13 @@ INFO=./slurm_info.txt
 DATASET=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' $INFO )
 CELLTYPE=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $2 }' $INFO )
 
-OUT=./results/${DATASET}/${CELLTYPE}
+RES=./results_p1
+OUT=${RES}/${DATASET}/${CELLTYPE}
 
 # Differential splicing analysis for each dataset and cell type
-COUNT=./results/leafcutter_perind_numers.counts.gz
+COUNT=${RES}/leafcutter_perind_numers.counts.gz
 GROUP=${OUT}/groups_file.txt
-EXON=./grch38_exon.txt.gz
+EXON=../grch38_exon.txt.gz
 
 ${HOME}/leafcutter/scripts/leafcutter_ds.R \
     -i 3 -g 3 \
@@ -44,5 +45,5 @@ ${HOME}/leafcutter/leafviz/prepare_results.R \
     $COUNT \
     ${OUT}/leafcutter_cluster_significance.txt \
     ${OUT}/leafcutter_effect_sizes.txt \
-    ./leafviz/gencode_hg38/gencode_hg38 \
+    ../leafviz/gencode_hg38/gencode_hg38 \
     -o ${OUT}/${CELLTYPE}.Rdata

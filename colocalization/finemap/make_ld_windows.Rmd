@@ -1,0 +1,74 @@
+---
+title: "liftOver LD windows"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, comment = "")
+```
+
+```{r}
+library(tidyverse)
+```
+
+## LD window coordinates as used by Kundu et al. (2021)
+
+```{r}
+bed19 <- 
+    file.path("https://bitbucket.org/nygcresearch/ldetect-data/raw",
+	      "ac125e47bf7ff3e90be31f278a7b6a61daaba0dc/EUR",
+	      "fourier_ls-all.bed") |>
+    read_tsv()
+
+bed19_file <- "./data/ld_windows_hg19.bed"
+
+write_tsv(bed19, bed19_file, col_names = FALSE)
+```
+
+
+## liftOver to hg38
+
+```{r}
+chain <- 
+    "/reference_databases/ReferenceGenome/liftover_chain/hg19/hg19ToHg38.over.chain.gz"
+
+bed38_file <- 
+    "./data/ld_windows_hg38.bed" 
+
+fail <-
+    "./data/ld_windows_fail.txt"
+    
+"liftOver %s %s %s %s" |>
+    sprintf(bed19_file, chain, bed38_file, fail) |>
+    system()
+```
+
+## Read back the converted file
+
+```{r}
+bed38 <- read_tsv(bed38_file, col_names = FALSE)   
+```
+
+## Identify the windows that failed to convert between assemblies 
+
+```{r}
+failed_windows <- 
+    read_lines(fail) |>
+    {function(x) split(x, cumsum(grepl("^#", x)))}() |>
+    map_dfr(function(x) tibble(info = x[1], coord = x[2])) |>
+    separate(coord, c("chr", "start", "end"), sep = "\t", convert = TRUE)
+
+failed_windows
+```
+
+## Remove failed windows and merge old coordinates to new coordinates
+
+```{r}
+res <- 
+    anti_join(bed19, failed_windows) |>
+    bind_cols(bed38) |>
+    select(chr_hg19 = chr, start_hg19 = start, stop_hg19 = stop,
+	   chr_hg38 = X1, start_hg38 = X2, stop_hg38 = X3)
+
+res
+```

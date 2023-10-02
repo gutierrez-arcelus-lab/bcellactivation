@@ -1,12 +1,10 @@
+library(clusterProfiler)
+library(org.Hs.eg.db)
 library(tidyverse)
 library(rvest)
 library(ggridges)
 library(cowplot)
-library(clusterProfiler)
-library(org.Hs.eg.db)
 
-select <- dplyr::select
-slice <- dplyr::slice
 
 
 #plot colors
@@ -168,6 +166,41 @@ bind_rows("BCR stim" = ase_igg, "TLR7 stim" = ase_rsq, .id = "condition") %>%
     labs(fill = "Ref allele\nratio")
 
 ggsave("./plots/ase_gwasgenes.png", width = 8, height = 5, dpi = 300)
+
+sle_eur_genes <- gwas_genes %>%
+    filter(grepl("Langefeld|Bentham", author)) %>%
+    distinct(gene_name = gene) %>%
+    inner_join(genes_ase) %>%
+    filter(q < 0.05) %>%
+    count(gene_name, stim) 
+
+sle_eur_genes %>% print(n = Inf)
+
+sle_eur_genes %>%
+    count(stim, sort = TRUE)
+
+
+sle_eur_genes %>%
+    complete(gene_name, stim, fill = list(n = 0)) %>%
+    mutate(stim = recode(stim, "16hr_resting" = "Resting", 
+                         "24hr_IgG" = "BCR 24hr",
+                         "72hr_IgG" = "BCR 72hr",
+                         "24hr_RSQ" = "TLR7 24hr",
+                         "72hr_RSQ" = "TLR7 72hr")) %>%
+    arrange(gene_name, stim) %>%
+    ggplot(aes(stim, gene_name)) +
+    geom_point(aes(color = n), size = 4, alpha = .25) +
+    geom_text(aes(label = n), size = 3) +
+    scale_color_viridis_c(guide = guide_colorbar(barwidth = .5)) +
+    theme_minimal() +
+    theme(axis.title = element_blank(),
+          panel.grid = element_line(color = "grey96"),
+          plot.background = element_rect(fill = "white"),
+          plot.title = element_text(size = 8)) +
+    labs(title = "Number of ASE variants per condition for SLE genes")
+
+ggsave("ase_lupus.png", width = 5)
+
 
 
 ## enrichment

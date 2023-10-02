@@ -15,15 +15,17 @@ export QTLTOOLS_X=1.3.1
 export R_X=4.1
 
 GENOT=${SLURM_SUBMIT_DIR}/VCF/allchr.1000G.vcf.gz
-PHENO=${SLURM_SUBMIT_DIR}/ebv_phenotypes_corrected.bed.gz
+#PHENO=${SLURM_SUBMIT_DIR}/ebv_phenotypes_corrected.bed.gz
+PHENO=${SLURM_SUBMIT_DIR}/ebv_phenotypes_corrected_v2.bed.gz
 OUTDIR=${SLURM_SUBMIT_DIR}/results/qtltools 
 SEED=123
-OUTPERMUT=${OUTDIR}/trans.sample
+#OUTPERMUT=${OUTDIR}/trans.sample
+OUTPERMUT=${OUTDIR}/trans.sample_v2
 
 # Permutation pass
 QTLtools trans \
     --vcf $GENOT \
     --bed $PHENO \
-    --sample 100 \
+    --sample 86 \
     --out $OUTPERMUT
 

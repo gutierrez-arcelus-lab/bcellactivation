@@ -178,19 +178,18 @@ prep_data <- function(r) {
 	ungroup() |>
 	top_n(20, h4) |>
 	left_join(study_df) |>
-	mutate(study_id = paste0(author, " (", tissue, " ", condition, ")")) |>
-	select(study_id, gene_id, gene_name, method, h4) |>
+	select(dataset, level, gene_id, gene_name, h4) |>
 	arrange(h4)
 }
 
 plot_colocs <- function(dat) {
 
     ggplot(dat, aes(x = h4, 
-		    y = reorder_within(study_id, h4, locus, max),
-		    fill = method)) +
-    geom_vline(xintercept = .8, linetype = 2, size = .2) +
+		    y = reorder_within(dataset, h4, locus, max),
+		    fill = level)) +
+    geom_vline(xintercept = .8, linetype = 2, linewidth = .2) +
     geom_point(size = 4, shape = 21, stroke = .2) +
-    geom_text_repel(aes(color = method, label = gene_name),
+    geom_text_repel(aes(color = level, label = gene_name),
 		    size = 3, fontface = "bold",
 		    min.segment.length = 0,
 		    segment.size = .2,
@@ -202,28 +201,39 @@ plot_colocs <- function(dat) {
     facet_wrap(~locus) +
     theme(axis.text = element_text(size = 12),
 	  panel.background = element_rect(fill = "grey96"),
-	  legend.position = "top") +
+	  legend.position = "top",
+	  legend.justification = "left",
+	  legend.margin = margin(l = -5, unit = 'cm')) +
     labs(x = "PP4", 
 	 y = NULL, 
-	 fill = "Method:")
+	 fill = "Level:")
 } 
 
 coloc_colors <- 
-    c("ge"= "tomato3", 
-      "exon" = "forestgreen", 
-      "tx" = "cornflowerblue", 
-      "txrev" = "midnightblue", 
-      microarray = "#F39B7FFF")
+    c("Gene"= "brown", 
+      "Exon" = pal_npg()(10)[9], 
+      "Transcript" = "cornflowerblue", 
+      "Splicing" = "midnightblue", 
+      "Microarray" = "#F39B7FFF")
 
-study_df <- "./data/coloc_input/eqtl_catalogue_paths.tsv" |>
+study_df <- 
+    "./data/coloc_input/eqtl_catalogue_paths.tsv" |>
     read_tsv() |>
     rename("author" = "study") |>
     mutate(study = basename(ftp_path),
 	   study = sub("\\.all\\.tsv\\.gz$", "", study),
 	   author = sub("_", " ", author),
-	   quant_method = factor(quant_method, 
-				 levels = c("ge", "exon", "tx", "txrev", "microarray"))) |>
-    select(study, author, tissue = tissue_label, condition = condition_label, method = quant_method)
+	   level = recode(quant_method, 
+			  "ge" = "Gene",
+			  "exon" = "Exon", 
+			  "tx" = "Transcript",
+			  "txrev" = "Splicing",
+			  "microarray" = "Microarray"),
+	   level = factor(level, levels = c("Gene", "Exon", "Transcript", "Splicing", "Microarray")),
+	   dataset = case_when(tissue_label != "LCL" ~ paste0(author, " (", tissue_label, " ", condition_label, ")"),
+			       tissue_label == "LCL" ~ paste0(author, " (", tissue_label, ")"))) |>
+    select(study, dataset, level)
+
 
 bentham_hits <- read_tsv("./data/bentham_top_hits.tsv")
 
@@ -240,6 +250,11 @@ plot_list <- bentham_colocs |>
 ggsave(filename = "coloc_plots.pdf", 
        plot = marrangeGrob(plot_list, nrow = 1, ncol = 1), 
        width = 8, height = 10)
+
+## Save PNG
+ggsave("./plots/spred2.png", plot_list[[5]])
+ggsave("./plots/blk.png", plot_list[[19]])
+
 
 
 bentham_colocs |>
