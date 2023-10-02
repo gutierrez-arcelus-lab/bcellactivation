@@ -1,0 +1,268 @@
+---
+title: "Low-input RNA-seq"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, 
+	       message = FALSE, 
+	       warning = FALSE, 
+	       comment = "#",
+	       dpi = 300)
+```
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(RColorBrewer)
+```
+
+## Set colors for PCA plot
+
+```{r}
+stims_order <-
+    c("Unstim_0hrs", "Unstim_4hrs", "Unstim_24hrs", "IL4_4hrs", "IL4_24hrs",
+      paste("CD40L", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      paste("BCR", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      paste("TLR7", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      paste("BCR-TLR7", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      paste("TLR9", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
+      paste("DN2", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"))
+      
+stim_colors <- 
+    c("white", "#e2e2e2", "#909090", "#474747", "#000000",
+      brewer.pal(n = 9, "YlOrRd")[c(1, 3, 4, 5)],
+      brewer.pal(n = 9, "Blues")[c(2, 4, 6, 8)],
+      brewer.pal(n = 9, "Greens")[c(2, 4, 6, 8)],
+      grep("cyan", colors(), value = TRUE)[c(8, 2, 4, 6)],
+      grep("pink", colors(), value = TRUE)[c(16, 7, 1, 4)],
+      "#f1c9bd", "#dd957f", "#c36144", "#a3280a")
+
+names(stim_colors) <- stims_order
+```
+
+## sample meta data
+
+```{r}
+sample_info <- read_tsv("./data/data/sample_decode.tsv") |>
+    separate(sample_name, c("donor_id", "stim", "timepoint"), sep = "_")
+```
+
+## expression data
+
+```{r}
+quant_df <- read_tsv("./data/data/lowinput_tpm.tsv") |>
+    pivot_longer(-(1:2), names_to = "sample_id", values_to = "tpm")
+```
+
+## select top 2,000 variable genes
+
+```{r}
+variable_genes <- quant_df |>
+    group_by(gene_id, gene_name) |>
+    summarise(v = var(tpm)) |>
+    ungroup() |>
+    top_n(2000, v) |>
+    arrange(desc(v))
+
+variable_matrix <- quant_df |>
+    filter(gene_id %in% variable_genes$gene_id) |>
+    select(-gene_name) |>
+    pivot_wider(names_from = gene_id, values_from = tpm) |>
+    column_to_rownames("sample_id") |>
+    as.matrix()
+```
+
+## Run PCA
+
+```{r}
+pca <- prcomp(variable_matrix, center = TRUE, scale. = TRUE)
+
+pc_scores <- as_tibble(pca$x, rownames = "sample_id")
+
+pc_eigenvals <- pca$sdev^2
+
+pc_varexp <- 
+    tibble(PC = paste0("PC", 1:length(pc_eigenvals)),
+	   variance = pc_eigenvals) |>
+    mutate(pct = round(variance/sum(variance) * 100, 1),
+           pct = paste0("(", pct, "%)")) |>
+    select(PC, pct) |>
+    unite("lab", c(PC, pct), sep = " ", remove = FALSE)
+```
+
+## Plot
+
+```{r, fig.height = 6}
+pca_df <- pc_scores |>
+    select(sample_id, PC1:PC2) |>
+    left_join(sample_info, join_by(sample_id)) |>
+    unite(stim, c("stim", "timepoint"), sep = "_") |>
+    mutate(stim = factor(stim, levels = stims_order))
+
+ggplot(pca_df, aes(PC1, PC2)) +
+    geom_point(aes(fill = stim), size = 4, shape = 21) +
+    scale_fill_manual(values = stim_colors) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          legend.key.height = unit(.25, "cm")) +
+    guides(fill = guide_legend(ncol = 1)) +
+    labs(x = pc_varexp$lab[1], y = pc_varexp$lab[2])
+
+```
+
+
+## Session info
+
+
+```{r}G
+devtools::session_info()
+```
+
+
+# Try DESeq2
+
+```{r}
+library(DESeq2)
+
+slice <- dplyr::slice
+
+dat <- read_rds("./wgcna/data/gene_expression.rds")
+
+sample_table <- 
+    tibble(sample_id = colnames(dat$counts)) |>
+    extract(sample_id, c("group"), "[^_]+_(.+)", remove = FALSE) |>
+    column_to_rownames("sample_id")
+
+dds <- 
+    DESeqDataSetFromTximport(dat, sample_table, ~1) |>
+    estimateSizeFactors() |>
+    {function(x) x[, colSums(counts(x)) > 2e6]}() |>
+    {function(x) x[rowSums(counts(x, normalized = TRUE) >= 10 ) >= 3, ]}() |>
+    vst()
+
+top_variable_genes <- 
+    rowVars(assay(dds)) |> 
+    setNames(rownames(assay(dds))) |>
+    enframe("gene_id", "var") |>
+    arrange(desc(var)) |>
+    slice(1:2000)
+
+
+## Transpose expression matrix to use with WGCNA
+count_matrix <- t(assay(dds)[top_variable_genes$gene_id, ])
+```
+
+## Run PCA
+
+```{r}
+pca_2 <- prcomp(count_matrix, center = TRUE, scale. = TRUE)
+
+pc_scores_2 <- as_tibble(pca_2$x, rownames = "sample_id")
+
+pc_eigenvals_2 <- pca_2$sdev^2
+
+pc_varexp_2 <- 
+    tibble(PC = paste0("PC", 1:length(pc_eigenvals_2)),
+	   variance = pc_eigenvals_2) |>
+    mutate(pct = round(variance/sum(variance) * 100, 1),
+           pct = paste0("(", pct, "%)")) |>
+    select(PC, pct) |>
+    unite("lab", c(PC, pct), sep = " ", remove = FALSE)
+```
+
+## Plot
+
+```{r, fig.height = 6}
+
+stim_colors_2 <- stim_colors
+names(stim_colors_2) <- sub("_", " ", names(stim_colors_2))
+names(stim_colors_2) <- sub("DN2", "DN cocktail", names(stim_colors_2))
+
+pca_df_2 <- 
+    pc_scores_2 |>
+    select(sample_id, PC1:PC2) |>
+    separate(sample_id, c("donor_id", "stim", "timep"), sep = "_") |>
+    mutate(condition = paste(stim, timep, sep = " "),
+	   condition = sub("DN2", "DN cocktail", condition),
+	   condition = factor(condition, levels = names(stim_colors_2)))
+
+pca_vst <- 
+    ggplot(pca_df_2, aes(PC1, PC2)) +
+    geom_point(aes(fill = condition), size = 4, shape = 21) +
+    scale_fill_manual("Condition:", values = stim_colors_2) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          legend.key.height = unit(.25, "cm"),
+	  legend.text = element_text(size = 8)) +
+    guides(fill = guide_legend(ncol = 1)) +
+    labs(x = pc_varexp_2$lab[1], y = pc_varexp_2$lab[2])
+
+ggsave("./plots/pca_vst.png", pca_vst, height = 5.25)
+```
+
+
+### DN2 only
+
+```{r}
+dds_dn2 <- 
+    DESeqDataSetFromTximport(dat, sample_table, ~1) |>
+    estimateSizeFactors() |>
+    {function(x) x[, colSums(counts(x)) > 2e6]}() |>
+    {function(x) x[, grepl("_Unstim_|_IL4_|_DN2_", colnames(x))]}() |>
+    {function(x) x[rowSums(counts(x, normalized = TRUE) >= 10 ) >= 3, ]}() |>
+    vst()
+
+top_variable_genes_dn2 <- 
+    rowVars(assay(dds_dn2)) |> 
+    setNames(rownames(assay(dds_dn2))) |>
+    enframe("gene_id", "var") |>
+    arrange(desc(var)) |>
+    slice(1:2000)
+
+## Transpose expression matrix to use with WGCNA
+count_matrix_dn2 <- t(assay(dds_dn2)[top_variable_genes_dn2$gene_id, ])
+
+pca_dn2 <- prcomp(count_matrix_dn2, center = TRUE, scale. = TRUE)
+
+pc_scores_dn2 <- as_tibble(pca_dn2$x, rownames = "sample_id")
+
+pc_eigenvals_dn2 <- pca_dn2$sdev^2
+
+pc_varexp_dn2 <- 
+    tibble(PC = paste0("PC", 1:length(pc_eigenvals_dn2)),
+	   variance = pc_eigenvals_dn2) |>
+    mutate(pct = round(variance/sum(variance) * 100, 1),
+           pct = paste0("(", pct, "%)")) |>
+    select(PC, pct) |>
+    unite("lab", c(PC, pct), sep = " ", remove = FALSE)
+
+stim_colors_dn2 <- stim_colors
+names(stim_colors_dn2) <- sub("_", " ", names(stim_colors_dn2))
+
+pca_df_dn2 <- 
+    pc_scores_dn2 |>
+    select(sample_id, PC1:PC2) |>
+    separate(sample_id, c("donor_id", "stim", "timep"), sep = "_") |>
+    mutate(condition = paste(stim, timep, sep = " "),
+	   condition = factor(condition, levels = names(stim_colors_dn2)))
+
+pca_vst_dn2 <- 
+    ggplot(pca_df_dn2, aes(PC1, PC2)) +
+    geom_point(aes(fill = condition), size = 4, shape = 21) +
+    scale_fill_manual("Condition:", values = stim_colors_dn2) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          legend.key.height = unit(.25, "cm"),
+	  legend.text = element_text(size = 8)) +
+    guides(fill = guide_legend(ncol = 1),
+	   alpha = "none") +
+    labs(x = pc_varexp_dn2$lab[1], y = pc_varexp_dn2$lab[2])
+
+ggsave("./plots/pca_vst_dn2.png", pca_vst_dn2, height = 4, width = 6)
+
+```
+
+

@@ -5,6 +5,7 @@ library(ggsci)
 library(ggbeeswarm)
 library(ComplexUpset)
 library(patchwork)
+library(gridExtra)
 
 stim_colors <- 
     c("IL4_0hrs" = "#dbdbdb",
@@ -58,15 +59,62 @@ cpm_df <-
     unnest(cols = data) |>
     select(sample_id, condition, stim, hours, gene_id, gene_name, obs_cpm, obs_logcpm)
 
-sle_genes <- read_tsv("../bcell_scrna/reported_genes.tsv")
-
 edger_results <- 
     read_tsv("./results/edger/results.tsv") |>
     mutate(stim = recode(stim, "BCR-TLR7" = "BCR+TLR7"),
 	   stim = factor(stim, levels = all_stims))
 
-selected_genes <- 
-    c("BACH2", "IL10", "BLK", "SOCS1", "STAT1", "TNFSF4")
+selected_genes <-
+    c(
+      "ARID5B",
+      "ATG5",
+      "BANK1",
+      "BLK", 
+      "CD44",
+      "CSK",
+      "DHCR7",
+      "ETS1",
+      "FCGR2A",
+      "LYST",
+      "IFIH1",
+      "IKBKE",
+      "IKZF1",
+      "IKZF2",
+      "IKZF3",
+      "IL10",
+      "IL12A",
+      "IRAK1",
+      "IRF5",
+      "IRF7",
+      "IRF8",
+      "ITGAM",
+      "ITGAX",
+      "JAZF1",
+      "MECP2",
+      "MIR146A",
+      "MIR3142HG",
+      "NCF2",
+      "PTPN22",
+      "PRDM1",
+      "PXK",
+      "RAD51B",
+      "SH2B3",
+      "SLC15A4",
+      "SOCS1",
+      "SPRED2",
+      "STAT1", 
+      "STAT4",
+      "TASL",
+      "TCF7",
+      "TNFAIP3",
+      "TNFSF4",
+      "TNIP1",
+      "TREX1",
+      "TYK2",
+      "UHRF1BP1",
+      "UBE2L3",
+      "WDFY4"
+    )
 
 cpm_plot_df <- cpm_df |>
     filter(gene_name %in% selected_genes)
@@ -80,16 +128,18 @@ p_vals <- edger_results |>
 	   p_lab = ifelse(fdr < 0.05, paste(p_lab, "*"), p_lab))
 
 out_plot <-
-    ggplot(data = cpm_plot_df) +
+    cpm_plot_df |>
+    {function(x) split(x, x$gene_name)}() |>
+    map(~ggplot(data = .x) +
 	geom_quasirandom(aes(x = hours, y = obs_cpm, fill = condition),
 			 method = "smiley", width = .2, 
-			 shape = 21, stroke = .2, size = 4) +
-	geom_text(data = p_vals, 
+			 shape = 21, stroke = .2, size = 3.5) +
+	geom_text(data = filter(p_vals, gene_name %in% unique(.x$gene_name)),
 		  aes(x = 0.5, y = cpm * 1.25, label = p_lab),
 		  hjust = "inward", vjust = "inward", size = 4) +
 	scale_fill_manual(values = stim_colors) + 
-	facet_grid(gene_name~fct_relevel(stim, levels(cpm_plot_df)),
-		   scale = "free", space = "free_x") +
+	facet_grid(.~fct_relevel(stim, levels(cpm_plot_df)),
+		   scale = "free", space = "free_x", drop = TRUE) +
 	theme(panel.grid.minor = element_blank(),
 	      panel.grid.major.x = element_blank(),
 	      panel.background = element_rect(fill = "grey96"),
@@ -97,11 +147,16 @@ out_plot <-
 	      strip.text.y = element_text(angle = 0, size = 12),
 	      axis.text = element_text(size = 12),
 	      axis.title = element_text(size = 14),
-	      legend.position = "none") +
-	labs(x = NULL, y = "Normalized counts")
+	      legend.position = "none",
+	      plot.margin = margin(3.2, 0.1, 3.2, 0.1, unit = "in")) +
+	labs(x = NULL, y = "Normalized counts", title = unique(.x$gene_name)))
 
-ggsave("./plots/timecourse_topgenes.png", out_plot, width = 12, height = 8, dpi = 300)
-
+walk(names(out_plot), 
+     ~ggsave(sprintf("./plots/plots_timecourse/%s.pdf", .x), 
+	     out_plot[[.x]], 
+	     width = 11,
+	     height = 8.5,
+	     dpi = 300))
 
 
 

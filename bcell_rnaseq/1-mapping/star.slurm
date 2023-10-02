@@ -9,32 +9,35 @@
 #SBATCH --job-name=STAR
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /temp_work/ch229163/log/STAR-%A-%a
+#SBATCH -o /temp_work/ch229163/log/STAR-%A-%a.out
+#SBATCH -e /temp_work/ch229163/log/STAR-%A-%a.err
 
 source /programs/biogrids.shrc
-export STAR_X=2.7.9a
+STAR=/lab-share/IM-Gutierrez-e2/Public/vitor/software/STAR/STAR_2.7.11a/Linux_x86_64_static/STAR
 
 # INPUT
-FQDIR=/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_rnaseq/QC 
-META=/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_rnaseq/metadata.tsv
-SUBJECTID=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $1 }' )
+LABSHR=/lab-share/IM-Gutierrez-e2/Public 
+DIR=${LABSHR}/Lab_datasets/B_cells_rnaseq 
+META=${DIR}/metadata.tsv
+DONORID=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $1 }' )
 SAMPLEID=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $2 }' )
 STIM=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $3 }' )
 FQ1=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $4 }' )
 FQ2=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $5 }' )
+FQDIR=${TEMP_WORK}/fastq/highinput 
 FQ1qc=${FQDIR}/$( echo $FQ1 | sed 's|.fastq.gz|_val_1.fq.gz|' )
 FQ2qc=${FQDIR}/$( echo $FQ2 | sed 's|.fastq.gz|_val_2.fq.gz|' )
 
-VCF=${SLURM_SUBMIT_DIR}/data/${SUBJECTID}.vcf.gz
+VCF=${LABSHR}/vitor/lupus/bcell_rnaseq/0-genotypes/data/${DONORID}.vcf.gz
 
 # INDEX
-INDEX=/lab-share/IM-Gutierrez-e2/Public/vitor/lupus/indices/starindex_100
+INDEX=/lab-share/IM-Gutierrez-e2/Public/vitor/lupus/indices/STAR
 
 # OUTPUT
-OUT=${SLURM_SUBMIT_DIR}/mapping/${SAMPLEID}_${STIM}
+OUT=${TEMP_WORK}/bam/highinput/${SAMPLEID}_${STIM} 
 
-# EXECUTE
-STAR --runMode alignReads \
+# Run mapping
+$STAR --runMode alignReads \
     --runThreadN $SLURM_CPUS_PER_TASK \
     --genomeDir $INDEX \
     --readFilesIn $FQ1qc $FQ2qc \

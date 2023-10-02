@@ -8,7 +8,6 @@ stim_colors <- c("unstday0" = "grey",
 		 "TLR7" = "#91D1C2FF",
 		 "DN2" = "#E64B35FF")
 # QC
-
 qc_df <- 
     "/home/ch229163/labshr/Lab_datasets/B_cells_rnaseq/QC/multiqc_data/mqc_fastqc_sequence_counts_plot_1.txt" |>
     read_tsv() |>
@@ -53,13 +52,13 @@ ggsave("./plots/total_reads.png", total_reads, width = 10, height = 5)
 
 
 # PCA 
-quant <- read_tsv("./quantifications_genes.tsv")
+quant <- read_tsv("./results/salmon_genes.tsv")
 
 variable_genes <- quant |>
     group_by(gene_id, gene_name) |>
     summarise(v = var(tpm)) |>
     ungroup() |>
-    top_n(2000, v) |>
+    top_n(5000, v) |>
     arrange(desc(v))
 
 variable_matrix <- quant |>
@@ -84,23 +83,31 @@ var_exp <- pca |>
 
 pc_scores <- as_tibble(pca$x, rownames = "id")
 
-pca_df <- pc_scores %>%
-    separate(id, c("sample_id", "stim"), sep = "_") %>%
+pca_df <- pc_scores |>
+    separate(id, c("sample_id", "stim"), sep = "_") |>
     mutate(stim = factor(stim, levels = names(stim_colors)))
 
 pca_plot <- ggplot(pca_df, aes(PC1, PC2)) +
-    geom_point(aes(fill = stim), size = 4, shape = 21) +
+    geom_point(aes(fill = stim), alpha = .25, size = 4, shape = 21) +
+    ggrepel::geom_text_repel(aes(label = sample_id, color = stim),
+			     fontface = "bold", size = 2.5, 
+			     max.overlaps = 1000, min.segment.length = 0,
+			     show.legend = FALSE) +
+    scale_color_manual(values = stim_colors) +
     scale_fill_manual(values = stim_colors) +
     theme_minimal() +
     theme(text = element_text(size = 14),
 	  panel.grid = element_blank(),
-          legend.key.height = unit(.25, "cm")) +
+          legend.key.height = unit(.25, "cm"),
+	  legend.position = c(.9, .1)) +
     guides(fill = guide_legend(ncol = 1))
 
 pca_out <- plot_grid(var_exp, pca_plot, nrow = 1, rel_widths = c(.5, 1)) +
     theme(plot.background = element_rect(fill = "white", color = "white"))
 
-ggsave("./plots/pca.png", pca_out, width = 8, height = 5)
+ggsave("./plots/pca.png", pca_out, width = 8, height = 4)
+
+ggsave("./plots/pca_labels.png", pca_plot + theme(plot.background = element_rect(fill = "white", color = "white")))
 
 
 # Edger
@@ -111,22 +118,46 @@ cpm_df <- read_tsv("./edger_cpm.tsv") |>
 edger_res <- read_tsv("./edger_results.tsv") |>
     mutate(stim_test = factor(stim_test, levels = c("BCR", "TLR7", "DN2")))
 
+fold_change_summ <- 
+    edger_res |> 
+    group_by(stim = stim_test, is_up = logFC >= 0) |>
+    summarise(n = sum(abs(logFC) >= 1 & FDR < .05)) |>
+    ungroup() |>
+    mutate(is_up = recode(as.character(is_up), "FALSE" = "Down", "TRUE" = "Up")) |>
+    ggplot(aes(x = is_up, y = n, fill = stim)) +
+	geom_col() +
+	scale_fill_manual(values = c("BCR" = "#6996e3", "TLR7" = "#748f46", "DN2" = "#d76b51")) +
+	facet_wrap(~stim, nrow = 1) +
+	theme_minimal() +
+	theme(legend.position = "none",
+	      panel.grid.major.y = element_blank(),
+	      plot.background = element_rect(color = "white", fill = "white")) +
+	labs(x = "Up/Down regulated", y = "Number of genes")
+
+ggsave("./plots/fold_change_summary.png", 
+       fold_change_summ, 
+       width = 4, height = 3, dpi = 600)
+
+
+
 sle_genes <- read_tsv("../bcell_scrna/reported_genes.tsv")
 
-plot_fc <- edger_res |> 
+plot_fc <- 
+    edger_res |> 
     filter(gene_name %in% sle_genes$gene, FDR < 0.05) |>
     group_by(stim_test) |>
     top_n(25, abs(logFC)) |>
     ungroup() |>
     ggplot(aes(x = logFC,y = reorder_within(gene_name, within = stim_test, by = logFC))) +
-	geom_col(aes(fill = logFC)) +
+	geom_col(aes(fill = stim_test)) +
 	scale_y_reordered() +
-	scale_fill_gradient2() +
+	scale_fill_manual(values = c("BCR" = "#6996e3", "TLR7" = "#748f46", "DN2" = "#d76b51")) +
 	facet_wrap(~stim_test, nrow = 1, scales = "free") +
 	theme_bw() +
-	theme(legend.position = "none",
+	theme(text = element_text(size = 12),
+	      legend.position = "none",
 	      panel.grid.minor.x = element_blank()) +
-	labs(y = NULL)
+	labs(x = "log2 Fold-change", y = NULL)
 
 ggsave("./plots/fold_change.png", plot_fc, width = 10, height = 5)
 
@@ -176,6 +207,70 @@ goplot <- ggplot(go_res) +
 	       labeller = labeller(Term = label_wrap_gen(width = 25))) +
     theme_bw() +
     theme(legend.position = "none") +
+    scale_shape_manual(values = 1:nlevels(mbv_df$donor_vcf) - 1) +
     labs(x = NULL)
 
 ggsave("./plots/go.png", goplot, width = 10, height = 6)
+
+
+# MBV analysis
+
+mbv_files <- list.files("./results/mbv/")
+
+mbv_df <- file.path("./results/mbv", mbv_files) |>
+    setNames(mbv_files) |>
+    map_dfr(~read_delim(., delim = " "), .id = "bam") |>
+    extract(bam, c("donor_id_bam", "bam_stim"), "(\\d+\\.\\d)_([^.]+)\\.txt") |>
+    separate(donor_id_bam, c("donor_bam", "rep_bam"), sep = "\\.", remove = FALSE) |>
+    extract(SampleID, c("donor_vcf"), "\\d+_[^-]+-(\\d+)")
+
+donor_id_order <- mbv_df |> 
+    distinct(donor_id_bam, bam_stim) |> 
+    count(donor_id_bam) |>
+    arrange(desc(n), donor_id_bam) |>
+    pull(donor_id_bam)
+
+mbv_df <- 
+    mbv_df |>
+    mutate(donor_id_bam = factor(donor_id_bam, levels = donor_id_order),
+	   bam_stim = factor(bam_stim, levels = c("unstday0", "TLR7", "BCR", "DN2")), 
+	   id_match = donor_bam == donor_vcf,
+	   lab = ifelse(id_match == FALSE & perc_hom_consistent > .8 & perc_het_consistent > .8,
+			donor_vcf,
+			NA))
+
+mbv_plot <- 
+    ggplot(mbv_df, 
+       aes(perc_het_consistent, perc_hom_consistent)) +
+    geom_point(aes(color = id_match), size = 2, shape = 1, stroke = 2) +
+    ggrepel::geom_text_repel(aes(label = lab), 
+			     size = 3,
+			     min.segment.length = 0,
+			     fontface = "bold") +
+    scale_color_manual(values = c("TRUE" = "midnightblue", "FALSE" = "tomato2")) +
+    scale_x_continuous(limits = c(0, 1), 
+		       breaks = seq(0, 1, .5), 
+		       labels = c("0", "0.5", "1")) + 
+    scale_y_continuous(limits = c(0, 1), 
+		       breaks = seq(0, 1, .5),
+		       labels = c("0", "0.5", "1")) +
+    facet_wrap(donor_id_bam~bam_stim, ncol = 8) +
+    theme_bw() +
+    theme(text = element_text(size = 12),
+	  panel.grid = element_blank(),
+	  legend.position = c(.9, .025)) +
+    labs(color = "Sample ID\nmatch",
+	 x = "Fraction concordant heterozygous sites",
+	 y = "Fraction concordant homozygous sites")
+
+ggsave("./plots/mbv.png", mbv_plot, width = 10, height = 12)
+
+mbv_df |>
+    group_by(donor_id_bam) |>
+    filter(!any(perc_hom_consistent > .8 & perc_het_consistent > .8)) |>
+    select(donor_id_bam, bam_stim:id_match) |>
+    print(n = Inf, width = Inf)
+
+mbv_df |>
+    filter(donor_bam == "10051708") |>
+    print(width = Inf)

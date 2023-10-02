@@ -28,7 +28,7 @@ FQ2qc=${FQDIR}/$( echo $FQ2 | sed 's|.fastq.gz|_val_2.fq.gz|' )
 INDEX=/lab-share/IM-Gutierrez-e2/Public/vitor/lupus/indices/SALMON
 
 # OUTPUT
-OUT=${SLURM_SUBMIT_DIR}/results/${SAMPLEID}_${STIM}
+OUT=${SLURM_SUBMIT_DIR}/results/salmon/${SAMPLEID}_${STIM}
 mkdir -p $OUT
 
 # EXECUTE

@@ -23,11 +23,6 @@ count <- dplyr::count
 select <- dplyr::select
 
 
-png("./plots/test.png")
-plot(1:10, pch = 19, cex = 4, col = ggsci::pal_npg()(10))
-dev.off()
-
-
 # Set colors
 npg_colors <- ggsci::pal_npg()(10)
 
@@ -53,7 +48,6 @@ sample_table <-
 edger_res <- read_tsv("../results/edger/results.tsv")
 
 stim_i <- "DN2"
-plot_counter <- 0
 
 ## Use genes that are significant in the time course
 sig_genes <- edger_res |>
@@ -114,10 +108,8 @@ meank_p <-
     geom_line() +
     theme_bw()
 
-plot_counter <- plot_counter + 1L
-ggsave(glue("./plots/wgcna_{stim_i}_{plot_counter}_sft.png"), 
+ggsave(glue("./plots/wgcna_{stim_i}_sft.png"), 
        rsq_p | meank_p, height = 3, width = 7)
-
 
 ## Build WGCNA network 
 ## we need to reassing the 'cor()' function to avoid a bug in WGCNA
@@ -145,18 +137,23 @@ cor <- stats::cor
 ## Gene classification into modules
 module_genes <- enframe(network$colors, "gene_id", "module")
 
+valid_modules <- module_genes |>
+    count(module, sort = T) |>
+    filter(module != "grey") |>
+    pull(module)
+
+
 ## Module eigengenes
 ## A module eigengene is like a hypothetical gene the represents the module
 module_eigen <- as_tibble(network$MEs, rownames = "sample_name")
 
 # Save data for analysis of module preservation across stims
-write_tsv(module_genes, glue("./data/wgcna_{stim_i}_modules.tsv"))
-write_tsv(module_eigen, glue("./data/wgcna_{stim_i}_eigen.tsv"))
-write_rds(count_matrix, glue("./data/wgcna_{stim_i}_counts.rds"))
+#write_tsv(module_genes, glue("./data/wgcna_{stim_i}_modules.tsv"))
+#write_tsv(module_eigen, glue("./data/wgcna_{stim_i}_eigen.tsv"))
+#write_rds(count_matrix, glue("./data/wgcna_{stim_i}_counts.rds"))
 
 ## plot dendogram to visualize modules
-plot_counter <- plot_counter + 1L
-png(glue("./plots/wgcna_{stim_i}_{plot_counter}_dendro.png"), 
+png(glue("./plots/wgcna_{stim_i}_dendro.png"), 
     width = 10, height = 6, unit = "in", res = 200)
 plotDendroAndColors(network$dendrograms[[1]], 
 		    recolor(network$colors),
@@ -172,30 +169,28 @@ eigengene_tree <-
     as.dist(1 - bicor(select(network$MEs, -MEgrey))) |>
     hclust(method = "average")
 
-plot_counter <- plot_counter + 1L
-png(glue("./plots/wgcna_{stim_i}_{plot_counter}_metree.png"), 
+png(glue("./plots/wgcna_{stim_i}_metree.png"), 
     width = 8, height = 8, unit = "in", res = 300)
 plot(eigengene_tree, main = "Clustering of module eigengenes", xlab = "", sub = "")
 abline(h = cut_height, col = "red")
 dev.off()
 
 # plot TOM
-sim_tom <- 
-    TOMsimilarityFromExpr(count_matrix, 
-			  corType = "bicor",
-			  networkType = "signed",
-			  power = beta_power,
-			  nThreads = 4)
-	
-diss_tom <- 1 - sim_tom
-gene_tree <- hclust(as.dist(diss_tom), method = "average")
-diag(diss_tom) <- NA
-
-plot_counter <- plot_counter + 1L
-png(glue("./plots/wgcna_{stim_i}_{plot_counter}_tom.png"), 
-    unit = "in", height = 6, width = 6, res = 200)
-TOMplot(diss_tom^8, gene_tree, Colors = network$colors, col = heat.colors(256))
-dev.off()
+#sim_tom <- 
+#    TOMsimilarityFromExpr(count_matrix, 
+#			  corType = "bicor",
+#			  networkType = "signed",
+#			  power = beta_power,
+#			  nThreads = 4)
+#	
+#diss_tom <- 1 - sim_tom
+#gene_tree <- hclust(as.dist(diss_tom), method = "average")
+#diag(diss_tom) <- NA
+#
+#png(glue("./plots/wgcna_{stim_i}_tom.png"), 
+#    unit = "in", height = 6, width = 6, res = 200)
+#TOMplot(diss_tom^8, gene_tree, Colors = network$colors, col = heat.colors(256))
+#dev.off()
 
 
 ## Plot trends
@@ -230,12 +225,10 @@ top_kme <- kme_df |>
 top_kme_counts <- 
     top_kme |>
     left_join(scaled_mean_counts, join_by(gene_id)) |>
-    mutate(module = str_remove(module, "^kME"))
+    mutate(module = str_remove(module, "^kME"),
+	   module = factor(module, levels = valid_modules))
 
-module_colors <- top_kme_counts |> 
-    distinct(module) |>
-    pull(module) |>
-    {function(x) setNames(x, x)}()
+module_colors <- setNames(recolor(valid_modules), valid_modules)
 
 mod_summ <- module_eigen |>
     column_to_rownames("sample_name") |>
@@ -247,9 +240,10 @@ mod_summ <- module_eigen |>
     group_by(timep, module) |>
     summarise(value = mean(value)) |>
     ungroup() |>
+    filter(module != "grey") |>
     mutate(timep = str_remove(timep, "hrs$"),
-	   timep = factor(as.integer(timep))) |>
-    filter(module != "grey")
+	   timep = factor(as.integer(timep)),
+	   module = factor(module, levels = valid_modules))
 
 trends_plot <- 
     ggplot(data = top_kme_counts,
@@ -260,17 +254,64 @@ trends_plot <-
 	      aes(x = timep, y = value, group = module)) +
     geom_vline(xintercept = unique(top_kme_counts$timep), 
 	       linetype = 2, linewidth = .1) +
-    scale_color_manual(values = recolor(module_colors)) +
+    scale_color_manual(values = module_colors) +
     facet_wrap(~module, scale = "free", nrow = 2) +
     theme_bw() +
     theme(panel.grid = element_blank(),
 	  legend.position = "none") +
     labs(x = "Hours", y = "Average scaled expression")
 
-plot_counter <- plot_counter + 1L
-ggsave(glue("./plots/wgcna_{stim_i}_{plot_counter}_trends.png"), trends_plot, 
+ggsave(glue("./plots/wgcna_{stim_i}_trends.png"), trends_plot, 
 	    height = 3.5, width = 7)
-    
+   
+# For presentation:
+#pres_order <- 
+#    c("Quick down and up", "Quick down and slow up", "Quick up – Quick down", 
+#      "Quick up – peak at 24 hrs", "Late activation", "Constant down")
+#
+#top_kme_counts_pres <- 
+#    top_kme_counts |>
+#    mutate(facet_lab = fct_recode(module,
+#			       "Constant down" = "turquoise",
+#			       "Quick up – Quick down" = "blue",
+#			       "Quick up – peak at 24 hrs" = "brown",
+#			       "Late activation" = "yellow",
+#			       "Quick down and up" = "green",
+#			       "Quick down and slow up" = "red"),
+#	   facet_lab = factor(facet_lab, levels = pres_order))
+#
+#mod_summ_pres <- 
+#    mod_summ |>
+#    mutate(facet_lab = fct_recode(module,
+#			       "Constant down" = "turquoise",
+#			       "Quick up – Quick down" = "blue",
+#			       "Quick up – peak at 24 hrs" = "brown",
+#			       "Late activation" = "yellow",
+#			       "Quick down and up" = "green",
+#			       "Quick down and slow up" = "red"),
+#	   facet_lab = factor(facet_lab, levels = pres_order))
+#   
+#trends_plot_pres <- 
+#    ggplot(data = top_kme_counts_pres,
+#	   aes(x = timep, y = mean_scaled_counts)) +
+#    geom_line(aes(group = gene_id, color = module), 
+#	      alpha = .05) +
+#    geom_line(data = mod_summ_pres, 
+#	      aes(x = timep, y = value, group = module)) +
+#    geom_vline(xintercept = unique(top_kme_counts$timep), 
+#	       linetype = 2, linewidth = .1) +
+#    scale_color_manual(values = module_colors) +
+#    facet_wrap(~facet_lab, scale = "free", nrow = 2) +
+#    theme_bw() +
+#    theme(panel.grid = element_blank(),
+#	  legend.position = "none") +
+#    labs(x = "Hours", y = "Average scaled expression")
+#
+#ggsave(glue("./plots/wgcna_{stim_i}_trends_pres.png"), trends_plot_pres, 
+#	    height = 3.5, width = 7)
+#
+#
+
 # GO
 run_enrichment <- function(gene_list) {
 
@@ -310,57 +351,53 @@ go_res <-
 #    separate_rows(gene_id, sep = "/") |>
 #    filter(gene_id == "STAT1")
 
-go_res_top50 <- go_res |>
+go_res_top <- go_res |>
     map_df(as_tibble, .id = "module") |>
-    mutate(Description = str_trunc(Description, width = 50)) |>
+    mutate(Description = str_trunc(Description, width = 36)) |>
     group_by(module, Description) |>
     slice_max(-log10(pvalue)) |>
     group_by(module) |>
-    top_n(50, -log10(pvalue)) |>
-    ungroup()
+    top_n(10, -log10(pvalue)) |>
+    ungroup() |>
+    mutate(module = factor(module, levels = valid_modules))
 
 go_plot <- 
-    ggplot(data = go_res_top50, 
-       aes(x = -log10(pvalue), 
+    ggplot(data = go_res_top, 
+       aes(x = "1", 
 	   y = reorder_within(Description, by = -log10(pvalue), within = module))) +
-    geom_col(aes(fill = -log10(pvalue))) +
-    scale_x_continuous(limits = c(0, max(-log10(go_res_top50$pvalue)))) +
+    geom_point(aes(fill = -log10(pvalue), size = Count), shape = 21, stroke = .25) +
     scale_y_reordered() +
-    scale_fill_gradient(low = "goldenrod1", high = "red") +
-    facet_wrap(~module, nrow = 2, scale = "free") +
-    theme_bw() +
-    theme(axis.text.x = element_text(size = 14),
+    scale_fill_gradient(low = "beige", high = "tomato4") +
+    facet_wrap(~module, nrow = 2, scale = "free_y", drop = FALSE) +
+    theme_minimal() +
+    theme(axis.text.x = element_blank(),
 	  axis.text.y = element_text(size = 12),
 	  axis.title = element_blank(),
 	  panel.grid = element_blank(),
-	  legend.position = "none",
+	  legend.position = "top",
 	  legend.text = element_text(size = 14),
 	  plot.background = element_rect(fill = "white", color = "white"),
+	  plot.margin = margin(r = 1, l = 1, unit = "cm"),
 	  strip.text = element_text(size = 14),
 	  strip.clip = "off") +
     labs(fill = expression("-log"["10"]("p"))) +
-    guides(fill = guide_colorbar(barheight = 1, barwidth = 10)) +
+    guides(fill = guide_colorbar(barheight = .7, barwidth = 10),
+	   size = guide_legend(override.aes = list(fill = "black"))) +
     coord_cartesian(clip = "off")
 
-plot_counter <- plot_counter + 1L
-ggsave(glue("./plots/wgcna_{stim_i}_{plot_counter}_go.png"), 
-       go_plot, width = 26, height = 18, dpi = 300)
+ggsave(glue("./plots/wgcna_{stim_i}_go.png"), 
+       go_plot, width = 11, height = 7, dpi = 300)
 #
-#
-#
-#
-plot_counter <- plot_counter + 1L
-ggsave(glue("./plots/wgcna_{stim_i}_{plot_counter}_go.png"), go_plot, width = 18, height = 12)
 
 # Plot correlation between Lupus-associated genes and modules in a heatmap
-
 # List of Lupus-associated genes
 sle_genes <- 
     c("PTPN22", "FCGR2A", "TNFSF4", "NCF2", "SPRED2", "IFIH1", "STAT1", "STAT4",
       "IKZF1", "IKZF2", "IKZF3", "PXK", "IL12A", "BANK1", "BLK", "TCF7", "SKP1",
       "TNIP1", "MIR3142HG", "C4A", "C4B", "PRDM1", "TNFAIP3", "IRF5", "IRF7", "IRF8",
       "WDFY4", "ARID5B", "CD44", "ETS1", "SH2B3", "SLC15A4", "CSK", "CIITA", "SOCS1", 
-      "CLEC16A", "ITGAM", "ITGAX", "GSDMB", "ORMDL3", "TYK2", "UBE2L3", "NR4A1", "MYC")
+      "CLEC16A", "ITGAM", "ITGAX", "GSDMB", "ORMDL3", "TYK2", "UBE2L3", "NR4A1", "MYC", "TREX1",
+      "TLR7", "IRAK1")
 
 gene_names <- distinct(edger_res, gene_id, gene_name)  
 
@@ -370,13 +407,13 @@ sle_genes_cormatrix <-
     left_join(kme_df, join_by(gene_id)) |>
     mutate(module = str_remove(module, "^kME")) |>
     filter(!is.na(module), module != "grey") |>
+    mutate(module = factor(module, levels = valid_modules)) |>
     select(-gene_id) |>
     pivot_wider(names_from = module, values_from = value) |>
     column_to_rownames("gene_name") |>
     data.matrix()
 
-plot_counter <- plot_counter + 1L
-png(glue("./plots/wgcna_{stim_i}_{plot_counter}_slegenes.png"), 
+png(glue("./plots/wgcna_{stim_i}_slegenes.png"), 
     units = "in", height = 8, width = 4, res = 400)
 pheatmap(sle_genes_cormatrix,
 	 fontsize = 9,
@@ -384,55 +421,53 @@ pheatmap(sle_genes_cormatrix,
 	 legend_breaks = seq(-1, 1, by = .25))
 dev.off()
 
-# Interferon genes
-pathways <- 
-    "/lab-share/IM-Gutierrez-e2/Public/References/msigdb/h.all.v2022.1.Hs.symbols.gmt.txt" |>
-    fgsea::gmtPathways() |>
-    {function(x) keep(x, grepl("interferon", names(x), ignore.case = TRUE))}()
-
-ifn_alpha_cormatrix <- 
-    gene_names |>
-    filter(gene_name %in% pathways[[1]]) |>
-    left_join(kme_df, join_by(gene_id)) |>
-    mutate(module = str_remove(module, "^kME")) |>
-    filter(!is.na(module), module != "grey") |>
-    select(-gene_id) |>
-    pivot_wider(names_from = module, values_from = value) |>
-    column_to_rownames("gene_name") |>
-    data.matrix()
-
-ifn_gamma_cormatrix <- 
-    gene_names |>
-    filter(gene_name %in% pathways[[2]]) |>
-    left_join(kme_df, join_by(gene_id)) |>
-    mutate(module = str_remove(module, "^kME")) |>
-    filter(!is.na(module), module != "grey") |>
-    select(-gene_id) |>
-    pivot_wider(names_from = module, values_from = value) |>
-    column_to_rownames("gene_name") |>
-    data.matrix()
-
-plot_counter <- plot_counter + 1L
-png(glue("./plots/wgcna_{stim_i}_{plot_counter}_ifna.png"), 
-    units = "in", height = 14, width = 4, res = 400)
-pheatmap(ifn_alpha_cormatrix,
-	 fontsize = 9,
-	 color = colorRampPalette(rev(brewer.pal(n = 7, name ="RdYlBu")))(100),
-	 legend_breaks = seq(-1, 1, by = .25))
-dev.off()
-
-plot_counter <- plot_counter + 1L
-png(glue("./plots/wgcna_{stim_i}_{plot_counter}_ifng.png"), units = "in", height = 18, width = 4, res = 400)
-pheatmap(ifn_gamma_cormatrix,
-	 fontsize = 9,
-	 color = colorRampPalette(rev(brewer.pal(n = 7, name ="RdYlBu")))(100),
-	 legend_breaks = seq(-1, 1, by = .25))
-dev.off()
-
-
-
-
-
+## Interferon genes
+#pathways <- 
+#    "/lab-share/IM-Gutierrez-e2/Public/References/msigdb/h.all.v2022.1.Hs.symbols.gmt.txt" |>
+#    fgsea::gmtPathways() |>
+#    {function(x) keep(x, grepl("interferon", names(x), ignore.case = TRUE))}()
+#
+#ifn_alpha_cormatrix <- 
+#    gene_names |>
+#    filter(gene_name %in% pathways[[1]]) |>
+#    left_join(kme_df, join_by(gene_id)) |>
+#    mutate(module = str_remove(module, "^kME")) |>
+#    filter(!is.na(module), module != "grey") |>
+#    select(-gene_id) |>
+#    pivot_wider(names_from = module, values_from = value) |>
+#    column_to_rownames("gene_name") |>
+#    data.matrix()
+#
+#ifn_gamma_cormatrix <- 
+#    gene_names |>
+#    filter(gene_name %in% pathways[[2]]) |>
+#    left_join(kme_df, join_by(gene_id)) |>
+#    mutate(module = str_remove(module, "^kME")) |>
+#    filter(!is.na(module), module != "grey") |>
+#    select(-gene_id) |>
+#    pivot_wider(names_from = module, values_from = value) |>
+#    column_to_rownames("gene_name") |>
+#    data.matrix()
+#
+#png(glue("./plots/wgcna_{stim_i}_ifna.png"), 
+#    units = "in", height = 14, width = 4, res = 400)
+#pheatmap(ifn_alpha_cormatrix,
+#	 fontsize = 9,
+#	 color = colorRampPalette(rev(brewer.pal(n = 7, name ="RdYlBu")))(100),
+#	 legend_breaks = seq(-1, 1, by = .25))
+#dev.off()
+#
+#png(glue("./plots/wgcna_{stim_i}_ifng.png"), units = "in", height = 18, width = 4, res = 400)
+#pheatmap(ifn_gamma_cormatrix,
+#	 fontsize = 9,
+#	 color = colorRampPalette(rev(brewer.pal(n = 7, name ="RdYlBu")))(100),
+#	 legend_breaks = seq(-1, 1, by = .25))
+#dev.off()
+#
+#
+#
+#
+#
 ## Hub genes
 #hub_genes <- 
 #    chooseTopHubInEachModule(count_matrix, 
@@ -498,16 +533,16 @@ dev.off()
 #dev.off()
 
 
-# Network visualization
-green_genes <- module_genes |>
-    filter(module == "green") |>
-    pull(gene_id)
-
-adj_green <- adjacency(count_matrix[, green_genes], power = beta_power, type = "signed")
-tom_green = TOMsimilarity(adj_green, TOMType = "signed")
-
-
-
-
-
-
+## Network visualization
+#green_genes <- module_genes |>
+#    filter(module == "green") |>
+#    pull(gene_id)
+#
+#adj_green <- adjacency(count_matrix[, green_genes], power = beta_power, type = "signed")
+#tom_green <- TOMsimilarity(adj_green, TOMType = "signed")
+#
+#
+#tom_green[1:5, 1:5]
+#
+#
+#
