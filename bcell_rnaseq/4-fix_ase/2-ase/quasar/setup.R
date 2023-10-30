@@ -1,9 +1,10 @@
+# Make a VCF with variants originally selected for ASE
+# to compute their AFs in MGB
+
 library(tidyverse)
 
 if (!file.exists("data")) dir.create("data")
 
-# Make a VCF with variants originally selected for ASE
-# to compute their AFs in MGB
 vcf <-
     "../../0-genotypes/data/allchr.mgb.vcf.gz" |>
     read_tsv(comment = "##")

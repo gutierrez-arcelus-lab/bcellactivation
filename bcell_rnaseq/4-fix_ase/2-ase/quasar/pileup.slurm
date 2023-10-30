@@ -5,7 +5,7 @@
 #SBATCH --mem=24gb
 #SBATCH --time=24:00:00 
 #SBATCH -p bch-compute 
-#SBATCH --array=1-4
+#SBATCH --array=1-74
 #SBATCH --job-name=QuASAR
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
@@ -43,3 +43,4 @@ Rscript $PILEUPtoQUASAR ${TEMP_WORK}/quasar/${PREFIX}.pileup.bed.gz $MINCOV
 # QuASAR script writes output to SUBMIT_DIR
 # Move files to TEMP dir instead
 mv ${SLURM_SUBMIT_DIR}/${PREFIX}.quasar.in.gz ${TEMP_WORK}/quasar/ 
+rm ${TEMP_WORK}/quasar/${PREFIX}.pileup.bed.gz 

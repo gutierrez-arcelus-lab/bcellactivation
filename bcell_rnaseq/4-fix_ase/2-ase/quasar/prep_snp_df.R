@@ -4,8 +4,8 @@ snp_info <-
     "/temp_work/ch229163/vcf/quasar/chr%s.merged.info.vcf.gz" |>
     sprintf(c(1:22, "X")) |>
     map_dfr(~read_tsv(., comment = "##") |>
-	    mutate(af = str_extract(INFO, "(?<=AF=)[0-9.]+"),
-		   hwe = str_extract(INFO, "(?<=HWE=)[0-9.]+")) |>
+	    mutate(af = str_extract(INFO, "(?<=AF=)[^;]+"),
+		   hwe = str_extract(INFO, "(?<=HWE=)[^;]+")) |>
 	    mutate_at(vars(af, hwe), as.numeric) |>
 	    select(chr = `#CHROM`, pos = POS, snp_id = ID, ref = REF, alt = ALT, af, hwe))
 
