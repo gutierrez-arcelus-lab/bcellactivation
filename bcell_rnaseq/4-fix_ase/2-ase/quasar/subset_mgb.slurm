@@ -25,7 +25,7 @@ VCFVAR=${SLURM_SUBMIT_DIR}/data/variants.vcf.gz
 PREFIX=${TEMP_WORK}/vcf/quasar/${CHR}_${BATCH} 
 VCFOUT=${PREFIX}.vcf.gz
      
-bcftools isec  --threads $SLURM_CPUS_PER_TASK -c none -n=2 -w2 $VCFVAR $VCFIN |\
+bcftools isec --threads $SLURM_CPUS_PER_TASK -c none -n=2 -w2 $VCFVAR $VCFIN |\
     bcftools view --threads $SLURM_CPUS_PER_TASK --samples-file $IDS --force-samples - |\
     bcftools annotate --threads $SLURM_CPUS_PER_TASK -x INFO,FORMAT -O z -o $VCFOUT -
 

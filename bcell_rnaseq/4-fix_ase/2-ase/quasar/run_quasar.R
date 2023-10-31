@@ -1,5 +1,6 @@
 library(tidyverse)
 library(QuASAR)
+library(qvalue)
 
 system("export BEDTOOLS_X=2.31.0")
 temp_dir <- system("echo $TEMP_WORK", intern = TRUE) 
@@ -50,7 +51,7 @@ run_quasar <- function(input_files, min_cov = 10) {
 # Pileup files
 metadata <- 
     "/lab-share/IM-Gutierrez-e2/Public/vitor/lupus/bcell_rnaseq/4-fix_ase/1-mapping/metadata.tsv" |>
-    read_tsv() |>
+    read_tsv(col_names = c("donor_id", "sample_id", "stim"), col_types = "ccc--") |>
     select(donor_id, sample_id, stim) |>
     mutate(prefix = paste(sample_id, stim, sep = "_")) |>
     select(donor_id, prefix) |>
@@ -60,11 +61,13 @@ metadata <-
 files_list <- 
     metadata |>
     map(function(x) {
-	    files <- sprintf(file.path(temp, "quasar/%s.quasar.in.gz"), x)
+	    files <- sprintf(file.path(temp_dir, "quasar/%s.quasar.in.gz"), x)
 	    setNames(files, x)})
 
 # Run quasar
-out <- map_df(files_list, run_quasar, .id = "donor_id")
+out <- 
+    map_df(files_list, run_quasar, .id = "donor_id") |>
+    mutate(qval = qvalue(pval)$qvalues)
 
 # Save results
 write_tsv(out, "./quasar_results.tsv")
