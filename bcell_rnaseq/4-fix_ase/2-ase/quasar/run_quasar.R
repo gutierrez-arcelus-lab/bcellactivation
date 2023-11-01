@@ -19,11 +19,6 @@ run_quasar <- function(input_files, min_cov = 10) {
 			ase_dat_gt$alt, 
 			log.gmat = log(ase_dat_gt$gmat))
 
-    #gt_probs <- 
-    #    bind_cols(ase_dat_gt$annotations, ase_joint$gt) |>
-    #    as_tibble() |>
-    #    select(snp_id = rsID, g0:g2)
-
     # Estimate ASE
     ase_results <- 
 	aseInference(gts = ase_joint$gt, 
@@ -36,17 +31,64 @@ run_quasar <- function(input_files, min_cov = 10) {
 		     annos = ase_dat_gt$annotations)
 
     # Output
-    ase_results |>
+    ase_out <- ase_results |>
 	map_df("dat", .id = "sample_id") |>
+	as_tibble() |>
 	select(sample_id, 
 	       snp_id = annotations.rsID, 
 	       beta = betas, 
 	       beta_se = betas.se, 
-	       pval = matches("^pval")) |>
-	#left_join(gt_probs, join_by(snp_id)) |>
-	#select(sample_id, snp_id, g0:g2, beta:pval) |>
-	as_tibble()
+	       pval = matches("^pval"))
 }
+
+get_gt_probs <- function(input_files, min_cov = 10) {
+
+    ase_dat <- UnionExtractFields(input_files, combine = TRUE)
+
+    ase_dat_gt <- PrepForGenotyping(ase_dat, min.coverage = min_cov)
+
+    sample_names <- colnames(ase_dat_gt$ref)
+
+    ase_joint <- 
+	fitAseNullMulti(ase_dat_gt$ref, 
+			ase_dat_gt$alt, 
+			log.gmat = log(ase_dat_gt$gmat))
+    
+    #allele counts
+    ref_counts <-
+	bind_cols(ase_dat_gt$ref, ase_dat_gt$annotations) |>
+	as_tibble() |>
+	pivot_longer(-(chr:af), names_to = "sample_id") |>
+	group_by(rsID) |>
+	summarise(value = sum(value)) |>
+	ungroup() |>
+	select(rsID, ref_count = value)
+    
+    alt_counts <-
+	bind_cols(ase_dat_gt$alt, ase_dat_gt$annotations) |>
+	as_tibble() |>
+	pivot_longer(-(chr:af), names_to = "sample_id") |>
+	group_by(rsID) |>
+	summarise(value = sum(value)) |>
+	ungroup() |>
+	select(rsID, alt_count = value)
+   
+    count_df <- 
+	left_join(ref_counts, alt_counts, join_by(rsID))
+
+    #probabilities
+    gt_probs <- 
+        bind_cols(ase_dat_gt$annotations, ase_joint$gt) |>
+        as_tibble() |>
+        select(rsID, g0:g2)
+
+    out <- 
+	left_join(count_df, gt_probs, join_by(rsID)) |>
+	rename("snp_id" = rsID)
+    
+    out
+}
+
 
 # Pileup files
 metadata <- 
@@ -71,3 +113,9 @@ out <-
 
 # Save results
 write_tsv(out, "./quasar_results.tsv")
+
+
+# Genotype probabilities
+probs <- map_df(files_list, get_gt_probs, .id = "donor_id")
+
+write_tsv(probs, "./quasar_genotypes.tsv")

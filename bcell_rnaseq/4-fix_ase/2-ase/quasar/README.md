@@ -6,7 +6,7 @@ Run setup.R to create a VCF with variants selected for ASE analysis.
 
 ## Step 1
 
-Run subset_mgb.slurm and merge_mgb.slurm sequentially to obtain genotypes for 
+Run subset_mgb.slurm and merge_mgb.slurm to obtain genotypes for 
 the selected variants, for females of European ancestry in MGBB.
 
 ## Step 2
