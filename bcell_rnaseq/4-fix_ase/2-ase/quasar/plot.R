@@ -5,7 +5,7 @@ library(ggbeeswarm)
 if (!file.exists("plots")) dir.create("plots")
 
 quasar_gt <- 
-    read_tsv("./quasar_genotypes.tsv", col_types = "ccddd")
+    read_tsv("./quasar_genotypes.tsv", col_types = "ccddddd")
 
 mgb_gt <- 
     read_tsv("../../0-genotypes/data/allchr.mgb.vcf.gz", comment = "##") |>
@@ -36,8 +36,6 @@ genot_plot <-
 
 ggsave("./plots/genots.png", genot_plot)
 
-
-
 # Potential false homozygotes in MGBB
 left_join(quasar_gt, mgb_gt) |>
     filter(gt != 1, g1 > .99)
@@ -46,10 +44,19 @@ left_join(quasar_gt, mgb_gt) |>
     filter(gt != 1, g1 > .99) |>
     add_count(donor_id) |>
     filter(n == max(n)) |>
-    select(-n) |>
+    select(-n)
 
 # Potential false heterozygotes in MGBB
 # But this is confounded by monoallelic expression
 left_join(quasar_gt, mgb_gt) |>
     filter(gt == 1, g1 < .1)
+
+left_join(quasar_gt, mgb_gt) |>
+    filter(gt == 1, g1 < .1) |>
+    separate(snp_id, c("chr", "pos", "ref", "alt"), sep = ":", convert = TRUE) |>
+    filter(chr == "chr6") |>
+    mutate(tile = ntile(pos, 10)) |>
+    group_by(tile) |>
+    summarise(n = n()) |>
+    ungroup()
 

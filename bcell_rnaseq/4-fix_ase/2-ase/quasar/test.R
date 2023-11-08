@@ -32,8 +32,14 @@ ase_annot_df <- ase_df |>
     left_join(annot_ase_vars, join_by(snp_id), relationship = "many-to-many") |>
     select(donor_id, sample_id, snp_id, gene_id, gene_name, beta:qval)
 
-
 ase_annot_df |>
-    filter(snp_id == "chr16:31363214:C:G") |>
-    mutate(s = ifelse(qval <= 0.05, 1, 0)) |>
-    print(n = Inf)
+    filter(snp_id == "chr11:35208126:T:C")
+
+quasar_genotypes <- read_tsv("./quasar_genotypes.tsv")
+
+quasar_genotypes |>
+    filter(snp_id == "chr11:35208126:T:C")
+    
+
+
+
