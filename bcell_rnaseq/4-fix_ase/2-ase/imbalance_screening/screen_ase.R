@@ -50,7 +50,7 @@ test_data <-
     group_by(gwas_var, stim, var_id) |>
     filter(all(c("HOM", "HET") %in% zygosity)) |>
     ungroup() |>
-    mutate(zygosity = factor(zygosity, levels = c("HOM", "HET")))
+    mutate(zygosity = factor(zygosity, levels = c("HET", "HOM")))
 
 res <- 
     test_data |>
@@ -58,21 +58,9 @@ res <-
     summarise(p = wilcox.test(imb ~ zygosity, alternative = "greater", exact = FALSE)$p.value) |>
     ungroup()
 
-
-
-# test alternative greater or less
-x <- 
-    test_data |>
-    filter(var_id == "chr10:48981904:G:T") |>
-    arrange(zygosity, imb) |>
-    mutate(zygosity = factor(zygosity, levels = c("HET", "HOM")))
-
-wilcox.test(x$imb ~ x$zygosity, alternative = "two.sided", exact = FALSE)
-
-
-sig_imb <- filter(res, p < 0.05)
-
-
+sig_imb <- filter(res, p < 0.05) |>
+    distinct(var_id) |>
+    pull(var_id)
 
 # Plot
 stim_colors <- 
@@ -88,9 +76,9 @@ fill_colors <- stim_colors |>
     unite(lab, c("stim", "zygosity"), sep = "_") |>
     deframe()
 
-
 plot_data <- 
-    sig_imb |>
+    res |>
+    filter(p < 0.05) |>
     distinct(gwas_var, var_id) |>
     inner_join(merged_data) |>
     extract(gwas_var, c("chr", "pos"), "([^:]+):([^:]+)", 
@@ -105,23 +93,64 @@ plot_data <-
     mutate(stim = factor(stim, levels = names(stim_colors)),
 	   zygosity = factor(zygosity, levels = c("HOM", "HET")))
 
-plot_data_i <- filter(plot_data, ase_var == unique(ase_var)[1]) |>
-    arrange(stim, donor_id)
 
-pvals_i <- filter(res, var_id == unique(plot_data_i$ase_var))
 
-test_p <- 
-    ggplot(plot_data_i, aes(zygosity, imb)) +
-    geom_jitter(aes(color = stim, fill = lab), 
-		size = 3, shape = 21, width = .1) +
-    scale_y_continuous(limits = c(NA, .5)) + 
-    scale_color_manual(values = stim_colors) +
-    scale_fill_manual(values = fill_colors) +
-    facet_wrap(~stim, nrow = 1) +
-    theme_bw() +
-    theme(panel.grid.minor.y = element_blank(),
-	  legend.position = "none") +
-    labs(x = NULL, y = "Imbalance")
+plot_imb <- function(snp_id) {
+    
+    plot_data_i <- filter(plot_data, ase_var == snp_id) |>
+	arrange(stim, donor_id)
 
-ggsave("./plots/test.png", test_p, width = 6, height = 2)
+    pvals_i <- res |>
+	filter(var_id == unique(plot_data_i$ase_var)) |>
+	mutate(p = round(p, 3),
+	       p = paste("p = ", p)) |>
+	mutate(stim = factor(stim, levels = names(stim_colors)))
+
+    plot_title <- 
+	sprintf("Imbalance at %s (%s)\nby genotype of %s at the %s locus.",
+		unique(plot_data_i$ase_var), 
+		unique(plot_data_i$ase_gene_name), 
+		unique(plot_data_i$gwas_snp), 
+		unique(plot_data_i$gwas_locus))
+
+    out_plot <- 
+	ggplot(plot_data_i, aes(zygosity, imb)) +
+	geom_jitter(aes(color = stim, fill = lab), 
+		    size = 3, shape = 21, width = .1) +
+	scale_y_continuous(limits = c(NA, .5)) + 
+	scale_color_manual(values = stim_colors) +
+	scale_fill_manual(values = fill_colors) +
+	geom_text(data = pvals_i,
+		  aes(label = p),
+		  size = 4, x = 0.5, y = 0.49, hjust = "inward"
+		  ) +
+	facet_wrap(~stim, nrow = 1) +
+	theme_bw() +
+	theme(
+	      axis.text = element_text(size = 11),
+	      axis.title = element_text(size = 11),
+	      strip.text = element_text(size = 11),
+	      panel.grid.minor.y = element_blank(),
+	      legend.position = "none",
+	      plot.title = element_text(size = 11),
+	      plot.margin = margin(t = 3, b = 3., r = 2, l = 2, unit = "in"),
+	      ) +
+	labs(x = NULL, y = "Imbalance",
+	     title = plot_title)
+
+}
+
+
+ase_plot_list <- map(sig_imb, plot_imb)
+names(ase_plot_list) <- str_replace_all(sig_imb, ":", "_")
+
+
+walk(names(ase_plot_list), 
+     ~ggsave(sprintf("./plots/%s.pdf", .x), 
+	     ase_plot_list[[.x]], 
+	     width = 11,
+	     height = 8.5,
+	     dpi = 300))
+
+
 
