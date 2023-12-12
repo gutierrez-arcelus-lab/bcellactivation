@@ -152,5 +152,32 @@ walk(names(ase_plot_list),
 	     height = 8.5,
 	     dpi = 300))
 
+# MIR146A region
+plot_data <- 
+    res |>
+    distinct(gwas_var, var_id) |>
+    inner_join(merged_data) |>
+    extract(gwas_var, c("chr", "pos"), "([^:]+):([^:]+)", 
+	    convert = TRUE) |>
+    left_join(select(langefeld, -p), join_by(chr, pos)) |>
+    filter(gene == "PTTG1-MIR146A") |>
+    left_join(distinct(ase, var_id, annot, gene_id, gene_name)) |>
+    select(gwas_locus = gene, gwas_snp = snp_id, 
+	   ase_var = var_id, ase_annot = annot, 
+	   ase_gene_id = gene_id, ase_gene_name = gene_name,
+	   stim, donor_id, zygosity, imb) |>
+    unite(lab, c("stim", "zygosity"), sep = "_", remove = FALSE) |>
+    mutate(stim = factor(stim, levels = names(stim_colors)),
+	   zygosity = factor(zygosity, levels = c("HOM", "HET")))
+
+ase_plot_list_mir <- map(unique(plot_data$ase_var), plot_imb)
+names(ase_plot_list_mir) <- str_replace_all(names(ase_plot_list_mir), ":", "_")
+
+walk(names(ase_plot_list_mir), 
+     ~ggsave(sprintf("./plots/mir_%s.pdf", .x), 
+	     ase_plot_list_mir[[.x]], 
+	     width = 11,
+	     height = 8.5,
+	     dpi = 300))
 
 

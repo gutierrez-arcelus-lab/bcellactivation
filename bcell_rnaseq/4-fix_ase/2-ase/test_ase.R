@@ -1,78 +1,288 @@
 library(tidyverse)
 library(qvalue)
+library(VGAM)
 library(ggrepel)
 library(RColorBrewer)
 library(patchwork)
+library(ggh4x)
 
-meta <- 
-    "./array_spec.tsv" |>
-    read_tsv(col_names = c("donor_id", "sample_id", "stim", "mgbid"), 
-	     col_types = c(.default = "c")) |>
-    unite("id", c("sample_id", "stim"), sep = "_", remove = FALSE) |>
-    select(id, donor_id, sample_id, stim)
-    
-ase_df <- 
-    sprintf("./results/%s.asereadcounter.txt", meta$id) |>
-    setNames(meta$id) |>
-    map_df(read_tsv, .id = "id") |>
-    left_join(meta, by = "id") |>
-    select(donor_id, sample_id, stim, everything()) |>
-    select(-id)
+# plotting colors
+stim_colors <- 
+    c("Day 0" = "grey",
+      "BCR" = "cornflowerblue",
+      "TLR7" = "#09820d",
+      "DN2" = "#822808")
 
+# ASE results
+ase_df <- read_tsv("./ase_data.tsv", col_types = "ffccccii") 
+
+# Binomial test
 ase_res <- 
     ase_df |>
-    janitor::clean_names() |>
-    select(donor_id, sample_id, stim, chr = contig, position, 
-	   variant_id, ref_allele, alt_allele,
-	   ref_count, alt_count, total_count, low_mapq_depth,
-	   low_base_q_depth, raw_depth, other_bases, improper_pairs) |>
-    mutate(chr = factor(chr, levels = paste0("chr", c(1:22, "X")))) |>
-    mutate(p_value = pmap_dbl(list(ref_count, total_count, 0.5), 
-			      function(x, y, z) binom.test(x, y, p = z, alternative = "two.sided")$p.value),
-	   q_value = qvalue(p_value)$qvalues) |> 
-    mutate(stim = recode(stim, "unstday0" = "Day 0"))
+    mutate(total = refCount + altCount) |>
+    mutate(p_value = map2_dbl(refCount, total, 
+			      ~binom.test(.x, .y, p = .5, alternative = "two.sided")$p.value),
+	   q_value = qvalue(p_value)$qvalues) |>
+    select(sample_id, stim, var_id, p_value, q_value)
 
-annotations <- 
-    file.path("/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens",
-	      "gencode.v39.primary_assembly.annotation.gtf") |>
-    read_tsv(comment = "#", col_names = FALSE, col_types = "ccciicccc")
+## Beta-binomial
+#bbinom.test <- function(x, y, p, r) {
+#    
+#    x0 <- pmin(x, y)
+#    x1 <- pmax(x, y)
+#    
+#    pval1 <- pbetabinom(x0, x0 + x1, prob = p, rho = r)
+#    pval2 <- (1 - pbetabinom(x1 - 1L, x0 + x1, prob = p, rho = r))
+#
+#    pval1 + pval2
+#}
+#
+#bbinom_params <- 
+#   test <- ase_df |>
+#    filter(sample_id == first(sample_id), stim == first(stim)) |>
+#    {function(x) split(x, list(x$sample_id, x$stim))}() |>
+#    keep(~nrow(.) > 0) |>
+#    map(~select(., refCount, altCount)) |>
+#    map(as.matrix) |>
+#    map(~Coef(vglm(. ~ 1, betabinomialff, trace = FALSE))) |>
+#    bind_rows(.id = "id") |>
+#    separate(id, c("donor_id", "rep", "stim"), sep = "\\.") |>
+#    unite("sample_id", c("donor_id", "rep"), sep = ".")
+#
+#ase_res_bb <- ase_df |>
+#    left_join(bbinom_params, join_by(sample_id, stim)) |>
+#    mutate(p_value = pmap_dbl(list(refCount, altCount, mu, rho), bbinom.test))
+#	   
+#
+#    q_value = qvalue(p_value)$qvalues) |>
+#    select(sample_id, stim, var_id, p_value, q_value)
+    
 
-gene_df <- annotations |>
-    filter(X3 == "gene", X1 %in% paste0("chr", c(1:22, "X"))) |>
-    mutate(gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
-	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+")) |>
-    select(chr = X1, start = X4, end = X5, gene_id, gene_name)
-
-ase_res_annot <-
-    left_join(ase_res, gene_df, join_by(chr, between(position, start, end))) |>
-    select(-start, -end) |>
-    group_by(donor_id, sample_id, stim, chr, position, variant_id, 
-	     ref_allele, alt_allele, ref_count, alt_count, total_count,
-	     low_mapq_depth, low_base_q_depth, raw_depth, other_bases, 
-	     improper_pairs, p_value, q_value) |>
-    summarise_at(vars(gene_id, gene_name), ~paste(., collapse = "/")) |>
-    ungroup()
-
-write_tsv(ase_res_annot, "./ase_data.tsv")
+## Summary
+#ase_res |>
+#    group_by(sample_id, stim) |>
+#    summarise(n_sig = sum(q_value <= 0.05)) |>
+#    ungroup() |>
+#    mutate(stim = fct_relevel(stim, "Day 0", after = 0)) |>
+#    arrange(sample_id, stim) |>
+#    write_tsv("./ase_total_fdr5.tsv")
 
 
 
-# Remove suspect samples    
-ase_res_final <- ase_res_annot |>
-    filter(! donor_id %in% c("10044277", "10049365", "10051708", "10068703", "10073411", "10098629"))
 
-# Compute imbalance
-imb_df <- 
-    ase_res_final |>
-    mutate(imb = abs(0.5 - (refCount/total))) |>
-    select(gene_id, gene_name, donor_id, sample_id, stim, variantID, imb, q) |>
-    mutate(stim = factor(stim, levels = c("Day 0", "BCR", "TLR7", "DN2")),
-	   gene_id = str_remove(gene_id, "\\.\\d+$"))
-  
 # SLE genes
 sle_genes <- 
-    "../../../colocalization/data/coloc_input/gene_annots_bentham.tsv" |>
-    read_tsv()
+    "../../../bcell_lowinput/data/sle_curated_genes.txt" |>
+    read_lines() |>
+    c("IRF1")
+
+
+ase_res_annot |>
+    filter(q_value < 0.05) |>
+    left_join(ase_df) |>
+    mutate(total = refCount + altCount,
+	   imb = abs(0.5 - (refCount/total))) |>
+    filter(imb > .2) |>
+    group_by(var_id) |>
+    filter(n_distinct(sample_id) > 5) |>
+    ungroup() |>
+    distinct(var_id, gene_id, gene_name) |>
+    distinct(gene_name) |> pull(gene_name)
+
+
+# Most extreme p-values in SLE genes
+top_ase_variants <- 
+    ase_res_annot |>
+    filter(gene_name %in% sle_genes, q_value < 0.05) |>
+    group_by(gene_id, var_id) |>
+    slice_min(p_value) |>
+    group_by(gene_id) |>
+    top_n(10, -log10(p_value)) |>
+    ungroup() |>
+    distinct(gene_id, gene_name, var_id)
+
+top_vars_df <- 
+    inner_join(ase_res_annot, top_ase_variants, join_by(var_id, gene_id, gene_name)) |>
+    left_join(ase_df, join_by(sample_id, stim, var_id)) |>
+    mutate(stim = factor(stim, levels = c("Day 0", "BCR", "TLR7", "DN2"))) |>
+    select(gene_name, sample_id, stim, var_id, refCount, altCount, p_value, q_value) |>
+    arrange(gene_name, var_id, stim, p_value)
+
+# Create data.frame for plotting
+# include all conditions sequenced, 
+# even though data is not observed in ASEReadCounter (no expression)
+
+all_samples <-  
+    meta |>
+    select(-id) |>
+    mutate(stim = recode(stim, "unstday0" = "Day 0"),
+	   stim = factor(stim))
+
+top_vars_counts <- 
+    top_vars_df |>
+    select(-p_value, -q_value) |>
+    pivot_longer(refCount:altCount, names_to = "allele", values_to = "count") |>
+    mutate(allele = str_remove(allele, "Count"),
+	   allele = toupper(allele),
+	   allele = factor(allele, levels = c("REF", "ALT"))) |>
+    group_by(gene_name, sample_id, var_id, allele) |>
+    complete(stim, fill = list(count = 0)) |>
+    ungroup() |>
+    arrange(gene_name, var_id, sample_id, stim, allele) |>
+    inner_join(all_samples, join_by(sample_id, stim))
+
+top_vars_pvalue <- 
+    top_vars_df |>
+    select(-refCount, -altCount) |>
+    mutate(fdr = ifelse(q_value <= 0.05, "*", ""),
+	   p_value = case_when(as.numeric(p_value) == 1L ~ "1",
+			       is.na(p_value) ~ NA_character_,
+			       TRUE ~ format(p_value, digits = 2, scientific = TRUE)),
+	   p_value = str_replace(p_value, "e", "x10^"),
+	   p_value = ifelse(is.na(p_value), p_value, paste0("p = ", p_value, fdr))) |>
+    select(-q_value, -fdr)
+
+fill_colors <- stim_colors |>
+    enframe("stim", "color") |>
+    cross_join(tibble(allele = c("REF", "ALT"))) |>
+    mutate(color = ifelse(allele == "ALT", "white", color)) |>
+    unite(lab, c("stim", "allele"), sep = "_") |>
+    deframe()
+
+# Plot data
+sle_variants <- 
+    top_vars_counts |>
+    distinct(gene_name, var_id) |>
+    arrange(gene_name) |>
+    pull(var_id)
+
+plot_ase <- function(i_variant) {
+
+    i_df <- filter(top_vars_counts, var_id == i_variant) |>
+	mutate(fill_lab = paste(stim, allele, sep = "_"))
+
+    i_pvalues <- filter(top_vars_pvalue, var_id == i_variant)
+    i_title <- sprintf("%s: %s", i_df$gene_name[1], i_variant) 
+
+    i_margin <- 11 - (n_distinct(i_df$sample_id)/15 * 11) - .5
+
+    ggplot(i_df) +
+	geom_col(aes(y = allele, x = count, color = stim, fill = fill_lab)) +
+	scale_x_continuous(expand = c(0, 0),
+			   breaks = scales::pretty_breaks(2)) +
+	scale_color_manual(values = stim_colors) +
+	scale_fill_manual(values = fill_colors) +
+	geom_text(data = filter(i_pvalues, !grepl("\\*$", p_value)),
+		  aes(label = p_value), x = 0, y = 3,
+		  size = 3, hjust = "inward", vjust = 0.7, color = "grey40") +
+	geom_text(data = filter(i_pvalues, grepl("\\*$", p_value)),
+		  aes(label = p_value), x = 0, y = 3,
+		  size = 3, hjust = "inward", vjust = 0.7, color = "red", fontface = "bold") +
+	#facet_grid2(sample_id~stim, scales = "free_x", drop = FALSE, independent = "x") +
+	facet_grid(sample_id~stim) +
+	theme_minimal() +
+	theme(text = element_text(size = 12),
+	      legend.position = "none",
+	      strip.text.x = element_text(vjust = 3, face = "bold"),
+	      strip.text.y = element_text(angle = 0, face = "bold"),
+	      panel.grid.major.y = element_blank(),
+	      panel.spacing = unit(1, "lines"),
+	      plot.margin = margin(t = i_margin/2, b = i_margin/2, r = 1, l = 1, unit = "in"),
+	      plot.background = element_rect(color = "white", fill = "white")) +
+	labs(x = "Read count", y = NULL, title = i_title) +
+	coord_cartesian(clip = "off")
+}
+
+ase_plot_list <- map(sle_variants, plot_ase)
+names(ase_plot_list) <- str_replace_all(sle_variants, ":", "_")
+
+
+#dir.create("./plots/ase_plots")
+walk(names(ase_plot_list), 
+     ~ggsave(sprintf("./plots/ase_plots/%s.pdf", .x), 
+	     ase_plot_list[[.x]], 
+	     width = 8.5,
+	     height = 11,
+	     dpi = 300))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# CD44
+vcf <- 
+    "../0-genotypes/data/allchr.mgb.vcf.gz" |>
+    read_tsv(comment = "##")
+
+susie_res <- 
+    "../../../colocalization/finemap/susie_results.tsv" |>
+    read_tsv() |>
+    filter(!is.na(cs))
+
+susie_vcf <- 
+    "../0-genotypes/susie_variants/allchr.mgb.vcf.gz" |>
+    read_tsv(comment = "##") |>
+    select(chr = `#CHROM`, pos = POS, ref = REF, alt = ALT, starts_with("2")) |>
+    pivot_longer(starts_with("2"), names_to = "vcf_donor_id", values_to = "gt") |>
+    separate(vcf_donor_id, c("mgb_prefix", "donor_id"), sep = "-")
+
+cd44_ase <- vcf |>
+    filter(`#CHROM` == "chr11", POS == 35208126) |>
+    select(ID, matches("^\\d")) |>
+    pivot_longer(-ID, names_to = "donor_id", values_to = "geno") |>
+    extract(donor_id, "donor_id", ".+-(.+)") |>
+    select(donor_id, geno)
+
+susie_cd44 <- susie_res |>
+    filter(locus == "CD44", pos == 35073939) |>
+    select(chr, pos, ref, alt, cs) |>
+    inner_join(susie_vcf)
+   
+imb_df <- 
+    ase_df |>
+    filter(var_id == "chr11:35208126:T:C") |>
+    separate(sample_id, c("donor_id", "replic"), sep = "\\.") |>
+    mutate(total = refCount + altCount,
+	   imb = abs(0.5 - (refCount/total))) |>
+    select(donor_id, replic, stim, imb) |>
+    mutate(stim = factor(stim, levels = c("Day 0", "BCR", "TLR7", "DN2")))
+
+cd44_df <- 
+    left_join(cd44_ase, susie_cd44) |>
+    select(donor_id, geno_reg = gt, geno_cd44 = geno) |>
+    left_join(imb_df) |>
+    drop_na(imb)
+
+test_p <- 
+    ggplot(cd44_df, aes(x = stim, y = imb, color = stim)) +
+    geom_point(size = 4) +
+    scale_color_manual(values = c("Day 0" = "grey40", "BCR" = "cornflowerblue", "TLR7" = "forestgreen", "DN2" = "tomato3")) +
+    facet_wrap(~geno_reg, nrow = 1) +
+    theme_bw() +
+    theme(legend.position = "none")    
+
+ggsave("./plots/cd44.png", test_p, height = 4)
+
+
+
+
+
+
+
+  
 
 imb_df |>
     inner_join(sle_genes, join_by(gene_id, gene_name)) |>
@@ -89,10 +299,9 @@ test_df <- imb_df |>
     ungroup()
 
 
-susie_res <- 
-    "../../../colocalization/finemap/susie_results.tsv" |>
-    read_tsv() |>
-    filter(!is.na(cs))
+
+susie_res |> filter(locus == "BLK")
+susie_res |> filter(grepl("IRF5", locus), grepl("L2", cs))
 
 susie_res |> filter(locus == "IRF8")
 
@@ -113,60 +322,6 @@ test_p2 <-
 	      legend.position = "top")
 
 ggsave("./plots/test2.png", test_p2)
-
-selected_genes <-
-    c(
-      "ARID5B",
-      "ATG5",
-      "BANK1",
-      "BLK", 
-      "CD44",
-      "CSK",
-      "DHCR7",
-      "ETS1",
-      "FCGR2A",
-      "LYST",
-      "IFIH1",
-      "IKBKE",
-      "IKZF1",
-      "IKZF2",
-      "IKZF3",
-      "IL10",
-      "IL12A",
-      "IRAK1",
-      "IRF5",
-      "IRF7",
-      "IRF8",
-      "ITGAM",
-      "ITGAX",
-      "JAZF1",
-      "MECP2",
-      "MIR146A",
-      "MIR3142HG",
-      "NCF2",
-      "PTPN22",
-      "PRDM1",
-      "PXK",
-      "RAD51B",
-      "SH2B3",
-      "SLC15A4",
-      "SOCS1",
-      "SPRED2",
-      "STAT1", 
-      "STAT4",
-      "TASL",
-      "TCF7",
-      "TNFAIP3",
-      "TNFSF4",
-      "TNIP1",
-      "TREX1",
-      "TYK2",
-      "UHRF1BP1",
-      "UBE2L3",
-      "WDFY4"
-    )
-
-
 
 null_vars <- imb_df |>
     filter(stim == "Day 0") |>
@@ -260,12 +415,6 @@ test_df <-
     rowid_to_column("i") |>
     unnest(cols = data)
 
-stim_colors <- 
-    c("Day 0" = "grey",
-      "BCR" = "cornflowerblue",
-      "TLR7" = "forestgreen",
-      "DN2" = "tomato3")
-
 test_plot <- 
     ggplot(test_df, aes(x = factor(i), y = refCount/total)) +
     geom_line(aes(group = variantID), linewidth = .1) +
@@ -293,12 +442,6 @@ susie_res <-
     read_tsv() |>
     filter(!is.na(cs), pip >= 0.1)
 
-susie_vcf <- 
-    "../0-genotypes/susie_variants/allchr.mgb.vcf.gz" |>
-    read_tsv(comment = "##") |>
-    select(chr = `#CHROM`, pos = POS, ref = REF, alt = ALT, starts_with("2")) |>
-    pivot_longer(starts_with("2"), names_to = "vcf_donor_id", values_to = "gt") |>
-    separate(vcf_donor_id, c("mgb_prefix", "donor_id"), sep = "-")
 
 # Salmon gene expression
 meta_data <- "../1-mapping/metadata.tsv" |>
