@@ -27,14 +27,20 @@ plot_df <-
     
 genot_plot <- 
     ggplot(plot_df, aes(x = factor(gt), y = gp)) +
-	geom_quasirandom(method = "smiley", width = .2, size = .5, alpha = .25) +
+	geom_jitter(width = .2, alpha = .25) +	
+	scale_x_discrete(labels = c("REF/\nREF", "REF/\nALT", "ALT/\nALT")) +
 	scale_y_continuous(breaks = c(0, 1)) +
 	theme_bw() +
 	theme(panel.grid = element_blank()) +
 	facet_wrap(~donor_id, nrow = 4) +
-	labs(x = "Genotype", y = "QuASAR genotype probability")
+	labs(x = "Genotype in MGBB", y = "QuASAR genotype probability")
 
-ggsave("./plots/genots.png", genot_plot)
+ggsave("./plots/genots.png", genot_plot, height = 6)
+
+
+plot_df |>
+    filter(donor_id == "10038707", snp_id == "chrX:154348765:T:C")
+
 
 # Potential false homozygotes in MGBB
 left_join(quasar_gt, mgb_gt) |>

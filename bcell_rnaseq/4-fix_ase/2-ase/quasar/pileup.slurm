@@ -29,6 +29,8 @@ BAM=${TEMP_WORK}/bam/fixase/${PREFIX}.uniq.mkdups.wasp.bam
 GENOME=${LABSHR}/References/Genomes/hsapiens/GRCh38/GRCh38.primary_assembly.genome.fa
 SNPS=${SLURM_SUBMIT_DIR}/data/snps_af.bed
 
+#samtools mpileup -f $GENOME -l $SNPS $BAM | gzip > ${HOME}/${PREFIX}.pileup.gz
+
 samtools mpileup -f $GENOME -l $SNPS $BAM |\
     awk -v OFS='\t' '{ if ($4>0 && $5 !~ /[^\^][<>]/ && $5 !~ /\+[0-9]+[ACGTNacgtn]+/ && $5 !~ /-[0-9]+[ACGTNacgtn]+/ && $5 !~ /[^\^]\*/) print $1,$2-1,$2,$3,$4,$5,$6}' |\
     sortBed -i stdin |\

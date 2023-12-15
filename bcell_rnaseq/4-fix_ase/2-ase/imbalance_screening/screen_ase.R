@@ -1,4 +1,5 @@
 library(tidyverse)
+library(extrafont)
 
 langefeld <- read_tsv("./data/langefeld_hits.tsv")
 
@@ -18,7 +19,7 @@ windows <-
     select(chr, gwas_var, start, end)
 
 ase <- 
-    read_tsv("../ase_data_clean_annotated.tsv", col_types = "ccccccii") |>
+    read_tsv("../ase_data.tsv", col_types = "ccccccii") |>
     separate(sample_id, c("donor_id", "rep"), sep = "\\.") |>
     mutate(total = refCount + altCount,
 	   imb = abs(0.5 - (refCount/total))) |>
@@ -64,10 +65,10 @@ sig_imb <- filter(res, p < 0.05) |>
 
 # Plot
 stim_colors <- 
-    c("Day 0" = "grey",
-      "BCR" = "cornflowerblue",
-      "TLR7" = "#09820d",
-      "DN2" = "#822808")
+    c("Day 0" = "#898e9f",
+      "BCR" = "#003967",
+      "TLR7" = "#637b31",
+      "DN2" = "#a82203")
 
 fill_colors <- stim_colors |>
     enframe("stim", "color") |>
@@ -180,4 +181,25 @@ walk(names(ase_plot_list_mir),
 	     height = 8.5,
 	     dpi = 300))
 
+# P-value distribution
+p_hist <- 
+    ggplot(res |> mutate(stim = factor(stim, levels = names(stim_colors))), 
+	   aes(x = p)) +
+    geom_histogram(aes(fill = stim), bins = 20) +
+    scale_fill_manual(values = stim_colors) +
+    scale_x_continuous(breaks = c(0, 1)) +
+    facet_wrap(~stim, ncol = 2) +
+    theme_minimal() +
+    theme(
+	  axis.text = element_text(size = 12, family = "Arial"),
+	  axis.title = element_text(size = 14, family = "Arial"),
+	  legend.text = element_text(family = "Arial"),
+	  legend.title = element_text(family = "Arial"),
+	  strip.text = element_text(family = "Arial"),
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(color = "white", fill = "white")
+	  ) +
+    labs(x = "P-value", fill = "Stim:")
 
+
+ggsave("./plots/p_hist.png", height = 4)

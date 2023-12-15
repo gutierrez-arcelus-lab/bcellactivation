@@ -5,13 +5,14 @@ library(ggrepel)
 library(RColorBrewer)
 library(patchwork)
 library(ggh4x)
+library(extrafont)
 
 # plotting colors
 stim_colors <- 
-    c("Day 0" = "grey",
-      "BCR" = "cornflowerblue",
-      "TLR7" = "#09820d",
-      "DN2" = "#822808")
+    c("Day 0" = "#898e9f",
+      "BCR" = "#003967",
+      "TLR7" = "#637b31",
+      "DN2" = "#a82203")
 
 # ASE results
 ase_df <- read_tsv("./ase_data.tsv", col_types = "ffccccii") 
@@ -23,7 +24,38 @@ ase_res <-
     mutate(p_value = map2_dbl(refCount, total, 
 			      ~binom.test(.x, .y, p = .5, alternative = "two.sided")$p.value),
 	   q_value = qvalue(p_value)$qvalues) |>
-    select(sample_id, stim, var_id, p_value, q_value)
+    select(sample_id, stim, var_id, ref_count = refCount, alt_count = altCount, p_value, q_value)
+
+
+# technical replicates
+tech_reps <- 
+    ase_res |>
+    distinct(sample_id) |>
+    separate(sample_id, c("donor_id", "rep"), sep = "\\.", remove = FALSE)
+
+tech_df <- ase_res |>
+    left_join(tech_reps, join_by(sample_id)) |>
+    group_by(donor_id) |>
+    filter(n_distinct(rep) > 1) |>
+    ungroup() |>
+    mutate(ref_r = ref_count/(ref_count + alt_count)) |>
+    select(donor_id, rep, stim, var_id, ref_r, p_value, q_value)
+
+temp1 <- 
+    tech_df |>
+    filter(donor_id == first(donor_id), 
+	   rep == first(rep),
+	   q_value <= 0.05) |>
+    select(donor_id:ref_r)
+
+temp2 <- tech_df |>
+    inner_join(select(temp1, donor_id, stim, var_id)) |>
+    filter(rep != unique(temp1$rep)) |>
+    select(donor_id:ref_r)
+
+
+
+
 
 ## Beta-binomial
 #bbinom.test <- function(x, y, p, r) {
@@ -205,10 +237,65 @@ walk(names(ase_plot_list),
 	     height = 11,
 	     dpi = 300))
 
+# IRF8
+irf8_vars <- 
+    c("chr16:85913869:C:T", "chr16:85915465:G:A", "chr16:85915665:G:A",
+      "chr16:85918076:A:G", "chr16:85918190:T:G")
+
+irf8_df <- 
+    ase_df |>
+    filter(var_id %in% irf8_vars) |>
+    select(sample_id, stim, var_id, refCount, altCount) |>
+    pivot_longer(-c(sample_id:var_id), names_to = "allele", values_to = "counts") |>
+    mutate(allele = str_remove(allele, "Count"),
+	   allele = toupper(allele),
+	   fill_lab = paste(stim, allele, sep = "_"))
+
+irf8_pvals <- 
+    ase_res |>
+    filter(var_id %in% irf8_vars) |>
+    mutate(fdr = ifelse(q_value <= 0.05, "*", ""),
+	   p_value = case_when(as.numeric(p_value) == 1L ~ "1",
+			       is.na(p_value) ~ NA_character_,
+			       TRUE ~ format(p_value, digits = 2, scientific = TRUE)),
+	   p_value = str_replace(p_value, "e", "x10^"),
+	   p_value = ifelse(is.na(p_value), p_value, paste0("p = ", p_value, fdr))) |>
+    select(-q_value, -fdr)
 
 
+irf8_i <- irf8_vars[5]
+irf8_plot <- 
+    ggplot(data = irf8_df |> filter(var_id == irf8_i)) +
+    geom_col(aes(x = counts, y = allele, color = stim, fill = fill_lab)) +
+    scale_x_continuous(expand = c(0, 0),
+		       breaks = scales::pretty_breaks(3)) +
+    scale_color_manual(values = stim_colors) +
+    scale_fill_manual(values = fill_colors) +
+    geom_text(data = filter(irf8_pvals, var_id == irf8_i, !grepl("\\*$", p_value)),
+	      aes(label = p_value), x = 0, y = 3,
+	      size = 3.5, hjust = "inward", vjust = 0.7, color = "grey40",
+	      family = "Arial") +
+    geom_text(data = filter(irf8_pvals, var_id == irf8_i, grepl("\\*$", p_value)),
+	      aes(label = p_value), x = 0, y = 3,
+	      size = 3.5, hjust = "inward", vjust = 0.7, color = "red", 
+	      fontface = "bold", family = "Arial") +
+    facet_grid(sample_id~stim) +
+    theme_minimal() +
+    theme(
+	  axis.text = element_text(size = 11, family = "Arial"),
+	  axis.title = element_text(size = 12, family = "Arial"),
+	  strip.text.x = element_text(size = 12, family = "Arial", vjust = 3, face = "bold"),
+	  strip.text.y = element_text(size = 12, family = "Arial", angle = 0, face = "bold"),
+	  panel.grid.minor.x = element_blank(),
+	  panel.grid.major.y = element_blank(),
+	  panel.spacing = unit(1, "lines"),
+	  plot.title = element_text(size = 14, family = "Arial"),
+	  plot.background = element_rect(color = "white", fill = "white")) +
+    labs(x = "Read count", y = NULL, title = irf8_i) +
+    coord_cartesian(clip = 'off') +
+    guides(color = "none", fill = "none")
 
-
+ggsave("./plots/irf8_5.png", irf8_plot, height = 7.5, width = 7)
 
 
 

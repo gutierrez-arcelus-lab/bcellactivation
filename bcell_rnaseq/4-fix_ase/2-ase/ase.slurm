@@ -40,35 +40,35 @@ VCF=${LABSHR}/vitor/lupus/bcell_rnaseq/4-fix_ase/0-genotypes/data/${DONORID}.vcf
 OUT=${SLURM_SUBMIT_DIR}/results 
 mkdir -p $OUT
 
-## Create a temporary directory for each sample and delete it at the end
-#TEMP=${TEMP_WORK}/temp/gatk/${SAMPLEID}_${STIM} 
-#mkdir -p $TEMP
-#
-## Extract uniquely mapped reads
-#samtools view --threads $CPUS -b -h -q 255 -o ${TEMP}/uniq.bam $BAM 
-#
-## Mark duplicates
-#picard AddOrReplaceReadGroups \
-#    I=${TEMP}/uniq.bam \
-#    O=${TEMP}/uniq.rg.bam \
-#    RGID=readGroupID${SLURM_ARRAY_TASK_ID} \
-#    RGLB=libraryID \
-#    RGPL=ILLUMINA \
-#    RGPU=NovaSeq \
-#    RGSM=$MGBID \
-#    TMP_DIR=$TEMP
-#
-#gatk MarkDuplicatesSpark \
-#    -I ${TEMP}/uniq.rg.bam \
-#    -O ${TEMP}/uniq.mkdups.bam \
-#    --tmp-dir $TEMP \
-#    --spark-master local[$CPUS]
-#
-## Extract reads that passed WASP filter.
-#samtools view -h ${TEMP}/uniq.mkdups.bam |\
-#    awk '$0 ~ /^@/ || $0 ~ /vW:i:1/' |\
-#    samtools view -Sb - > ${PREFIX}.uniq.mkdups.wasp.bam
-#
+# Create a temporary directory for each sample and delete it at the end
+TEMP=${TEMP_WORK}/temp/gatk/${SAMPLEID}_${STIM} 
+mkdir -p $TEMP
+
+# Extract uniquely mapped reads
+samtools view --threads $CPUS -b -h -q 255 -o ${TEMP}/uniq.bam $BAM 
+
+# Mark duplicates
+picard AddOrReplaceReadGroups \
+    I=${TEMP}/uniq.bam \
+    O=${TEMP}/uniq.rg.bam \
+    RGID=readGroupID${SLURM_ARRAY_TASK_ID} \
+    RGLB=libraryID \
+    RGPL=ILLUMINA \
+    RGPU=NovaSeq \
+    RGSM=$MGBID \
+    TMP_DIR=$TEMP
+
+gatk MarkDuplicatesSpark \
+    -I ${TEMP}/uniq.rg.bam \
+    -O ${TEMP}/uniq.mkdups.bam \
+    --tmp-dir $TEMP \
+    --spark-master local[$CPUS]
+
+# Extract reads that passed WASP filter.
+samtools view -h ${TEMP}/uniq.mkdups.bam |\
+    awk '$0 ~ /^@/ || $0 ~ /vW:i:1/' |\
+    samtools view -Sb - > ${PREFIX}.uniq.mkdups.wasp.bam
+
 # Compute ASE
 # filters out duplicate reads by default
 gatk ASEReadCounter \
