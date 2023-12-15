@@ -1,9 +1,11 @@
 library(tidyverse)
 library(qvalue)
 library(extrafont)
+library(cowplot)
 library(patchwork)
 library(ggbeeswarm)
-
+library(glue)
+library(ggh4x)
 
 ase_data <- read_tsv("ase_data.tsv", col_types = "ffccccii")
 
@@ -17,6 +19,7 @@ ase_res <-
     mutate(p_value = map2_dbl(refCount, total, 
 			      ~binom.test(.x, .y, p = .5, alternative = "two.sided")$p.value),
 	   q_value = qvalue(p_value)$qvalues)
+    
 
 # Plot parameters
 stim_colors <- 
@@ -58,7 +61,7 @@ summary_1_plot <-
 	  plot.background = element_rect(fill = "white", color = "white")
 	  ) +
     labs(x = NULL, y = "Number of variants",
-	 title = "Number of different variants tested\nper condition") +
+	 title = "Number of variants tested per condition\nacross all samples") +
     guides(fill = "none")
 
 
@@ -137,9 +140,11 @@ summary_4 <-
 
 summary_4_plot <- 
     ggplot(summary_4, aes(x = stim, y = n)) +
-    geom_quasirandom(aes(color = stim), method = "smiley", width = .2) +
+    geom_quasirandom(aes(color = stim), method = "smiley", width = .25, alpha = .75) +
+    geom_boxplot(aes(fill = stim), linewidth = .25, alpha = .5, width = .5, outlier.color = NA) +
     scale_y_continuous(limits = c(0, 30e3), label = scales::comma) +
     scale_color_manual(values = stim_colors) +
+    scale_fill_manual(values = stim_colors) +
     theme_minimal() +
     theme(
 	  axis.text = element_text(family = "Arial", size = text_size_small),
@@ -150,7 +155,7 @@ summary_4_plot <-
 	  ) +
     labs(x = NULL, y = "Number of variants",
 	 title = "Total number of variants tested\nper sample") +
-    guides(color = "none")
+    guides(fill = "none", color = "none")
 
 summary_5 <- 
     ase_res |>
@@ -166,11 +171,13 @@ summary_5 <-
 summary_5_plot <- 
     ggplot(summary_5, aes(x = stim, y = n)) +
     geom_quasirandom(aes(color = stim), 
-		     method = "smiley", width = .2, size = .75) +
+		     method = "smiley", width = .2, size = .75, alpha = .75) +
+    geom_boxplot(aes(fill = stim), linewidth = .25, alpha = .5, width = .5, outlier.color = NA) +
     scale_y_continuous(limits = c(0, 1400), 
 		       breaks = seq(0, 1400, 200),
 		       label = scales::comma) +
     scale_color_manual(values = stim_colors) +
+    scale_fill_manual(values = stim_colors) +
     facet_wrap(~FDR, nrow = 1, strip.position = "bottom") +
     theme_minimal() +
     theme(
@@ -189,7 +196,7 @@ summary_5_plot <-
 	  ) +
     labs(x = "FDR", y = "Number of variants",
 	 title = "Number of significant variants per sample\nper FDR threshold") +
-    guides(color = "none")
+    guides(color = "none", fill = "none")
 
 
 summary_6 <- ase_res |>
@@ -209,10 +216,12 @@ summary_6 <- ase_res |>
 summary_6_plot <- 
     ggplot(summary_6, aes(x = stim, y = n)) +
     geom_quasirandom(aes(color = stim), 
-		     method = "smiley", width = .2, size = .75) +
+		     method = "smiley", width = .2, size = .75, alpha = .75) +
+    geom_boxplot(aes(fill = stim), linewidth = .25, alpha = .5, width = .5, outlier.color = NA) +
     scale_y_continuous(limits = c(0, 800), 
 		       breaks = seq(0, 800, 200)) +
     scale_color_manual(values = stim_colors) +
+    scale_fill_manual(values = stim_colors) +
     facet_wrap(~FDR, nrow = 1, strip.position = "bottom") +
     theme_minimal() +
     theme(
@@ -231,7 +240,7 @@ summary_6_plot <-
 	  ) +
     labs(x = "FDR", y = "Number of variants",
 	 title = "Number of genes with significant ASE variants\nper sample per FDR threshold") +
-    guides(color = "none")
+    guides(color = "none", fill = "none")
 
 
 
@@ -281,4 +290,227 @@ qq_plot <-
     guides(color = "none")
 
 ggsave("./plots/qq.png", qq_plot, height = 12, width = 5, dpi = 600)
+
+p_hist <- 
+    ggplot(ase_res, aes(x = p_value)) +
+    geom_histogram(aes(fill = stim), bins = 20, linewidth = 0) +
+    scale_fill_manual(values = stim_colors) +
+    scale_x_continuous(breaks = c(0, 1)) +
+    facet_grid2(sample_id~stim, scales = "free_y", independent = "y") +
+    theme_minimal() +
+    theme(
+	  axis.text.x = element_text(family = "Arial", size = 11),
+	  axis.text.y = element_blank(),
+	  axis.title = element_text(family = "Arial", size = 14),
+	  strip.text = element_text(family = "Arial", size = 14),
+	  panel.grid = element_blank(),
+	  strip.text.y = element_text(angle = 0),
+	  plot.background = element_rect(color = "white", fill = "white")) +
+    guides(fill = "none") +
+    labs(x = "p-value", y = NULL)
+
+ggsave("./plots/pvalue_hist.png", p_hist, height = 12, width = 5, dpi = 600)
+
+# P-value ~ coverage
+testplot <- 
+    ase_res |>
+    filter(sample_id == first(sample_id)) |>
+    select(sample_id, stim, p_value, refCount, altCount, total) |>
+    mutate(bin = cut_interval(p_value, n = 20)) |>
+    arrange(bin) |>
+    ggplot(aes(x = bin, y = log2(total))) +
+	geom_violin(aes(fill = stim)) +
+	facet_wrap(~stim, ncol = 2) +
+	#facet_grid2(sample_id~stim, scales = "free_y", independent = "y") +
+	scale_fill_manual(values = stim_colors) +
+	theme_bw() +
+	theme(
+	      axis.text.x = element_text(family = "Arial", size = 11, angle = 45, hjust = 1, vjust = 1),
+	      axis.text.y = element_text(family = "Arial", size = 11),
+	      axis.title = element_text(family = "Arial", size = 14),
+	      strip.text = element_text(family = "Arial", size = 14),
+	      panel.grid = element_blank(),
+	      panel.border = element_blank(),
+	      strip.text.y = element_text(angle = 0),
+	      plot.background = element_rect(color = "white", fill = "white")) +
+	guides(fill = "none") +
+	labs(x = "P-value bins", y = "Log2 (number of reads)")
+
+ggsave("./plots/testplot.png", testplot, width = 8, height = 8)
+
+
+
+
+# Number of unique reads
+temp_work <- system("echo $TEMP_WORK", intern = TRUE)
+
+log_df <- 
+    ase_data |>
+    distinct(sample_id, stim) |>
+    mutate(stim2 = recode(stim, "Day 0" = "unstday0")) |>
+    mutate(logfile = file.path(temp_work, glue("/bam/fixase/{sample_id}_{stim2}_Log.final.out")),
+	   uniq = map_int(logfile, ~read_tsv(., col_names = FALSE) |>
+			  filter(grepl("^Uniquely mapped reads number", X1)) |>
+			  pull(X2) |>
+			  as.integer())) |>
+    select(sample_id, stim, uniq)
+
+# Correlation between number of significant hits and total number of reads
+
+ase_by_coverage_plot <- 
+    left_join(log_df, filter(summary_5, FDR == "10%"), join_by(sample_id, stim)) |>
+    select(sample_id, stim, n_reads = uniq, n_ase = n) |>
+    ggplot(aes(x = n_ase, y = n_reads)) +
+	geom_point(aes(color = stim), size = 4, alpha = .7) +
+	scale_color_manual(values = stim_colors) +
+	scale_x_continuous(limits = c(0, 1000)) +
+	scale_y_continuous(labels = function(x) x/1e6L) +
+	theme_minimal() +
+	theme(
+	      axis.text = element_text(family = "Arial", size = 11),
+	      axis.title = element_text(family = "Arial", size = 14),
+	      panel.grid.major = element_line(color = "grey96"),
+	      panel.grid.minor = element_blank(),
+	      plot.background = element_rect(color = "white", fill = "white"),
+	      plot.title = element_text(family = "Arial", size = 14),
+	      plot.title.position = "plot") +
+	labs(x = "Number of ASE variants", 
+	     y = "Uniquely mapped reads (Millions)",
+	     color = "Stim:",
+	     title = "Number of ASE variants at 10% FDR\nvs. number of uniquely mapped reads")
+
+ggsave("./plots/ase_by_coverage.png", ase_by_coverage_plot, width = 6, height = 5)
+
+# Number of SLE genes with ASE per donor
+# When there are more than 1 gene per locus, I followed the rule below:
+# - For Langefeld et al, I think it makes more sense to keep the first gene most of the times;
+# - For Bentham et al, I think it makes sense to keep both.
+
+langefeld <- 
+    "./imbalance_screening/data/langefeld_hits.tsv" |>
+    read_tsv() |>
+    distinct(gene) |>
+    pull(gene) |>
+    str_split("-") |>
+    map_chr(function(x) ifelse(any(grepl("IKZF", x)), x[grepl("IKZ", x)], x[1]))
+
+bentham <- "../../../sle_variants/paper_data/bentham_tab1.tsv" |>
+    read_tsv() |>
+    select(locus) |>
+    filter(!grepl("^MHC", locus)) |>
+    separate_rows(locus, sep = ", ") |>
+    mutate(locus = recode(locus, "CXorf21" = "TASL")) |>
+    pull(locus)
+
+gwas_genes <- 
+    c(langefeld, bentham) |>
+    unique() |>
+    c("STAT1") |>
+    sort()
+    
+ase_load <- ase_res |>
+    filter(q_value <= 0.05) |>
+    separate_rows(gene_id, gene_name, sep = "/") |>
+    filter(gene_name %in% gwas_genes) |>
+    count(sample_id, stim, gene_name) |>
+    mutate(gene_name = factor(gene_name, levels = gwas_genes)) |>
+    complete(sample_id, stim, gene_name, fill = list(n = 0)) |>
+    arrange(sample_id, stim, gene_name) |>
+    group_by(gene_name) |>
+    filter(any(n > 0)) |>
+    ungroup()
+
+
+plot_tiles <- function(stim_name) {
+
+    plot_data <- filter(ase_load, stim == stim_name)
+
+    ggplot(plot_data, aes(x = sample_id, y = gene_name)) +
+    geom_tile(aes(fill = n), alpha = .5) +
+    geom_text(data = plot_data |> filter(n > 0),
+	      aes(label = n), family = "Arial") +
+    scale_fill_gradient(low = "white", high = stim_colors[[stim_name]]) +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 12, family = "Arial", angle = 45, hjust = 1, vjust = 1),
+	  axis.text.y = element_text(size = 12, family = "Arial"),
+	  panel.border = element_blank(),
+	  plot.title = element_text(size = 16, family = "Arial", hjust = .5),
+	  plot.background = element_rect(color = "white", fill = "white")) +
+    labs(x = NULL, y = NULL, title = stim_name) +
+    guides(fill = "none")
+}
+
+tiles <- 
+    plot_tiles("Day 0") + 
+    plot_tiles("TLR7") + 
+    plot_tiles("BCR") + 
+    plot_tiles("DN2") + 
+    plot_layout(nrow = 1)
+
+ggsave("./plots/tiles.png", tiles, width = 24, height = 7, dpi = 600)
+
+################################################################################
+# Replication
+compute_replication <- function(sample_1, sample_2) {
+    
+    temp1 <- 
+	ref_ratios |>
+	filter(sample_id == sample_1, q_value <= 0.05) |>
+	select(sample_id:ref_r)
+
+    ref_ratios |>
+	filter(sample_id == sample_2) |>
+	inner_join(temp1, join_by(stim, var_id)) |>
+	group_by(stim) |>
+	summarise(r = cor(ref_r.x, ref_r.y)) |>
+	ungroup()
+}
+
+ref_ratios <- 
+    ase_res |> 
+    mutate(ref_r = refCount/total) |>
+    select(sample_id, stim, var_id, ref_r, q_value)
+
+cor_df <- 
+    ref_ratios |>
+    distinct(sample_id) |>
+    expand_grid(sample_1 = sample_id, sample_2 = sample_id) |>
+    distinct(sample_1, sample_2) |>
+    mutate(data = map2(sample_1, sample_2, compute_replication)) |>
+    unnest(cols = c(data))
+
+
+plot_corr <- function(stim_i) {
+
+    lim <- round(range(cor_df$r), 1)
+
+    ggplot(cor_df |> filter(stim == stim_i), 
+       aes(x = sample_1, y = sample_2)) +
+    geom_tile(aes(fill = r), alpha = .8) +
+    scale_fill_gradient(low = "white", high = stim_colors[stim_i]) +
+    geom_text(aes(label = round(r, 2)),
+	      size = 4, fontface = "bold", family = "Arial") +
+    scale_x_discrete(labels = function(x) sub("^(\\d+)\\.(\\d)$", "\\1 rep #\\2", x))  +
+    scale_y_discrete(labels = function(x) sub("^(\\d+)\\.(\\d)$", "\\1 rep #\\2", x))  +
+    theme_minimal() +
+    theme(
+	  axis.text.x = element_text(size = 12, angle = 45, hjust = 1, vjust = 1, family = "Arial"),
+	  axis.text.y = element_text(size = 12, family = "Arial"),
+	  legend.text = element_text(size = 12, family = "Arial"),  
+	  legend.title = element_text(size = 12, family = "Arial"),  
+	  plot.title = element_text(size = 16, hjust = .5, family = "Arial", face = "bold"),
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(color = "white", fill = "white")) +
+    labs(x = NULL, y = NULL, title = stim_i) +
+    guides(fill = "none")
+}
+
+
+corr_plot <- 
+    plot_corr("Day 0") + plot_corr("TLR7") + plot_corr("BCR") + plot_corr("DN2") +
+    plot_layout(ncol = 2) +
+    plot_annotation(title = "Spearman correlation of reference allele ratios among samples at variants with significant ASE at 5% FDR.",
+		    theme = theme(plot.title = element_text(size = 24, family = "Arial")))
+
+ggsave("./plots/reps_corr.png", corr_plot, height = 18, width = 18, dpi = 300)
 

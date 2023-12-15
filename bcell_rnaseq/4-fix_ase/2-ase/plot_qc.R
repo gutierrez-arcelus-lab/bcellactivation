@@ -4,63 +4,45 @@ library(ggrepel)
 library(RColorBrewer)
 library(patchwork)
 library(ggh4x)
+library(extrafont)
+
+stim_colors <- 
+    c("Day 0" = "#898e9f",
+      "BCR" = "#003967",
+      "TLR7" = "#637b31",
+      "DN2" = "#a82203")
 
 if (!file.exists("plots")) dir.create("plots")
 
-meta <- 
-    "./array_spec.tsv" |>
-    read_tsv(col_names = c("donor_id", "sample_id", "stim", "mgbid"), 
-	     col_types = c(.default = "c")) |>
-    unite("id", c("sample_id", "stim"), sep = "_", remove = FALSE) |>
-    select(id, donor_id, sample_id, stim)
-    
-ase_df <- 
-    sprintf("./results/%s.asereadcounter.txt", meta$id) |>
-    setNames(meta$id) |>
-    map_df(read_tsv, .id = "id") |>
-    left_join(meta, by = "id") |>
-    select(donor_id, sample_id, stim, everything()) |>
-    select(-id) |>
-    mutate(stim = recode(stim, "unstday0" = "Day 0"),
-	   stim = factor(stim, levels = c("Day 0", "BCR", "TLR7", "DN2")))
+ase_clean_df <- read_tsv("./ase_data.tsv", col_types = "ffccccii")
 
-sample_order <- ase_df |> 
+sample_order <- ase_clean_df |> 
     distinct(sample_id, stim) |> 
     count(sample_id, sort = TRUE) |>
     pull(sample_id)
 
-ase_clean_df <- ase_df |>
-    filter(totalCount >= 10,
-	   otherBases/refCount < .1 & otherBases/altCount < .1,
-	   (otherBases/(refCount + altCount)) < 0.05) |>
-    select(sample_id, stim, var_id = variantID, refCount, altCount) |>
-    mutate(sample_id = factor(sample_id, levels = sample_order))
-
-write_tsv(ase_clean_df, "./ase_data_clean.tsv")
-
-
 ref_ratios <- ase_clean_df |>
-    mutate(ref_r = refCount / (refCount + altCount)) |>
+    mutate(ref_r = refCount / (refCount + altCount),
+	   sample_id = factor(sample_id, levels = sample_order)) |>
     select(sample_id, stim, var_id, ref_r)
 
 ref_r_plot <- 
     ggplot(ref_ratios, aes(ref_r)) +
     geom_histogram(aes(fill = stim)) +
     scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1")) +
-    scale_fill_manual(values = c("Day 0" = "grey", "BCR" = "cornflowerblue",
-				  "TLR7" = "forestgreen", "DN2" = "tomato3")) +
-    facet_grid2(sample_id~stim, scales = "free_y", independent = "y") +
+    scale_fill_manual(values = stim_colors) +
+    facet_grid2(stim~sample_id, scales = "free_y", independent = "y") +
     theme_minimal() +
-    theme(text = element_text(size = 10),
+    theme(text = element_text(size = 11, family = "Arial"),
 	  panel.grid = element_blank(),
-	  strip.text.y = element_text(angle = 0),
+	  strip.text.y = element_text(size = 14, angle = 0, family = "Arial", face = "bold"),
 	  strip.background = element_rect(fill = "white", color = "white"),
 	  legend.position = "none",
 	  axis.text.y = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white")) +
     labs(x = "Reference allele ratio", y = NULL, fill = "Stim:")
 
-ggsave("./plots/ref_r.png", ref_r_plot, height = 7, width = 4)
+ggsave("./plots/ref_r_wide.png", ref_r_plot, height = 3, width = 15)
 
 # Fraction of both alleles seen
 both_seen_df <- ase_df |>
