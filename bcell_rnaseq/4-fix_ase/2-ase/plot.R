@@ -1,25 +1,16 @@
+# Data handling
 library(tidyverse)
-library(qvalue)
+library(glue)
+
+# Plotting
 library(extrafont)
 library(cowplot)
 library(patchwork)
 library(ggbeeswarm)
-library(glue)
 library(ggh4x)
 
-ase_data <- read_tsv("ase_data.tsv", col_types = "ffccccii")
-
-#imb_df <- ase_data |>
-#    mutate(imb = abs(0.5 - (ref_count/total_count))) |>
-#    select(sample_id, stim, variant_id, total_count, imb)
-
-ase_res <- 
-    ase_data |>
-    mutate(total = refCount + altCount) |>
-    mutate(p_value = map2_dbl(refCount, total, 
-			      ~binom.test(.x, .y, p = .5, alternative = "two.sided")$p.value),
-	   q_value = qvalue(p_value)$qvalues)
-    
+#ase_res <- read_tsv("ase_data.tsv", col_types = "ffccciidd")
+ase_res <- read_tsv("ase_data_20reads.tsv", col_types = "ffccciidd")
 
 # Plot parameters
 stim_colors <- 
@@ -32,18 +23,53 @@ text_size_big <- 9
 text_size_small <- 8
 
 # Plots
+
+# Ref alleles ratio
+sample_order <- ase_res |> 
+    distinct(sample_id, stim) |> 
+    count(sample_id, sort = TRUE) |>
+    pull(sample_id)
+
+ref_ratios <- ase_res |>
+    mutate(ref_r = ref_count / (ref_count + alt_count),
+	   sample_id = factor(sample_id, levels = sample_order)) |>
+    select(sample_id, stim, var_id, ref_r)
+
+ref_r_plot <- 
+    ggplot(ref_ratios, aes(ref_r)) +
+    geom_histogram(aes(fill = stim)) +
+    scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1")) +
+    scale_fill_manual(values = stim_colors) +
+    facet_grid2(sample_id~stim, scales = "free_y", independent = "y") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 11, family = "Arial"),
+	  axis.text.y = element_blank(),
+	  axis.title.x = element_text(size = 11, family = "Arial"),
+	  panel.grid = element_blank(),
+	  axis.ticks.x = element_line(linewidth = .5),
+	  strip.text.x = element_text(size = 11, family = "Arial"),
+	  strip.text.y = element_text(size = 11, angle = 0, family = "Arial"),
+	  strip.background = element_rect(fill = "white", color = "white"),
+	  legend.position = "none",
+	  	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(x = "Reference allele ratio", y = NULL, fill = "Stim:")
+
+#ggsave("./plots/ref_r.png", ref_r_plot, height = 8, width = 5)
+ggsave("./plots/ref_r_20.png", ref_r_plot, height = 8, width = 5)
+
+
+# Summary stats
 summary_1 <- 
     ase_res |>
     group_by(stim) |>
     summarise(n = n_distinct(var_id)) |>
     ungroup()
 
-
 summary_1_plot <- 
     summary_1 |>
     mutate(labtext = scales::comma(n)) |>
     ggplot(aes(x = stim, y = n)) +
-    geom_col(aes(fill = stim)) +
+    geom_col(aes(fill = stim), color = "black", linewidth = .5) +
     geom_text(aes(label = labtext),
 	      size = 2.5, fontface = "bold", family = "Arial", 
 	      vjust = -0.2) +
@@ -79,9 +105,9 @@ summary_2 <- ase_res |>
     
 summary_2_plot <- 
     ggplot(summary_2, aes(x = FDR, y = n)) +
-    geom_col(aes(fill = stim), position = "dodge", color = "black") +
+    geom_col(aes(fill = stim), position = "dodge", color = "black", linewidth = .5) +
     scale_fill_manual(values = stim_colors) + 
-    scale_y_continuous(limits = c(0, 8e3)) +
+    scale_y_continuous(limits = c(0, max(summary_2$n))) +
     theme_minimal() +
     theme(
 	  axis.text = element_text(family = "Arial", size = text_size_small),
@@ -115,9 +141,9 @@ summary_3 <-
 
 summary_3_plot <- 
     ggplot(summary_3, aes(x = FDR, y = n)) +
-    geom_col(aes(fill = stim), position = "dodge", color = "black") +
+    geom_col(aes(fill = stim), position = "dodge", color = "black", linewidth = .5) +
     scale_fill_manual(values = stim_colors) + 
-    scale_y_continuous(limits = c(0, 4e3)) +
+    scale_y_continuous(limits = c(0, max(summary_3$n))) +
     theme_minimal() +
     theme(
 	  axis.text = element_text(family = "Arial", size = text_size_small),
@@ -142,13 +168,14 @@ summary_4_plot <-
     ggplot(summary_4, aes(x = stim, y = n)) +
     geom_quasirandom(aes(color = stim), method = "smiley", width = .25, alpha = .75) +
     geom_boxplot(aes(fill = stim), linewidth = .25, alpha = .5, width = .5, outlier.color = NA) +
-    scale_y_continuous(limits = c(0, 30e3), label = scales::comma) +
+    scale_y_continuous(limits = c(0, max(summary_4$n)), label = scales::comma) +
     scale_color_manual(values = stim_colors) +
     scale_fill_manual(values = stim_colors) +
     theme_minimal() +
     theme(
 	  axis.text = element_text(family = "Arial", size = text_size_small),
 	  axis.title = element_text(family = "Arial", size = text_size_big),
+	  panel.grid.major.x = element_blank(),
 	  plot.background = element_rect(color = "white", fill = "white"),
 	  plot.title = element_text(family = "Arial", size = text_size_big),
 	  plot.title.position = "plot"
@@ -173,7 +200,7 @@ summary_5_plot <-
     geom_quasirandom(aes(color = stim), 
 		     method = "smiley", width = .2, size = .75, alpha = .75) +
     geom_boxplot(aes(fill = stim), linewidth = .25, alpha = .5, width = .5, outlier.color = NA) +
-    scale_y_continuous(limits = c(0, 1400), 
+    scale_y_continuous(limits = c(0, max(summary_5$n)), 
 		       breaks = seq(0, 1400, 200),
 		       label = scales::comma) +
     scale_color_manual(values = stim_colors) +
@@ -218,7 +245,7 @@ summary_6_plot <-
     geom_quasirandom(aes(color = stim), 
 		     method = "smiley", width = .2, size = .75, alpha = .75) +
     geom_boxplot(aes(fill = stim), linewidth = .25, alpha = .5, width = .5, outlier.color = NA) +
-    scale_y_continuous(limits = c(0, 800), 
+    scale_y_continuous(limits = c(0, max(summary_6$n)), 
 		       breaks = seq(0, 800, 200)) +
     scale_color_manual(values = stim_colors) +
     scale_fill_manual(values = stim_colors) +
@@ -243,13 +270,13 @@ summary_6_plot <-
     guides(color = "none", fill = "none")
 
 
-
 plot_out <- 
     summary_1_plot + summary_2_plot + summary_3_plot +
     summary_4_plot + summary_5_plot + summary_6_plot + 
     plot_layout(ncol = 3, widths = c(1, 1.5, 1.5))
 
-ggsave("./plots/summary.png", plot_out, height = 5.5, width = 8.5, dpi = 600)
+#ggsave("./plots/summary.png", plot_out, height = 5.5, width = 8.5, dpi = 600)
+ggsave("./plots/summary_20.png", plot_out, height = 5.5, width = 8.5, dpi = 600)
 
 
 ## QQ plot
@@ -289,7 +316,8 @@ qq_plot <-
 	 y = expression(paste("Observed -log"[10], plain(P)))) +
     guides(color = "none")
 
-ggsave("./plots/qq.png", qq_plot, height = 12, width = 5, dpi = 600)
+#ggsave("./plots/qq.png", qq_plot, height = 12, width = 5, dpi = 600)
+ggsave("./plots/qq_20.png", qq_plot, height = 12, width = 5, dpi = 600)
 
 p_hist <- 
     ggplot(ase_res, aes(x = p_value)) +
@@ -309,13 +337,15 @@ p_hist <-
     guides(fill = "none") +
     labs(x = "p-value", y = NULL)
 
-ggsave("./plots/pvalue_hist.png", p_hist, height = 12, width = 5, dpi = 600)
+#ggsave("./plots/pvalue_hist.png", p_hist, height = 12, width = 5, dpi = 600)
+ggsave("./plots/pvalue_hist_20.png", p_hist, height = 12, width = 5, dpi = 600)
 
 # P-value ~ coverage
 testplot <- 
     ase_res |>
     filter(sample_id == first(sample_id)) |>
-    select(sample_id, stim, p_value, refCount, altCount, total) |>
+    mutate(total = ref_count + alt_count) |>
+    select(sample_id, stim, p_value, total) |>
     mutate(bin = cut_interval(p_value, n = 20)) |>
     arrange(bin) |>
     ggplot(aes(x = bin, y = log2(total))) +
@@ -336,7 +366,8 @@ testplot <-
 	guides(fill = "none") +
 	labs(x = "P-value bins", y = "Log2 (number of reads)")
 
-ggsave("./plots/testplot.png", testplot, width = 8, height = 8)
+#ggsave("./plots/testplot.png", testplot, width = 8, height = 8)
+ggsave("./plots/testplot_20.png", testplot, width = 8, height = 8)
 
 
 
@@ -345,7 +376,7 @@ ggsave("./plots/testplot.png", testplot, width = 8, height = 8)
 temp_work <- system("echo $TEMP_WORK", intern = TRUE)
 
 log_df <- 
-    ase_data |>
+    ase_res |>
     distinct(sample_id, stim) |>
     mutate(stim2 = recode(stim, "Day 0" = "unstday0")) |>
     mutate(logfile = file.path(temp_work, glue("/bam/fixase/{sample_id}_{stim2}_Log.final.out")),
@@ -356,7 +387,6 @@ log_df <-
     select(sample_id, stim, uniq)
 
 # Correlation between number of significant hits and total number of reads
-
 ase_by_coverage_plot <- 
     left_join(log_df, filter(summary_5, FDR == "10%"), join_by(sample_id, stim)) |>
     select(sample_id, stim, n_reads = uniq, n_ase = n) |>
@@ -379,7 +409,8 @@ ase_by_coverage_plot <-
 	     color = "Stim:",
 	     title = "Number of ASE variants at 10% FDR\nvs. number of uniquely mapped reads")
 
-ggsave("./plots/ase_by_coverage.png", ase_by_coverage_plot, width = 6, height = 5)
+#ggsave("./plots/ase_by_coverage.png", ase_by_coverage_plot, width = 6, height = 5)
+ggsave("./plots/ase_by_coverage_20.png", ase_by_coverage_plot, width = 6, height = 5)
 
 # Number of SLE genes with ASE per donor
 # When there are more than 1 gene per locus, I followed the rule below:

@@ -1,6 +1,5 @@
 library(tidyverse)
-
-if (!file.exists("plots")) dir.create("plots")
+library(qvalue)
 
 meta <- 
     "./array_spec.tsv" |>
@@ -79,4 +78,25 @@ ase_annotated <- ase_clean_df |>
     mutate(annot = ifelse(is.na(annot), "intergenic", annot)) |>
     select(sample_id, stim, var_id, annot, gene_id, gene_name, refCount, altCount)
 
-write_tsv(ase_annotated, "./ase_data.tsv")
+ase_res <- 
+    ase_annotated |>
+    mutate(total = refCount + altCount) |>
+    mutate(p_value = map2_dbl(refCount, total, 
+			      ~binom.test(.x, .y, p = .5, alternative = "two.sided")$p.value),
+	   q_value = qvalue(p_value)$qvalues) |>
+    select(sample_id, stim, var_id, gene_name, gene_id, ref_count = refCount, alt_count = altCount, p_value, q_value)
+
+write_tsv(ase_res, "./ase_data.tsv")
+
+# Required at least 20 reads
+ase_res20 <- 
+    ase_res |>
+    mutate(total = ref_count + alt_count) |>
+    filter(total >= 20) |>
+    mutate(p_value = map2_dbl(ref_count, total, 
+			      ~binom.test(.x, .y, p = .5, alternative = "two.sided")$p.value),
+	   q_value = qvalue(p_value)$qvalues) |>
+    select(-total)
+
+write_tsv(ase_res20, "./ase_data_20reads.tsv")
+

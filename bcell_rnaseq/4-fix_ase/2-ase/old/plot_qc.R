@@ -16,6 +16,10 @@ if (!file.exists("plots")) dir.create("plots")
 
 ase_clean_df <- read_tsv("./ase_data.tsv", col_types = "ffccccii")
 
+### Make a version of all plots with total_reads >= 20
+ase_clean_df <- filter(ase_clean_df, (refCount + altCount) >= 20)
+###
+
 sample_order <- ase_clean_df |> 
     distinct(sample_id, stim) |> 
     count(sample_id, sort = TRUE) |>
@@ -31,65 +35,47 @@ ref_r_plot <-
     geom_histogram(aes(fill = stim)) +
     scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1")) +
     scale_fill_manual(values = stim_colors) +
-    facet_grid2(stim~sample_id, scales = "free_y", independent = "y") +
+    facet_grid2(sample_id~stim, scales = "free_y", independent = "y") +
     theme_minimal() +
     theme(text = element_text(size = 11, family = "Arial"),
 	  panel.grid = element_blank(),
-	  strip.text.y = element_text(size = 14, angle = 0, family = "Arial", face = "bold"),
+	  strip.text.x = element_text(size = 11, family = "Arial", face = "bold"),
+	  strip.text.y = element_text(size = 11, angle = 0, family = "Arial", face = "bold"),
 	  strip.background = element_rect(fill = "white", color = "white"),
 	  legend.position = "none",
 	  axis.text.y = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white")) +
     labs(x = "Reference allele ratio", y = NULL, fill = "Stim:")
 
-ggsave("./plots/ref_r_wide.png", ref_r_plot, height = 3, width = 15)
+ggsave("./plots/ref_r_20.png", ref_r_plot, height = 10, width = 5)
 
-# Fraction of both alleles seen
-both_seen_df <- ase_df |>
-    filter(totalCount >= 10) |>
-    mutate(both_seen = refCount >= 1 & altCount >= 1) |>
-    mutate(sample_id = factor(sample_id, levels = sample_order),
-	   stim = recode(stim, "unstday0" = "Day 0"),
-	   stim = factor(stim, levels = c("Day 0", "BCR", "TLR7", "DN2"))) |>
-    group_by(donor_id, sample_id, stim) |>
-    summarise(p_both_seen = mean(both_seen)) |>
-    ungroup() 
-
-both_seen_plot <- 
-    ggplot(both_seen_df |> mutate(sample_id = fct_rev(sample_id)), 
-	   aes(x = p_both_seen, y = sample_id)) +
-	geom_col(aes(fill = stim)) +
-	scale_x_continuous(limits = c(0, 1),
-			   breaks = c(0, .5, 1),
-			   labels = c("0", "0.5", "1")) +
-	scale_fill_manual(values = c("Day 0" = "grey", "BCR" = "cornflowerblue",
-				     "TLR7" = "forestgreen", "DN2" = "tomato3")) +
-	facet_wrap(~stim, nrow = 1) +
-	theme_minimal() +
-	theme(panel.grid.minor.x = element_blank(),
-	      legend.position = "none",
-	      plot.background = element_rect(fill = "white", color = "white")) +
-	labs(x = "Proportion of both alleles seen", y = "Sample ID")
-
-ggsave("./plots/both_seen.png", both_seen_plot)
-
-## Annotate genes
-#annotations <- 
-#    file.path("/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens",
-#	      "gencode.v39.primary_assembly.annotation.gtf") |>
-#    read_tsv(comment = "#", col_names = FALSE, col_types = "ccciicccc")
+## Fraction of both alleles seen
+#both_seen_df <- ase_clean_df |>
+#    mutate(both_seen = refCount >= 1 & altCount >= 1) |>
+#    mutate(sample_id = factor(sample_id, levels = sample_order),
+#	   stim = recode(stim, "unstday0" = "Day 0"),
+#	   stim = factor(stim, levels = c("Day 0", "BCR", "TLR7", "DN2"))) |>
+#    group_by(donor_id, sample_id, stim) |>
+#    summarise(p_both_seen = mean(both_seen)) |>
+#    ungroup() 
 #
-#gene_df <- annotations |>
-#    filter(X3 == "gene", X1 %in% paste0("chr", c(1:22, "X"))) |>
-#    mutate(gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
-#	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+")) |>
-#    select(chr = X1, start = X4, end = X5, gene_id, gene_name)
+#both_seen_plot <- 
+#    ggplot(both_seen_df |> mutate(sample_id = fct_rev(sample_id)), 
+#	   aes(x = p_both_seen, y = sample_id)) +
+#	geom_col(aes(fill = stim)) +
+#	scale_x_continuous(limits = c(0, 1),
+#			   breaks = c(0, .5, 1),
+#			   labels = c("0", "0.5", "1")) +
+#	scale_fill_manual(values = c("Day 0" = "grey", "BCR" = "cornflowerblue",
+#				     "TLR7" = "forestgreen", "DN2" = "tomato3")) +
+#	facet_wrap(~stim, nrow = 1) +
+#	theme_minimal() +
+#	theme(panel.grid.minor.x = element_blank(),
+#	      legend.position = "none",
+#	      plot.background = element_rect(fill = "white", color = "white")) +
+#	labs(x = "Proportion of both alleles seen", y = "Sample ID")
 #
-#ase_res_annot <-
-#    left_join(ase_df, gene_df, join_by(contig == chr, between(position, start, end))) |>
-#    select(-start, -end)
-#
-#
+#ggsave("./plots/both_seen.png", both_seen_plot)
 #
 
 # compare technical reps
@@ -211,34 +197,4 @@ ggsave("./plots/reps.png",
 temp_df |>
     left_join(temp_pvals, join_by(donor_id, stim, var_id)) |>
     count(sig, rep1 == -0.1, rep2 == -0.1)
-
-
-# For seminar
-average_imb <- ref_ratios |>
-    group_by(sample_id, stim) |>
-    summarise(mean_imb = mean(ref_r)) |>
-    ungroup()
-
-ref_r_plot_wide <- 
-    ggplot(ref_ratios, aes(ref_r)) +
-    geom_histogram(aes(fill = stim)) +
-    scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1")) +
-    scale_fill_manual(values = c("Day 0" = "grey", "BCR" = "cornflowerblue",
-				  "TLR7" = "forestgreen", "DN2" = "tomato3")) +
-    geom_vline(data = average_imb, 
-	       aes(xintercept = mean_imb), 
-	       linewidth = .5) +
-    facet_grid2(stim~sample_id, scales = "free_y", independent = "y") +
-    theme_minimal() +
-    theme(text = element_text(size = 10),
-	  panel.grid = element_blank(),
-	  strip.text.x = element_text(size = 6),
-	  strip.text.y = element_text(angle = 0, size = 12, face = "bold"),
-	  strip.background = element_rect(fill = "white", color = "white"),
-	  legend.position = "none",
-	  axis.text.y = element_blank(),
-	  plot.background = element_rect(fill = "white", color = "white")) +
-    labs(x = "Reference allele ratio", y = NULL, fill = "Stim:")
-
-ggsave("./plots/ref_r_wide.png", ref_r_plot_wide, height = 3, width = 12)
 
