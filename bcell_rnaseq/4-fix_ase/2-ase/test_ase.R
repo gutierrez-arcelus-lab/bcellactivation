@@ -15,16 +15,122 @@ stim_colors <-
       "DN2" = "#a82203")
 
 # ASE results
-ase_df <- read_tsv("./ase_data.tsv", col_types = "ffccccii") 
+ase_res <- read_tsv("./ase_data.tsv", col_types = "ffccciidd") 
 
-# Binomial test
-ase_res <- 
-    ase_df |>
-    mutate(total = refCount + altCount) |>
-    mutate(p_value = map2_dbl(refCount, total, 
-			      ~binom.test(.x, .y, p = .5, alternative = "two.sided")$p.value),
-	   q_value = qvalue(p_value)$qvalues) |>
-    select(sample_id, stim, var_id, ref_count = refCount, alt_count = altCount, p_value, q_value)
+# Differential ASE with DESeq2
+library(DESeq2)
+library(furrr)
+
+data_to_test <- 
+    ase_res |> 
+    select(sample_id, stim, var_id) |>
+    mutate(value = 1) |>
+    pivot_wider(names_from = stim, values_from = value) |>
+    pivot_longer((BCR:DN2), names_to = "stim") |>
+    drop_na(`Day 0`, value) |>
+    dplyr::count(var_id, stim) |>
+    filter(n >= 5)
+
+run_deseq <- function(ase_data, variant, stim_i) {
+    
+    var_df <- 
+	ase_data |> 
+	filter(var_id == variant, 
+	       stim %in% c("Day 0", stim_i)) |>
+	select(sample_id, stim, ref_count, alt_count) |>
+	mutate(stim = fct_recode(stim, "control" = "Day 0", "treated" = stim_i)) |>
+	group_by(sample_id) |>
+	filter(all(c("control", "treated") %in% stim)) |>
+	ungroup() |>
+	mutate_at(vars(sample_id, stim), fct_drop) |>
+	pivot_longer(ref_count:alt_count, names_to = "allele") |>
+	mutate(allele = sub("_count", "", allele),
+	       allele = factor(allele, levels = c("ref", "alt")))
+
+    count_matrix <- 
+	var_df |>
+	unite("col_label", c(sample_id, stim, allele), sep = "_") |>
+	pivot_wider(names_from = col_label) |>
+	as.matrix() |>
+	`rownames<-`(variant)
+
+    dds <- DESeqDataSetFromMatrix(count_matrix, var_df, ~stim + stim:sample_id + stim:allele)
+    sizeFactors(dds) <- rep(1, nrow(var_df))
+    dds <- estimateDispersionsGeneEst(dds)
+    dispersions(dds) <- mcols(dds)$dispGeneEst
+    dds <- nbinomWaldTest(dds)
+    results(dds, contrast = list("stimtreated.allelealt", "stimcontrol.allelealt"))
+}
+
+plan(multisession, workers = availableCores())
+
+res_df <- 
+    data_to_test |>
+    mutate(data = future_map2(var_id, stim, ~run_deseq(ase_data = ase_res, variant = .x, stim_i = .y)))
+
+write_rds(res_df, "./deseq2_results.rds")   
+
+res_table <- 
+    res_df |>
+    select(-n) |>
+    mutate(data = map(data, as.data.frame)) |>
+    unnest(cols = data)
+
+#write_tsv(res_table, "./deseq2_results.tsv")
+res_table <- read_tsv("./deseq2_results.tsv")
+
+candidate_vars <- 
+    res_table |> 
+    filter(abs(log2FoldChange) > .5, pvalue < 0.01) |>
+    arrange(pvalue) |>
+    distinct(var_id) |>
+    pull(var_id)
+
+
+# Check p-value hist
+# Readjust p-values
+
+res_table |> filter(var_id == candidate_vars[1])
+ase_res |> filter(var_id == candidate_vars[1]) |> arrange(sample_id, stim) |> print(n = Inf)
+
+candidate_vars_df <- 
+    res_table |> 
+    filter(abs(log2FoldChange) > .5, pvalue < 0.01) |>
+    arrange(pvalue) |>
+    distinct(var_id, stim)
+
+df_treat <- 
+    ase_res |> 
+    inner_join(candidate_vars_df) |> 
+    mutate(imb = abs(0.5 - (ref_count/(ref_count + alt_count)))) |>
+    select(sample_id, stim, var_id, gene_name, imb, p_value)
+
+df_control <- 
+    ase_res |> 
+    filter(stim == "Day 0", var_id %in% candidate_vars_df$var_id) |>
+    mutate(imb_control = abs(0.5 - (ref_count/(ref_count + alt_count)))) |>
+    select(sample_id, var_id, imb_control, p_control = p_value)
+
+
+candidate_vars_df2 <- 
+    inner_join(df_treat, df_control) |>
+    group_by(stim, var_id) |>
+    summarise_at(vars(imb, imb_control), mean) |>
+    ungroup() |>
+    filter(imb > imb_control)
+
+candidate_vars2 <- 
+    candidate_vars_df2 |>
+    distinct(var_id) |>
+    pull(var_id)
+
+res_table |> filter(var_id == candidate_vars2[8])
+ase_res |> filter(var_id == candidate_vars2[8]) |> arrange(sample_id, stim) |> print(n = Inf)
+
+ase_res |> filter(var_id %in% candidate_vars2) |> distinct(gene_name) |> pull(gene_name)
+
+res_table |> filter(var_id == "chr12:128794319:A:G")
+ase_res |> filter(var_id == "chr12:128794319:A:G") |> arrange(sample_id, stim) |> print(n = Inf)
 
 
 # technical replicates

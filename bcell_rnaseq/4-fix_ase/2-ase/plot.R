@@ -57,7 +57,6 @@ ref_r_plot <-
 #ggsave("./plots/ref_r.png", ref_r_plot, height = 8, width = 5)
 ggsave("./plots/ref_r_20.png", ref_r_plot, height = 8, width = 5)
 
-
 # Summary stats
 summary_1 <- 
     ase_res |>
