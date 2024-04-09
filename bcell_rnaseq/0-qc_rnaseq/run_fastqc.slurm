@@ -45,3 +45,5 @@ trim_galore --paired \
     --cores $SLURM_CPUS_PER_TASK \
     -o $OUTDIR \
     $FQMERGE1 $FQMERGE2
+
+rm $FQMERGE1 $FQMERGE2
