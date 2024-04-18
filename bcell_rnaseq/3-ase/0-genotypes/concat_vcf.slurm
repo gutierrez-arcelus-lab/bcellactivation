@@ -4,7 +4,7 @@
 #SBATCH -c 1
 #SBATCH --mem=16gb
 #SBATCH --time=24:00:00
-#SBATCH -p bch-compute,bch-compute-pe
+#SBATCH -p bch-compute
 #SBATCH --array=1-16
 #SBATCH --job-name=concat
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
