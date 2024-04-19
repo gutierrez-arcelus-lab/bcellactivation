@@ -2,7 +2,7 @@
 ## single-cell data analysis
 library(Seurat)
 library(sclibr)
-library(demuxmix)
+#library(demuxmix)
 
 ## Data wrangling
 library(dplyr)

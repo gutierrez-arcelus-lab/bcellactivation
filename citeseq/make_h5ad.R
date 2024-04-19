@@ -28,46 +28,18 @@ genes_df <-
     mutate(gene_lab = ifelse(n == 1, gene_name, paste(gene_name, gene_id, sep = "-"))) |>
     select(gene_id, gene_lab)
 
-# Import Seurat objects
-lib1984 <- readRDS("./data/seurat_1984_qced.rds")
-lib1988 <- readRDS("./data/seurat_1988_qced.rds")
-lib1990 <- readRDS("./data/seurat_1990_qced.rds")
-
-DefaultAssay(lib1984) <- DefaultAssay(lib1988) <- DefaultAssay(lib1990) <- "RNA"
-
+# Import Seurat object
 # Merge datasets
-bcells <- 
-    merge(lib1984, y = c(lib1988, lib1990), add.cell.ids = c("1984", "1988", "1990"))
+bcells <- read_rds("./bcells.rds") 
 
 # Rename genes
 ## ensure that genes are in the same order
 all(rownames(bcells[["RNA"]]@data) == genes_df$gene_id)
 
-## Rename
+## then rename
 rownames(bcells[["RNA"]]@counts) <- genes_df$gene_lab
 rownames(bcells[["RNA"]]@data) <- genes_df$gene_lab
 rownames(bcells[["RNA"]]@meta.features) <- genes_df$gene_lab
-
-# Scale and run PCA
-bcells <- bcells |>
-    {function(x) ScaleData(x, features = rownames(x))}() |>
-    FindVariableFeatures() |>
-    {function(x) RunPCA(x, features = VariableFeatures(x))}()
-
-# Run Harmony
-# Correct for batch
-set.seed(1L)
-bcells <- bcells |>
-    RunHarmony(group.by.vars = "orig.ident", 
-	       max.iter.harmony = 30,
-	       reduction.save = "harmony")
-
-# UMAP
-bcells <- bcells |>
-    RunUMAP(reduction = "harmony", 
-	    dims = 1:35,
-	    seed.use = 1L,
-	    reduction.name = "umap")
 
 # Append ADT data to RNA
 ## First add the 'prot' suffix to ADT protein names
@@ -97,9 +69,18 @@ bcells_out <-
 	       assays = "RNA",
 	       dimreducs = "umap",
 	       counts = FALSE,
-	       scale.data = FALSE)
+	       graphs = FALSE,
+	       scale.data = FALSE,
+	       misc = FALSE)
+
+bcells_out@commands <- list()
+bcells_out@meta.data <- select(bcells_out@meta.data, -prob, -doublet_score, -RNA_snn_res.0.4)
+
+bcells_out@meta.data <- 
+    bcells_out@meta.data |>
+    mutate(seurat_clusters = paste0("C", seurat_clusters))
 
 # Save data
-SaveH5Seurat(bcells_out, "bcells_harmony.h5Seurat", overwrite = TRUE)
-Convert("bcells_harmony.h5Seurat", dest = "h5ad", overwrite = TRUE)
+SaveH5Seurat(bcells_out, "bcells.h5Seurat", overwrite = TRUE)
+Convert("bcells.h5Seurat", dest = "h5ad", overwrite = TRUE)
 

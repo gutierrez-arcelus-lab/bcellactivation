@@ -29,11 +29,11 @@ library(ggsci)
 library(ggthemes)
 library(ggnewscale)
 library(cowplot)
-
+library(patchwork)
 
 # Colors
 stim_colors <- 
-    c("Day 0" = "#dbdbdb", 
+    c("Day 0" = "grey60", 
       "IL4 24h" = "grey40",
       "IL4 72h"  = "#000000",
       "BCR 24h" = "#6996e3",
@@ -67,10 +67,6 @@ DefaultAssay(lib1984) <- DefaultAssay(lib1988) <- DefaultAssay(lib1990) <- "RNA"
 bcells <- 
     merge(lib1984, y = c(lib1988, lib1990), add.cell.ids = c("1984", "1988", "1990"))
 
-# Save merged data
-#SaveH5Seurat(bcells, "bcells.h5Seurat")
-#Convert("bcells.h5Seurat", dest = "h5ad")
-
 # Scale and run PCA
 bcells <- bcells |>
     {function(x) ScaleData(x, features = rownames(x))}() |>
@@ -78,8 +74,6 @@ bcells <- bcells |>
     {function(x) RunPCA(x, features = VariableFeatures(x))}()
 
 # Visualize PCA
-variable_genes_merge <- VariableFeatures(bcells)
-
 # Total variance in the data
 #total_variance <- bcells@assays$RNA@scale.data |>
 #    matrixStats::rowVars() |>
@@ -103,84 +97,61 @@ sdev_plot <- tibble(sdev = bcells@reductions$pca@stdev) |>
 
 ggsave("./plots/pca_sdev.png", sdev_plot, width = 4, height = 3)
 
-# Run Harmony
-# Correct for batch
+# Run Harmony correcting for batch
 set.seed(1L)
 bcells <- bcells |>
     RunHarmony(group.by.vars = "orig.ident", 
 	       max.iter.harmony = 30,
 	       reduction.save = "harmony")
 
-# Correct for batch and condition
-#bcells <- bcells |>
-#    RunHarmony(group.by.vars = c("orig.ident", "hto"), 
-#	       max.iter.harmony = 30,
-#	       reduction.save = "harmony.2")
-#
 # UMAP
-bcells <- bcells |>
-    RunUMAP(reduction = "pca", 
-	    dims = 1:35, 
-	    seed.use = 1L,
-	    reduction.name = "umap.merged")
-
 bcells <- bcells |>
     RunUMAP(reduction = "harmony", 
 	    dims = 1:35,
 	    seed.use = 1L,
-	    reduction.name = "umap.harmony")
+	    reduction.name = "umap")
 
-#bcells <- bcells |>
-#    RunUMAP(reduction = "harmony.2", 
-#	    dims = 1:35,
-#	    seed.use = 1,
-#	    reduction.name = "umap.harmony.2")
-#
-#
-#Embeddings(bcells, "umap.harmony.1") |>
-#    as_tibble(rownames = "barcode") |>
-#    select(barcode, UMAP_1 = 2, UMAP_2 = 3) |> 
-#    left_join(as_tibble(bcells@meta.data, rownames = "barcode")) |>
-#    select(barcode, UMAP_1, UMAP_2, dataset = orig.ident, hto) |>
-#    write_tsv("./harmony_umap_data.tsv")
-#
-#
 
+# Metadata
+read_demuxlet <- function(f) {
+    read_tsv(f) |>
+    select(barcode = BARCODE, best = BEST) |>
+    extract(best, c("status", "sample"), "([^-]+)-(.+)")
+}
+
+batches <- unique(bcells@meta.data$orig.ident)
+
+demuxlet_df <- 
+    sprintf("./demultiplexing/demuxlet/demuxlet_%s_results.best", batches) |>
+    setNames(batches) |>
+    map_dfr(read_demuxlet, .id = "orig.ident") |>
+    unite("barcode", c(orig.ident, barcode), sep = "_")
+
+
+metadata <-
+    as_tibble(bcells@meta.data, rownames = "barcode") |>
+    select(barcode, orig.ident, hto) |>
+    left_join(demuxlet_df, join_by(barcode)) |>
+    mutate(donor_id = sub("^[^_]+_[^-]+-(\\d+)$", "\\1", sample)) |>
+    select(barcode, orig.ident, hto, donor_id)
+
+# Plots
 umap_df <- 
-    list("Merge" = Embeddings(bcells, "umap.merged"),
-	 "Harmony (batch)" = Embeddings(bcells, "umap.harmony")) |>
-    map_dfr(~as_tibble(., rownames = "barcode") |> 
-		select(barcode, UMAP_1 = 2, UMAP_2 = 3),
-	    .id = "reduction") |>
-    left_join(as_tibble(bcells@meta.data, rownames = "barcode")) |>
-    select(reduction, barcode, UMAP_1, UMAP_2, dataset = orig.ident, hto) |>
-    mutate(reduction = fct_inorder(reduction),
-	   dataset = paste0("BRI-", dataset)) |>
+    Embeddings(bcells, "umap") |>
+    as_tibble(rownames = "barcode") |> 
+    left_join(metadata, join_by(barcode)) |>
+    mutate(orig.ident = paste0("BRI-", orig.ident)) |>
     sample_frac(1L) |>
-    mutate(barcode = fct_inorder(barcode))
+    mutate(barcode = fct_inorder(barcode),
+	   hto = factor(hto, levels = names(stim_colors)))
 
-
-umap <- umap_df |>
-    pivot_longer(dataset:hto, names_to = "variable") |>
-    ggplot(aes(UMAP_1, UMAP_2)) +
-    geom_point(data = ~subset(., variable == "dataset"),
-	       aes(color = value), 
-	       size = .1) +
-    scale_color_manual(values = c("black", "turquoise2", "deeppink3")) +
-    guides(color = guide_legend(title = "batch", 
-				order = 1, 
+umap_batch <-
+    ggplot(umap_df, aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = orig.ident), size = .1) +
+    scale_color_manual(values = c("#C5000B", "midnightblue", "#FFB022")) +
+    guides(color = guide_legend(title = "Batch:", 
 				override.aes = list(size = 4, alpha = 1))) +
-    new_scale_color() +
-    geom_point(data = ~subset(., variable == "hto") |>
-		mutate(value = factor(value, levels = names(stim_colors))), 
-	       aes(color = value), 
-	       size = .1) +
-    scale_color_manual(values = stim_colors) +
-    guides(color = guide_legend(title = "Condition",
-				order = 2, 
-				override.aes = list(size = 4, alpha = 1))) +
-    facet_grid(variable~reduction) +
-    theme_bw() +
+    theme_minimal() +
     theme(axis.title = element_blank(),
 	  axis.text = element_blank(),
 	  strip.text.y = element_blank(),
@@ -188,8 +159,36 @@ umap <- umap_df |>
 	  panel.grid = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white"))
 
-ggsave("./plots/umap.png", umap, width = 9, height = 5, dpi = 600) 
+umap_donor <-
+    ggplot(umap_df, aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = donor_id), size = .1) +
+    scale_color_manual(values = RColorBrewer::brewer.pal(n = 5, "Set1")) +
+    guides(color = guide_legend(title = "Donor ID:", 
+				override.aes = list(size = 4, alpha = 1))) +
+    theme_minimal() +
+    theme(axis.title = element_blank(),
+	  axis.text = element_blank(),
+	  strip.text.y = element_blank(),
+	  axis.ticks = element_blank(),
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white"))
 
+ggsave("./plots/umap_batch_donor.png", umap_batch + umap_donor, width = 10, height = 4)
+
+
+umap_stim <-
+    ggplot(umap_df, aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = hto), size = .1) +
+    scale_color_manual(values = stim_colors) +
+    guides(color = guide_legend(title = "Stim:", 
+				override.aes = list(size = 4, alpha = 1))) +
+    theme_minimal() +
+    theme(axis.title = element_blank(),
+	  axis.text = element_blank(),
+	  strip.text.y = element_blank(),
+	  axis.ticks = element_blank(),
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white"))
 
 
 # Clusters
@@ -197,44 +196,45 @@ bcells <- bcells |>
     FindNeighbors(dims = 1:35, reduction = "harmony", nn.eps = .5) |>
     FindClusters(resolution = 0.4)
 
+#write_rds(bcells, "./bcells.rds")
+#bcells <- read_rds("./bcells.rds")
+
 cluster_df <- bcells@meta.data |>
     as_tibble(rownames = "barcode") |>
     select(barcode, cluster = RNA_snn_res.0.4)
 
 umap_df_clu <- umap_df |>
-    filter(reduction == "Harmony (batch)") |>
     left_join(cluster_df, join_by(barcode)) |>
     select(barcode, cluster, UMAP_1, UMAP_2)
 
 # Plot clusters and features
-cluster_labs <- umap_df_clu |> 
-    group_by(cluster) |>
-    summarise_at(vars(UMAP_1, UMAP_2), median) |>
-    ungroup()
-
 clust_colors <- 
-    c("black", "grey", "purple2", "goldenrod2", 
-      "magenta3", "yellow", "green4", "royalblue",
-      pal_npg()(9)) 
+    c("cornflowerblue", "mediumvioletred", "orange3", "red3", 
+      "black", "forestgreen", "indianred1", "blueviolet",
+      "firebrick4", "tan4", "yellowgreen", "darkgrey",
+      "tomato3", "blue", "goldenrod2", "lightsalmon",
+      "darkgreen")
 
-umap_clust <- ggplot(umap_df_clu, aes(UMAP_1, UMAP_2)) +
-    geom_point(aes(color = cluster), size = .25) +
-    geom_label(data = cluster_labs, aes(label = cluster), alpha = .5, size = 3) +
+umap_clust <- 
+    ggplot(umap_df_clu, aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(color = cluster), size = .1) +
     scale_color_manual(values = clust_colors) +
     theme_minimal() +
     theme(panel.grid = element_blank(),
           axis.title = element_blank(),
           axis.text = element_blank(),
 	  plot.title = element_text(hjust = .5),
-	  legend.position = "none") +
-    labs(title = "Clusters")
+	  plot.background = element_rect(fill = "white", color = "white")
+	  ) +
+    guides(color = guide_legend(title = "Cluster:", ncol = 2, 
+				override.aes = list(size = 4, alpha = 1)))
 
 mki_gene_df <- features_df |>
     filter(gene_name == "MKI67") |>
     select(gene_id, gene_name)
 
 mki_gene_quant <- bcells@assays$RNA@data |> 
-    {function(x) x[mki_gene_df$gene_id, ,drop = FALSE]}() |>
+    {function(x) x[mki_gene_df$gene_id, , drop = FALSE]}() |>
     as_tibble(rownames = "gene_id") |>
     left_join(mki_gene_df, by = "gene_id") |>
     pivot_longer(-c("gene_id", "gene_name"), 
@@ -245,17 +245,16 @@ umap_ki67 <- umap_df_clu |>
     select(barcode, gene_exp, UMAP_1, UMAP_2) |>
     ggplot(aes(UMAP_1, UMAP_2)) +
     geom_point(aes(color = gene_exp), size = .1) +
-    scale_color_gradient(low = "grey", high = "midnightblue", 
-			 guide = guide_colorbar(direction = "horizontal",
-						barheight = .5)) +
+    scale_color_gradient(low = "grey80", high = "midnightblue", 
+			 guide = guide_colorbar(direction = "vertical",
+						barwidth = .5)) +
     theme_minimal() +
     theme(panel.grid = element_blank(),
           axis.title = element_blank(),
           axis.text = element_blank(),
-	  legend.position = "bottom",
-	  plot.title = element_text(hjust = .5)) +
-    labs(color = NULL, title = "KI67")
-
+	  plot.background = element_rect(fill = "white", color = "white")
+	  ) +
+    labs(color = "MKI67:")
 
 umap_df_features <- bcells@meta.data |> 
     as_tibble(rownames = "barcode") |>
@@ -266,41 +265,38 @@ umap_genes <-
     ggplot(umap_df_features, 
 	   aes(UMAP_1, UMAP_2)) +
     geom_point(aes(color = n_genes), size = .1) +
-    scale_color_gradient(low = "grey", high = "midnightblue", 
-			 guide = guide_colorbar(direction = "horizontal",
-						barheight = .5)) +
+    scale_color_gradient(low = "grey80", high = "midnightblue", 
+			 guide = guide_colorbar(direction = "vertical",
+						barwidth = .5)) +
     theme_minimal() +
     theme(panel.grid = element_blank(),
           axis.title = element_blank(),
           axis.text = element_blank(),
-	  legend.position = "bottom",
-	  plot.title = element_text(hjust = .5)) +
-    labs(color = NULL, title = "Number of genes")
+	  plot.background = element_rect(fill = "white", color = "white")
+	  ) +
+    labs(color = "Genes:")
 
 umap_mito <- 
     ggplot(umap_df_features, 
 	   aes(UMAP_1, UMAP_2)) +
     geom_point(aes(color = percent_mt), size = .1) +
-    scale_color_gradient(low = "grey", high = "midnightblue", 
-			 guide = guide_colorbar(direction = "horizontal",
-						barheight = .5)) +
+    scale_color_gradient(low = "grey80", high = "midnightblue", 
+			 guide = guide_colorbar(direction = "vertical",
+						barwidth = .5)) +
     theme_minimal() +
     theme(panel.grid = element_blank(),
           axis.title = element_blank(),
-	  legend.position = "bottom",
           axis.text = element_blank(),
-	  plot.title = element_text(hjust = .5)) +
-    labs(color = NULL, title = "% Mito")
+	  plot.background = element_rect(fill = "white", color = "white")
+	  ) +
+    labs(color = "% Mito:")
 
-umaps <- 
-    plot_grid(NULL,
-	      umap_clust, 
-	      umap_ki67,
-	      umap_genes, 
-	      umap_mito,
-	      ncol = 1, 
-	      rel_heights = c(.2, 1, 1, 1, 1)) +
-    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/umap.png", 
+       umap_batch + umap_stim + umap_clust + umap_ki67 + umap_genes + umap_mito + plot_layout(ncol = 2),
+       width = 8, height = 7, dpi = 600) 
+
+
 
 
 # Marker genes
@@ -314,17 +310,44 @@ cluster_markers <-
                    min.pct = 0.1,
                    logfc.threshold = .5) |>
     as_tibble() |>
-    left_join(filter(features_df, phenotype == "Gene Expression"), 
-	      join_by(gene == gene_id)) |>
-    select(-phenotype)
+    left_join(genes_df, join_by(gene_id))
 
 cluster_markers_plot <- plot_markers(bcells, cluster_markers)
 
 ggsave("./plots/cluster_markers.png", 
-       plot_grid(umaps, cluster_markers_plot,
-		 nrow = 1, rel_widths = c(.33, 1),
-		 labels = c("A)", "B)")),
-       height = 10, width = 10, dpi = 600)
+       cluster_markers_plot,
+       height = 11, width = 8, dpi = 600)
+
+
+# Memory clusters vs all others
+mem_markers <- 
+    FindMarkers(bcells,
+	    ident.1 = c(3, 8),
+	    only.pos = TRUE,
+	    min.pct = 0.2,
+	    logfc.threshold = .5) |>
+    as_tibble(rownames = "gene_id") |>
+    left_join(genes_df, join_by(gene_id)) |>
+    select(gene_id, gene_name, everything()) |>
+    arrange(desc(abs(avg_log2FC)))
+
+# Gene diff expressed between mem clusters
+mem_dist_markers <- 
+    FindMarkers(bcells,
+	    ident.1 = 3,
+	    ident.2 = 8,
+	    only.pos = TRUE,
+	    min.pct = 0.2,
+	    logfc.threshold = .5) |>
+    as_tibble(rownames = "gene_id") |>
+    left_join(genes_df, join_by(gene_id)) |>
+    select(gene_id, gene_name, everything()) |>
+    arrange(desc(abs(avg_log2FC)))
+
+
+
+
+
 
 # test batch effects
 Idents(bcells) <- "orig.ident"
