@@ -30,11 +30,13 @@ res <-
 
 matches_df <-
     res |>
+    filter(vcf_batch != "0410") |>
     filter(bam_donor_id == vcf_donor_id) |>
     select(bam_donor_id, bam_rep, bam_stim, vcf_donor_id, consist_het, consist_hom)
 
-recruit_df <- 
-    filter(res, vcf_donor_id %in% recruit) |>
+recruit_df <- res |> 
+    filter(vcf_batch != "0410") |>
+    filter(vcf_donor_id %in% recruit) |>
     select(bam_donor_id, bam_rep, bam_stim, vcf_donor_id, consist_het, consist_hom)
 
 plot_df <- 
@@ -108,4 +110,87 @@ write_tsv(out, "./match_summary.tsv")
 out |> 
     mutate(recruit = vcf_donor_id %in% recruit) |>
     print(n = Inf)
+
+
+# Plot for JBC Synergy meeting
+
+mbv_ok_df <- plot_df |>
+    filter(! sample_id %in% unique(mis_df$sample_id))
+
+mbv_ok_plot <- 
+    ggplot(mbv_ok_df, aes(consist_het, consist_hom)) +
+    geom_point(size = 3, shape = 3, stroke = 1.5,
+	       aes(color = id_match)) +  
+    scale_x_continuous(limits = c(0, 1.1), breaks = c(0, 1)) +
+    scale_y_continuous(limits = c(0, 1.1), breaks = c(0, 1)) +
+    scale_color_manual(values = c("TRUE" = "#1cc202", "FALSE" = "grey30")) +
+    facet_grid(bam_stim~sample_id, switch = "y") +
+    theme_bw() +
+    theme(text = element_text(size = 10),
+	  legend.position = "none",
+	  panel.grid.minor.x = element_blank(),
+	  panel.grid.minor.y = element_blank(),
+	  strip.text.x = element_text(size = 7),
+	  strip.text.y.left = element_text(angle = 0),
+	  strip.background = element_rect(fill = "white", color = "white"),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(x = "Fraction concordant heterozygous sites",
+	 y = "Fraction concordant homozygous sites")
+
+ggsave("./plots/mbv_ok.png", mbv_ok_plot, width = 10, height = 3)
+
+mbv_flag_df <- plot_df |>
+    filter(sample_id %in% unique(mis_df$sample_id))
+
+mbv_flag_plot <- 
+    ggplot(mbv_flag_df, aes(consist_het, consist_hom)) +
+    geom_point(data = filter(mbv_flag_df, id_match == FALSE),
+	       size = 3, shape = 3, stroke = 1.5,
+	       aes(color = id_match)) +  
+    geom_point(data = filter(mbv_flag_df, id_match == TRUE),
+	       size = 3, shape = 3, stroke = 1.5,
+	       aes(color = id_match)) +  
+    geom_text_repel(data = mis_df,
+		    aes(consist_het, consist_hom, label = vcf_donor_id),
+		    size = 2, color = "slateblue",
+		    direction = "y",
+		    nudge_y = -.6,
+		    segment.size = .25,
+		    min.segment.length = 0) +
+    scale_x_continuous(limits = c(0, 1.1), breaks = c(0, 1)) +
+    scale_y_continuous(limits = c(0, 1.1), breaks = c(0, 1)) +
+    scale_color_manual(values = c("TRUE" = "#1cc202", "FALSE" = "grey30")) +
+    facet_grid(bam_stim~sample_id, switch = "y") +
+    theme_bw() +
+    theme(text = element_text(size = 10),
+	  legend.position = "none",
+	  panel.grid.minor.x = element_blank(),
+	  panel.grid.minor.y = element_blank(),
+	  strip.text.x = element_text(size = 7),
+	  strip.text.y.left = element_text(angle = 0),
+	  strip.background = element_rect(fill = "white", color = "white"),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(x = "Fraction concordant heterozygous sites",
+	 y = "Fraction concordant homozygous sites")
+
+ggsave("./plots/mbv_flag.png", mbv_flag_plot, width = 4, height = 3)
+
+mbv_flag_df |>
+    group_by(sample_id, bam_stim) |>
+    filter((consist_het + consist_hom) == max(consist_het + consist_hom)) |>
+    ungroup() |>
+    select(sample_id:vcf_donor_id) |>
+    inner_join(res) |>
+    select(-vcf_prefix) |>
+    filter(vcf_batch != "0410") |>
+    print(width = Inf, n = Inf)
+
+mbv_ok_df |>
+    filter(id_match) |>
+    select(sample_id:vcf_donor_id) |>
+    inner_join(res) |>
+    select(-vcf_prefix) |>
+    filter(vcf_batch != "0410") |>
+    print(n = Inf)
+    
 

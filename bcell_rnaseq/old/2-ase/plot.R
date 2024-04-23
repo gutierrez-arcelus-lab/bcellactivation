@@ -55,4 +55,63 @@ ref_r_plot <-
 
 ggsave("./plots/ref_r.png", ref_r_plot, height = 7, width = 4)
 
+# Plor for JBC Synergy seminar
+flagged_samples <- ref_ratios |>
+    group_by(sample_id, stim) |>
+    summarise(m = mean(ref_r)) |>
+    group_by(sample_id) |>
+    filter(any(m <= .4 | m >= .6)) |>
+    distinct(sample_id) |>
+    pull(sample_id) |>
+    as.character()
+    
+ref_r_plot_ok <- 
+    ref_ratios |>
+    filter(! sample_id %in% flagged_samples) |>
+    ggplot(aes(ref_r)) +
+    geom_histogram(aes(fill = stim)) +
+    scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1")) +
+    scale_fill_manual(values = c("Day 0" = "grey", "BCR" = "cornflowerblue",
+				  "TLR7" = "forestgreen", "DN2" = "tomato3")) +
+    facet_grid2(stim~sample_id, scales = "free_y", independent = "y", switch = "y") +
+    theme_minimal() +
+    theme(text = element_text(size = 10),
+	  panel.grid = element_blank(),
+	  strip.text.x = element_text(size = 7),
+	  strip.text.y.left = element_text(angle = 0),
+	  strip.background = element_rect(fill = "white", color = "white"),
+	  legend.position = "none",
+	  axis.text.y = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(x = "Reference allele ratio", y = NULL, fill = "Stim:") +
+    coord_cartesian(clip = "off")
+
+ggsave("./plots/ref_r_ok.png", ref_r_plot_ok, height = 3, width = 10)
+
+ref_r_plot_flag <- 
+    ref_ratios |>
+    filter(sample_id %in% flagged_samples) |>
+    ggplot(aes(ref_r)) +
+    geom_histogram(aes(fill = stim)) +
+    scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1")) +
+    scale_fill_manual(values = c("Day 0" = "grey", "BCR" = "cornflowerblue",
+				  "TLR7" = "forestgreen", "DN2" = "tomato3")) +
+    facet_grid2(stim~sample_id, scales = "free_y", independent = "y", switch = "y") +
+    theme_minimal() +
+    theme(text = element_text(size = 10),
+	  panel.grid = element_blank(),
+	  strip.text.x = element_text(size = 7),
+	  strip.text.y.left = element_text(angle = 0),
+	  strip.background = element_rect(fill = "white", color = "white"),
+	  legend.position = "none",
+	  axis.text.y = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(x = "Reference allele ratio", y = NULL, fill = "Stim:") +
+    coord_cartesian(clip = "off")
+
+ggsave("./plots/ref_r_flag.png", ref_r_plot_flag, height = 3, width = 4)
+
+
+
+
 

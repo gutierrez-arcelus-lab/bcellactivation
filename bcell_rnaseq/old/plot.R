@@ -2,52 +2,256 @@ library(tidyverse)
 library(tidytext)
 library(broom)
 library(cowplot)
+library(extrafont)
 
-stim_colors <- c("unstday0" = "grey",
-		 "BCR" = "#4DBBD5FF",
-		 "TLR7" = "#91D1C2FF",
-		 "DN2" = "#E64B35FF")
+stim_colors <- 
+    c("unstday0" = "grey",
+      "BCR" = "#4DBBD5FF",
+      "TLR7" = "#91D1C2FF",
+      "DN2" = "#E64B35FF")
+
+stim_shades <- 
+    c("unstday0_raw_reads" = "black",
+      "unstday0_Unique" = "grey60",
+      "BCR_raw_reads" = "midnightblue",
+      "BCR_Unique" = "#94a4db",
+      "TLR7_raw_reads" = "forestgreen",
+      "TLR7_Unique" = "#8dbf7d",
+      "DN2_raw_reads" = "#801c05",
+      "DN2_Unique" = "#d08d74")
+
 # QC
-qc_df <- 
-    "/home/ch229163/labshr/Lab_datasets/B_cells_rnaseq/QC/multiqc_data/mqc_fastqc_sequence_counts_plot_1.txt" |>
+temp_dir <- system("echo $TEMP_WORK", intern = TRUE)
+
+read_fastq_counts <- function(qc_dir) {
+
+    file.path(qc_dir, "mqc_fastqc_sequence_counts_plot_1.txt") |>
     read_tsv() |>
     extract(Sample, 
-	    c("subject_id", "stim", "r"), 
+	    c("sample_id", "stim", "r"), 
 	    "\\d+_(\\d+[_123]*)_(.+)_MG\\d+_.+_(R[12])") |>
-    separate(subject_id, c("subject_id", "sample_id"), sep = "_") |>
-    mutate(sample_id = replace_na(sample_id, "1"),
-	   sample_id = paste(subject_id, sample_id, sep = ".")) |>
+    mutate(donor_id = str_extract(sample_id, "[^_]+")) |>
     pivot_longer(`Unique Reads`:`Duplicate Reads`, names_to = "read_type", values_to = "n") |>
-    mutate(read_type = sub("\\sReads$", "", read_type))
+    mutate(read_type = sub("\\sReads$", "", read_type)) |>
+    select(donor_id, sample_id, stim, r, read_type, n)
+}
 
-plot_df <- qc_df %>%
-    filter(r == "R1") %>%
+qc_df <- 
+    file.path(temp_dir, 
+	      "fastq/highinput/multiqc_data") |>
+    read_fastq_counts()
+
+# Total raw reads
+raw_df <- 
+    file.path(temp_dir, "fastq/highinput_raw/multiqc_data/multiqc_general_stats.txt") |>
+    read_tsv() |>
+    select(Sample, raw_reads = ends_with("total_sequences")) |>
+    extract(Sample, 
+	    c("sample_id", "stim", "r"), 
+	    "\\d+_(\\d+[_123]*)_(.+)_MG\\d+_.+_(R[12])") |>
+    mutate(donor_id = str_extract(sample_id, "[^_]+")) |>
+    filter(r == "R1") |>
+    select(donor_id, sample_id, stim, raw_reads)
+
+qc_df_filter <- qc_df |>
+    filter(r == "R1") |>
+    select(-r) 
+
+plot_df <- raw_df |>
+    pivot_longer(raw_reads, names_to = "read_type", values_to = "n") |>
+    bind_rows(qc_df_filter) |>
     mutate(stim = recode(stim, "TR7" = "TLR7"),
-	   stim = factor(stim, levels = names(stim_colors)))
+	   stim = factor(stim, levels = names(stim_colors))) |>
+    arrange(sample_id, stim, read_type) |>
+    filter(read_type != "Duplicate") |>
+    mutate(lab = paste(stim, read_type, sep = "_"),
+	   read_type = factor(read_type, levels = c("raw_reads", "Unique")))
 
-total_reads <- ggplot(plot_df, 
-       aes(x = reorder_within(sample_id, by = n, within = stim, fun = min), 
-	   y = n)) +
-    geom_col(aes(fill = stim, alpha = read_type),
-	     color = "black", size = .1, width = 1) +
-    scale_fill_manual(values = stim_colors) +
-    scale_alpha_manual(values = c("Unique" = 1, "Duplicate" = .5)) +
-    scale_x_reordered() +
-    scale_y_continuous(labels = scales::comma, breaks = scales::pretty_breaks(6)) +
-    facet_wrap(~stim, scales = "free_x", nrow = 1) +
+total_reads <- 
+    ggplot(plot_df, 
+	   aes(x = n,
+	       y = reorder_within(sample_id, by = n, within = stim, fun = "max"))) +
+    geom_col(aes(fill = lab),
+	     position = "dodge",
+	     color = "black", linewidth = .1, width = 1) +
+    scale_fill_manual(values = stim_shades) +
+    scale_x_continuous(labels = function(x) x/1e6L, 
+		       breaks = seq(0, 70e6, 10e6),
+		       expand = c(0, 0)) +
+    scale_y_reordered() +
+    facet_wrap(~stim, scales = "free", ncol = 2) +
     theme_minimal() +
     theme(panel.grid.minor = element_blank(),
-          panel.grid.major.x = element_blank(),
-          panel.grid.major.y = element_line(color = "grey80", size = .5),
-          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
-	  axis.text.y = element_text(size = 14),
+          panel.grid.major.x = element_line(color = "grey90", size = .5),
+          panel.grid.major.y = element_blank(),
+	  panel.spacing = unit(2, "lines"),
 	  axis.title = element_text(size = 16),
 	  strip.text = element_text(size = 16),
+	  axis.text.x = element_text(size = 12),
+	  axis.text.y = element_text(hjust = 0),
           plot.background = element_rect(fill = "white", color = "white"),
           legend.position = "none") +
-    labs(x = NULL, y = "Total reads", fill = "Stim")
+    labs(x = "Million reads", y = NULL, fill = "Stim")
 
-ggsave("./plots/total_reads.png", total_reads, width = 10, height = 5)
+ggsave("./plots/total_reads.png", total_reads, width = 8, height = 8)
+
+
+stim_colors2 <- 
+    c("unstday0" = "#898e9f",
+      "BCR" = "#003967",
+      "TLR7" = "#637b31",
+      "DN2" = "#a82203")
+
+total_reads_raw_plot <- 
+    raw_df |>
+    mutate(stim = recode(stim, "TR7" = "TLR7"),
+	   stim = factor(stim, levels = names(stim_colors2))) |>
+    ggplot(aes(x = raw_reads,
+	       y = reorder_within(sample_id, by = raw_reads, within = stim))) +
+    geom_col(aes(fill = stim),
+	     color = "black", linewidth = .1, width = 1) +
+    scale_fill_manual(values = stim_colors2) +
+    scale_x_continuous(labels = function(x) x/1e6L,
+		       limits = c(0, max(raw_df$raw_reads)),
+		       expand = c(0, 0)) +
+    scale_y_reordered() +
+    facet_wrap(~stim, scales = "free", ncol = 2) +
+    theme_minimal() +
+    theme(panel.grid.minor = element_blank(),
+	  panel.grid.major.x = element_line(color = "grey90", linewidth = .5),
+	  panel.grid.major.y = element_blank(),
+	  panel.spacing = unit(2, "lines"),
+	  axis.title = element_text(size = 16, family = "Arial"),
+	  axis.text.x = element_text(size = 12, family = "Arial"),
+	  axis.text.y = element_text(hjust = 0, family = "Arial"),
+	  strip.text = element_text(size = 16, family = "Arial"),
+	  plot.background = element_rect(color = "white", fill = "white")) +
+    labs(x = "Total reads (Million)", y = NULL) +
+    guides(fill = "none")
+
+ggsave("./plots/total_reads_raw.png", total_reads_raw_plot, width = 8, height = 8)
+
+raw_df |>
+    select(sample_id, stim, n = raw_reads) |>
+    filter(n < 40e6L) |>
+    mutate(stim = factor(stim, levels = names(stim_colors2))) |>
+    arrange(stim, n) |>
+    unite("sample_id", c(sample_id, stim), sep = "_") |>
+    write_tsv("low_total_reads_samples_mga.tsv")
+
+# Resequencing of low depth samples
+reseq_samples <- 
+    "/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_rnaseq/resequencing/231227_MG10430_fastq/" |>
+    list.files(pattern = "fastq\\.gz") |>
+    {function(x) tibble(f = x)}() |>
+    extract(f, c("sample_id", "stim", "r"), "\\d+_(\\d+[_123]*)_(.+)_MG\\d+_.+_(R[12])") |>
+    mutate(i = 1) |>
+    pivot_wider(names_from = r, values_from = i) |>
+    unite("sample_id", c(sample_id, stim), sep = "_")
+
+reseq_samples |>
+    filter(is.na(R1) | is.na(R2)) |>
+    mutate_at(vars(R1, R2), ~replace_na(., 0))
+
+raw_rsq_df |>
+    select(sample_id, stim) |>
+    unite("sample_id", c(sample_id, stim), sep = "_") |>
+    anti_join(reseq_samples, join_by(sample_id))
+
+
+
+# Additional resequencing
+raw_rsq_df <- 
+    file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_rnaseq",
+	      "resequencing/240122_MG10430_fastq/multiqc_data",
+	      "multiqc_general_stats.txt") |>
+    read_tsv() |>
+    select(Sample, raw_reads = ends_with("total_sequences")) |>
+    extract(Sample, 
+	    c("sample_id", "stim", "r"), 
+	    "\\d+_(\\d+[-123]*)-(.+)_MG\\d+_.+_(R[12])") |>
+    mutate(sample_id = sub("-", "_", sample_id),
+	   donor_id = str_extract(sample_id, "[^_]+")) |>
+    filter(r == "R1") |>
+    select(donor_id, sample_id, stim, raw_reads)
+
+raw_all_df <-
+    bind_rows(raw_df, raw_rsq_df) |>
+    group_by(sample_id, stim) |>
+    summarise_at(vars(raw_reads), sum) |>
+    ungroup() |>
+    mutate(stim = recode(stim, "TR7" = "TLR7"),
+	   stim = factor(stim, levels = names(stim_colors2)))
+
+total_reads_raw_rsq_plot <- 
+    raw_all_df |>
+    ggplot(aes(x = raw_reads,
+	       y = reorder_within(sample_id, by = raw_reads, within = stim))) +
+    geom_col(aes(fill = stim),
+	     color = "black", linewidth = .1, width = 1) +
+    scale_fill_manual(values = stim_colors2) +
+    scale_x_continuous(labels = function(x) x/1e6L,
+		       limits = c(0, max(raw_df$raw_reads)),
+		       expand = c(0, 0)) +
+    scale_y_reordered() +
+    facet_wrap(~stim, scales = "free", ncol = 2) +
+    theme_minimal() +
+    theme(panel.grid.minor = element_blank(),
+	  panel.grid.major.x = element_line(color = "grey90", linewidth = .5),
+	  panel.grid.major.y = element_blank(),
+	  panel.spacing = unit(2, "lines"),
+	  axis.title = element_text(size = 16, family = "Arial"),
+	  axis.text.x = element_text(size = 12, family = "Arial"),
+	  axis.text.y = element_text(hjust = 0, family = "Arial"),
+	  strip.text = element_text(size = 16, family = "Arial"),
+	  plot.background = element_rect(color = "white", fill = "white")) +
+    labs(x = "Total reads (Million)", y = NULL) +
+    guides(fill = "none")
+
+ggsave("./plots/total_reads_raw_rsq.png", total_reads_raw_rsq_plot, width = 8, height = 8)
+
+
+
+
+
+# RNA extraction data
+library(readxl)
+
+rna_extraction_df <- 
+    "/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_rnaseq/DNA-RNAextraction_MGB.xlsx" |>
+    read_excel(skip = 2) |>
+    janitor::clean_names() |>
+    drop_na(date) |>
+    select(sample_id, n_cells, rna_conc = 4, rna_total = 5, dna_conc = 6, dna_total = 7) |>
+    mutate(sample_id = sub("TR7", "TLR7", sample_id),
+	   n_cells = sub("million", "e+06", n_cells),
+	   n_cells = sub(",", ".", n_cells),
+	   n_cells = sub(" ", "", n_cells),
+	   n_cells = as.integer(n_cells)) |>
+    mutate_at(vars(rna_conc:dna_total), as.numeric) |>
+    extract(sample_id, c("sample_id", "stim"), "(\\d+[_123]*)_(.+)") |>
+    mutate(stim = factor(stim, levels = names(stim_colors)))
+
+
+plot_df2 <- 
+    left_join(plot_df, rna_extraction_df, join_by(sample_id, stim)) |>
+    pivot_wider(names_from = read_type, values_from = n) |>
+    mutate(Total = Unique + Duplicate) |>
+    select(-Duplicate) |>
+    pivot_longer(c(Unique, Total), names_to = "read_type", values_to = "n_reads")
+    
+
+scatter_p <- ggplot(plot_df2, aes(rna_conc, y = n_reads)) +
+    geom_point(aes(color = stim), size = 2) +
+    scale_y_continuous(labels = function(x) x/1e6L) +
+    scale_color_manual(values = stim_colors) +
+    facet_wrap(~read_type, ncol = 1, scales = "free") +
+    theme_bw() +
+    theme(panel.grid.minor.x = element_blank(),
+	  panel.grid.minor.y = element_blank()) +
+    labs(x = "RNA concentration (ng/ul)", y = "Million reads", color = "Stim:")
+    
+ggsave("./plots/reads_by_rna.png", scatter_p, height = 5, width = 5)
 
 
 

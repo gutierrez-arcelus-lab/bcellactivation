@@ -9,8 +9,10 @@ susie_fine <- susie_res |>
     distinct(chr, pos)
 
 # Manually include validated variant
-val <- tibble(chr = "chr16", pos = 85985027)
-
+val <- 
+    tribble(~chr, ~pos,
+	    "chr16", 85985027,
+	    "chr11", 35073939)
 
 out <- 
     susie_fine |>

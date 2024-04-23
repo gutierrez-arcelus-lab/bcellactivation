@@ -432,3 +432,40 @@ pvalues_plot <-
     labs(x = "P-value")
 
 ggsave("./plots/pvals_replic.png", pvalues_plot, height = 8.5, width = 5)
+
+
+# Plot cases of significant effects of time
+
+ase_data
+
+signif_vars <- res_norand_df |> 
+    filter(qvalue::qvalue(p)$qvalue < 0.05) |>
+    arrange(p) |>
+    distinct(var_id) |>
+    pull(var_id)
+
+ase_plot_data <- res_norand_df |>
+    filter(var_id %in% signif_vars) |>
+    mutate(var_id = factor(var_id, levels = signif_vars)) |>
+    arrange(var_id, donor_id, replic, stim) |>
+    inner_join(ase_data, join_by(donor_id, replic, stim, var_id)) |>
+    mutate(stim = factor(stim, levels = names(stim_colors))) |>
+    unite("sample_id", c(donor_id, replic), sep = "_")
+
+ase_plot_data_counts <- ase_data |>
+    pivot_longer(ref_count:alt_count, names_to = "allele", values_to = "counts") |>
+    mutate(allele = str_remove(allele, "_count"))
+
+p <- 
+    ggplot(ase_plot_data_counts |> filter(var_id == first(var_id)), 
+	   aes(x = counts, y = allele)) +
+    geom_col(aes(fill = stim)) +
+    #geom_text(data = ase_plot_data |> filter(var_id == first(var_id))) +
+    scale_fill_manual(values = stim_colors) +
+    facet_grid(sample_id~stim, scale = "free") +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/ase_time.png", p)
+
+
