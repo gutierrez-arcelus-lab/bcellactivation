@@ -19,7 +19,7 @@ SPEC=${SLURM_SUBMIT_DIR}/data/vcf_samples.tsv
 DONORID=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $1 }' $SPEC )
 BATCH=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $2 }' $SPEC )
 
-VCFS=( $(eval echo ${TEMP_WORK}/vcf/ase2/chr{{1..22},X}_${BATCH}_${DONORID}.vcf.gz) )
+VCFS=( $(eval echo ${TEMP_WORK}/vcf/ase2/chr{{1..22},X}_${DONORID}.vcf.gz) )
 OUT=${SLURM_SUBMIT_DIR}/data/${DONORID}.vcf.gz
 
 bcftools concat -O z -o $OUT "${VCFS[@]}"

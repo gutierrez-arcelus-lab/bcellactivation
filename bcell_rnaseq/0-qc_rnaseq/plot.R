@@ -35,17 +35,18 @@ total_reads <-
 reads_df <- 
     left_join(total_reads, total_qc_reads, join_by(donor_id, replic_id, stim)) |>
     select(donor_id, replic_id, stim, total = reads, passed = passed_reads) |>
-    mutate(total = total - passed) |>
-    pivot_longer(total:passed, names_to = "read_type", values_to = "n") |>
+    mutate(failed = total - passed) |>
+    select(-total) |>
+    pivot_longer(passed:failed, names_to = "read_type", values_to = "n") |>
     unite("sample_id", c(donor_id, replic_id), sep = "_") |>
     mutate(stim = factor(stim, levels = c("unstday0", "BCR", "TLR7", "DN2")),
-	   read_type = factor(read_type, levels = c("total", "passed")))
+	   read_type = factor(read_type, levels = c("failed", "passed")))
 
 fill_colors <- 
-    c("unstday0" = "grey",
-      "BCR" = "royalblue",
-      "TLR7" = "forestgreen",
-      "DN2" = "tomato3")
+    c("Day 0" = "#898e9f",
+      "BCR" = "#003967",
+      "TLR7" = "#637b31",
+      "DN2" = "#a82203")
 
 p <- 
     ggplot(reads_df, 
@@ -53,17 +54,19 @@ p <-
 	   y = reorder_within(sample_id, by = n, within = stim),
 	   fill = stim,
 	   alpha = read_type)) +
-    geom_col() +
-    geom_vline(xintercept = 40e6, linetype = 2, linewidth = .5) +
+    geom_col(color = "black", linewidth = .25) +
+    geom_vline(xintercept = 40e6, linetype = 1, linewidth = .5) +
     scale_x_continuous(breaks = seq(0, 80e6, 20e6),
 		       labels = function(x) x/1e6L) +
     scale_y_reordered() +
-    scale_alpha_manual(values = c("total" = 1, "passed" = .7)) +
+    scale_alpha_manual(values = c("failed" = .5, "passed" = 1)) +
     scale_fill_manual(values = fill_colors) +
     facet_wrap(~stim, ncol = 2, scales = "free_y") + 
     theme_minimal() +
     theme(panel.grid = element_blank(),
 	  plot.background = element_rect(color = "white", fill = "white")) +
-    labs(x = "Million reads", y = NULL)
+    labs(x = "Million reads", y = NULL,
+	 alpha = "Read type:") +
+    guides(fill = "none")
 
 ggsave("./plots/total_reads.png", p)
