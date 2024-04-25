@@ -8,13 +8,7 @@ library(harmony)
 devtools::load_all("/lab-share/IM-Gutierrez-e2/Public/vitor/sclibr")
 
 # Data wrangling
-library(dplyr)
-library(forcats)
-library(tidyr)
-library(purrr)
-library(readr)
-library(tibble)
-library(ggplot2)
+library(tidyverse)
 
 # Parallelization
 library(furrr)
@@ -98,21 +92,7 @@ sdev_plot <- tibble(sdev = bcells@reductions$pca@stdev) |>
 ggsave("./plots/pca_sdev.png", sdev_plot, width = 4, height = 3)
 
 # Run Harmony correcting for batch
-set.seed(1L)
-bcells <- bcells |>
-    RunHarmony(group.by.vars = "orig.ident", 
-	       max.iter.harmony = 30,
-	       reduction.save = "harmony")
-
-# UMAP
-bcells <- bcells |>
-    RunUMAP(reduction = "harmony", 
-	    dims = 1:35,
-	    seed.use = 1L,
-	    reduction.name = "umap")
-
-
-# Metadata
+## Add donor data to Seurat metadata
 read_demuxlet <- function(f) {
     read_tsv(f) |>
     select(barcode = BARCODE, best = BEST) |>
@@ -125,21 +105,36 @@ demuxlet_df <-
     sprintf("./demultiplexing/demuxlet/demuxlet_%s_results.best", batches) |>
     setNames(batches) |>
     map_dfr(read_demuxlet, .id = "orig.ident") |>
-    unite("barcode", c(orig.ident, barcode), sep = "_")
-
-
-metadata <-
-    as_tibble(bcells@meta.data, rownames = "barcode") |>
-    select(barcode, orig.ident, hto) |>
-    left_join(demuxlet_df, join_by(barcode)) |>
+    unite("barcode", c(orig.ident, barcode), sep = "_") |>
+    filter(status == "SNG") |>
     mutate(donor_id = sub("^[^_]+_[^-]+-(\\d+)$", "\\1", sample)) |>
-    select(barcode, orig.ident, hto, donor_id)
+    select(barcode, donor_id)
+
+updated_metadata <-
+    as_tibble(bcells@meta.data, rownames = "barcode") |>
+    left_join(demuxlet_df, join_by(barcode)) |>
+    column_to_rownames("barcode")
+
+bcells@meta.data <- updated_metadata
+
+set.seed(1L)
+bcells <- bcells |>
+    RunHarmony(group.by.vars = c("orig.ident", "donor_id"),
+	       max.iter.harmony = 30,
+	       reduction.save = "harmony")
+
+# UMAP
+bcells <- bcells |>
+    RunUMAP(reduction = "harmony", 
+	    dims = 1:35,
+	    seed.use = 1L,
+	    reduction.name = "umap")
 
 # Plots
 umap_df <- 
     Embeddings(bcells, "umap") |>
     as_tibble(rownames = "barcode") |> 
-    left_join(metadata, join_by(barcode)) |>
+    left_join(as_tibble(updated_metadata, rownames = "barcode"), join_by(barcode)) |>
     mutate(orig.ident = paste0("BRI-", orig.ident)) |>
     sample_frac(1L) |>
     mutate(barcode = fct_inorder(barcode),
@@ -190,6 +185,7 @@ umap_stim <-
 	  panel.grid = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white"))
 
+ggsave("./plots/umap.png", umap_stim, width = 5, height = 4)
 
 # Clusters
 bcells <- bcells |>
@@ -297,8 +293,6 @@ ggsave("./plots/umap.png",
        width = 8, height = 7, dpi = 600) 
 
 
-
-
 # Marker genes
 Idents(bcells) <- "RNA_snn_res.0.4"
 
@@ -310,7 +304,7 @@ cluster_markers <-
                    min.pct = 0.1,
                    logfc.threshold = .5) |>
     as_tibble() |>
-    left_join(genes_df, join_by(gene_id))
+    left_join(genes_df, join_by(gene == gene_id))
 
 cluster_markers_plot <- plot_markers(bcells, cluster_markers)
 
