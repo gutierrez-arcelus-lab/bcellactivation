@@ -433,7 +433,7 @@ get_rep_betas <- function(d, s, r1, r2) {
     data_r1 <- 
 	res_norand_df |>
 	filter(donor_id == d, replic == r1, stim == s,
-	       qvalue::qvalue(p)$qvalue < 0.05) |>
+	       qvalue::qvalue(p)$qvalue <= 0.1) |>
 	select(donor_id, stim, variant_id, beta_time)
 
     data_r2 <-
@@ -499,6 +499,52 @@ p_beta_reps <-
 	  plot.background = element_rect(fill = "white", color = "white"))
 
 ggsave("./plots/betas_replic.png", p_beta_reps, height = 8.5, width = 5)
+
+# test
+min_cov_df <- 
+    ase_res |>
+    separate(sample_id, c("donor_id", "replic"), sep = "_") |>
+    mutate(replic = recode(replic, "1" = "A", "2" = "B", "3" = "C"),
+	   total = ref_count + alt_count) |>
+    select(donor_id, replic, stim, variant_id, total) |>
+    pivot_wider(names_from = stim, values_from = total) |>
+    pivot_longer(BCR:DN2, names_to = "stim", values_to = "total") |>
+    drop_na(total) |>
+    mutate(min_cov = pmin(`Day 0`, total)) |>
+    select(donor_id, replic, stim, variant_id, min_cov)
+
+plot_data_cov <- 
+    left_join(plot_data, min_cov_df, join_by(donor_id, stim, variant_id, replic.x == replic)) |>
+    left_join(min_cov_df, join_by(donor_id, stim, variant_id, replic.y == replic)) |>
+    mutate(min_cov = pmin(min_cov.x, min_cov.y)) |>
+    select(-min_cov.x, -min_cov.y)
+
+p_beta_reps_cov <- 
+    ggplot(plot_data_cov, 
+	   aes(x = beta_time.x, 
+	       y = beta_time.y)) +
+    geom_abline() +
+    geom_vline(xintercept = 0, color = "grey80") +
+    geom_hline(yintercept = 0, color = "grey80") +
+    geom_point(aes(color = log2(min_cov)), size = .7) +
+    scale_color_viridis_c("log2 min counts:", 
+			  guide = guide_colorbar(barheight = .5)) +
+    scale_x_continuous(breaks = scales::pretty_breaks(3)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+    geom_text(data = cor_data, aes(x = xmin, y = ymax + .2, label = cor_lab),
+	      size = 2.5, family = "Arial", hjust = "inward") +
+    facet_grid(lab~stim, scales = "free") +
+    theme_bw() +
+    theme(legend.position = 'top',
+	  axis.title = element_blank(),
+	  strip.text.x = element_text(size = 12, family = "Arial", face = "bold"),
+	  strip.text.y = element_text(size = 12, family = "Arial", angle = 0),
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/betas_replic_cov.png", p_beta_reps_cov, height = 8.5, width = 5)
+
+
 
 # Plot cases of significant effects of time
 
