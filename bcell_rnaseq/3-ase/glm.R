@@ -6,7 +6,7 @@ library(furrr)
 if (!file.exists("results_glm")) dir.create("results_glm")
 
 # Functions
-run_model <- function(count_data, random = TRUE) {
+run_model <- function(count_data, random = FALSE) {
    
     # format data
     counts_df <- 
@@ -17,24 +17,15 @@ run_model <- function(count_data, random = TRUE) {
 	mutate(ref_allele = as.factor(ref_allele),
 	       time_num = as.integer(stim) - 1L)
 
-    out_df <- count_data |>
-	filter(stim != "Day 0") |>
+    out_df <- 
+	count_data |>
+	group_by(donor_id, replic, variant_id) |>
+	summarise(stim = paste(stim, collapse = "-")) |>
+	ungroup() |>
 	select(donor_id, replic, stim, variant_id)
 
-    if (random == FALSE) {
-	# Model with no random effects
-
-	## Intercept-only model
-	lm0 <- glm(ref_allele ~ 1, data = counts_df, family = binomial)
-
-	## Include time as fixed
-	lm1 <- glm(ref_allele ~ 1 + time_num, data = counts_df, family = binomial)
-
-	anova_res <- anova(lm0, lm1, test = "Chisq")
-	out_df$p <- anova_res$P[2]
-	out_df$beta_time <- coef(lm1)[["time_num"]]
-
-    } else {
+    
+    if (isTRUE(random)) {
 
 	# Model with random effects
 
@@ -48,14 +39,41 @@ run_model <- function(count_data, random = TRUE) {
 	out_df$p <- anova_res$P[2]
     }
 
+    if (isFALSE(random)) {
+	# Model with no random effects
+
+	## Intercept-only model
+	lm0 <- glm(ref_allele ~ 1, data = counts_df, family = binomial)
+
+	## Include time as fixed
+	lm1 <- glm(ref_allele ~ 1 + time_num, data = counts_df, family = binomial)
+
+	anova_res <- anova(lm0, lm1, test = "Chisq")
+	out_df$p <- anova_res$P[2]
+	out_df$beta_time <- coef(lm1)[["time_num"]]
+
+    }
+
     list("dat" = out_df, "anova" = anova_res)
 }
 
-quietly_run_model_random <- quietly(function(x) run_model(x, random = TRUE))
-quietly_run_model_norandom <- quietly(function(x) run_model(x, random = FALSE))
+quietly_run_model <- quietly(function(x) run_model(x, random = FALSE))
+
+filter_data <- function(stim_a, stim_b) {
+
+    ase_data |>
+	filter(stim %in% c(stim_a, stim_b)) |>
+	mutate(stim = factor(stim, levels = c(stim_a, stim_b))) |>
+	group_by(donor_id, replic, variant_id) |>
+	filter(n_distinct(stim) == 2) |>
+	ungroup() |>
+	select(donor_id, replic, stim, variant_id, ref_count, alt_count)
+}
 
 # Data
 # Pre-filtered data
+stim_levels <- c("Day 0", "BCR", "TLR7", "DN2") 
+
 ase_data <- 
     read_tsv("./ase_data.tsv") |>
     separate(sample_id, c("donor_id", "replic"), sep = "_") |>
@@ -63,81 +81,57 @@ ase_data <-
 	   replic = factor(replic)) |>
     select(donor_id, replic, stim, variant_id, ref_count, alt_count)
 
-# Separate data per stim
-ase_bcr <- ase_data |>
-    filter(stim %in% c("Day 0", "BCR")) |>
-    mutate(stim = fct_inorder(stim)) |>
-    group_by(donor_id, replic, variant_id) |>
-    filter(n_distinct(stim) == 2) |>
-    ungroup() |>
-    select(donor_id, replic, stim, variant_id, ref_count, alt_count)
+		       
+# Run model without random effects for all stim pairs
+stim_pairs <- 
+    ase_data |>
+    distinct(stim_1 = stim) |>
+    expand_grid(stim_2 = stim_1) |>
+    mutate_at(vars(stim_1, stim_2), ~factor(., levels = stim_levels)) |>
+    filter(as.numeric(stim_1) < as.numeric(stim_2)) |>
+    mutate_at(vars(stim_1, stim_2), as.character)
 
-ase_tlr <- ase_data |>
-    filter(stim %in% c("Day 0", "TLR7")) |>
-    mutate(stim = fct_inorder(stim)) |>
-    group_by(donor_id, replic, variant_id) |>
-    filter(n_distinct(stim) == 2) |>
-    ungroup() |>
-    select(donor_id, replic, stim, variant_id, ref_count, alt_count)
-
-ase_dn2 <- ase_data |>
-    filter(stim %in% c("Day 0", "DN2")) |>
-    mutate(stim = fct_inorder(stim)) |>
-    group_by(donor_id, replic, variant_id) |>
-    filter(n_distinct(stim) == 2) |>
-    ungroup() |>
-    select(donor_id, replic, stim, variant_id, ref_count, alt_count)
-
-
-## Run model with random effects
-#plan(sequential)
-#plan(multisession, workers = availableCores())
-#
-#bcr_res <- 
-#    ase_bcr |>
-#    group_split(donor_id, replic, variant_id) |>
-#    future_map(quietly_run_model_random)
-#
-#write_rds(bcr_res, "./results_glm/bcr.rds")
-#
-#tlr_res <- 
-#    ase_tlr |>
-#    group_split(donor_id, replic, variant_id) |>
-#    future_map(quietly_run_model_random)
-#
-#write_rds(tlr_res, "./results_glm/tlr.rds")
-#
-#dn2_res <- 
-#    ase_dn2 |>
-#    group_split(donor_id, replic, variant_id) |>
-#    future_map(quietly_run_model_random)
-#
-#write_rds(dn2_res, "./results_glm/dn2.rds")
-
-
-
-# Run model without random effects
 plan(sequential)
 plan(multisession, workers = availableCores())
 
-bcr_res_nr <- 
-    ase_bcr |>
-    group_split(donor_id, replic, variant_id) |>
-    future_map(quietly_run_model_norandom)
+res_df <- 
+    stim_pairs |>
+    filter(stim_1 == "Day 0") |>
+    mutate(data = map2(stim_1, stim_2, 
+		       ~filter_data(.x, .y) |>
+		       group_split(donor_id, replic, variant_id) |>
+		       future_map(quietly_run_model)))
 
-write_rds(bcr_res_nr, "./results_glm/bcr_nr.rds")
+res_df$data |>
+    flatten() |>
+    write_rds("./results_glm/glm_res.rds")
 
-tlr_res_nr <- 
-    ase_tlr |>
-    group_split(donor_id, replic, variant_id) |>
-    future_map(quietly_run_model_norandom)
+res_df$data |>
+    flatten() |>
+    map("result") |>
+    map_df("dat") |>
+    write_tsv("./results_glm/glm_res_df.tsv")
 
-write_rds(tlr_res_nr, "./results_glm/tlr_nr.rds")
 
-dn2_res_nr <- 
-    ase_dn2 |>
-    group_split(donor_id, replic, variant_id) |>
-    future_map(quietly_run_model_norandom)
 
-write_rds(dn2_res_nr, "./results_glm/dn2_nr.rds")
-
+#bcr_res_nr <- 
+#    ase_bcr |>
+#    group_split(donor_id, replic, variant_id) |>
+#    future_map(quietly_run_model_norandom)
+#
+#write_rds(bcr_res_nr, "./results_glm/bcr_nr.rds")
+#
+#tlr_res_nr <- 
+#    ase_tlr |>
+#    group_split(donor_id, replic, variant_id) |>
+#    future_map(quietly_run_model_norandom)
+#
+#write_rds(tlr_res_nr, "./results_glm/tlr_nr.rds")
+#
+#dn2_res_nr <- 
+#    ase_dn2 |>
+#    group_split(donor_id, replic, variant_id) |>
+#    future_map(quietly_run_model_norandom)
+#
+#write_rds(dn2_res_nr, "./results_glm/dn2_nr.rds")
+#

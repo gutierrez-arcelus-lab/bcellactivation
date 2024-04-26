@@ -329,36 +329,8 @@ p_hist <-
 
 ggsave("./plots/pvalue_hist.png", p_hist, height = 12, width = 5, dpi = 600)
 
-# P-value ~ coverage
-#testplot <- 
-#    ase_res |>
-#    filter(sample_id == first(sample_id)) |>
-#    mutate(total = ref_count + alt_count) |>
-#    select(sample_id, stim, p_value, total) |>
-#    mutate(bin = cut_interval(p_value, n = 20)) |>
-#    arrange(bin) |>
-#    ggplot(aes(x = bin, y = log2(total))) +
-#	geom_violin(aes(fill = stim)) +
-#	facet_wrap(~stim, ncol = 2) +
-#	#facet_grid2(sample_id~stim, scales = "free_y", independent = "y") +
-#	scale_fill_manual(values = stim_colors) +
-#	theme_bw() +
-#	theme(
-#	      axis.text.x = element_text(family = "Arial", size = 11, angle = 45, hjust = 1, vjust = 1),
-#	      axis.text.y = element_text(family = "Arial", size = 11),
-#	      axis.title = element_text(family = "Arial", size = 14),
-#	      strip.text = element_text(family = "Arial", size = 14),
-#	      panel.grid = element_blank(),
-#	      panel.border = element_blank(),
-#	      strip.text.y = element_text(angle = 0),
-#	      plot.background = element_rect(color = "white", fill = "white")) +
-#	guides(fill = "none") +
-#	labs(x = "P-value bins", y = "Log2 (number of reads)")
-#
-#ggsave("./plots/testplot.png", testplot, width = 8, height = 8)
 
-
-# Number of unique reads
+# Correlation between number of significant hits and total number of reads
 read_star_log <- function(f) {
 
     tmp <- 
@@ -397,7 +369,6 @@ star_log_df <-
     select(sample_id, stim, data) |>
     unnest(cols = data)
 
-# Correlation between number of significant hits and total number of reads
 ase_by_coverage_plot <- 
     left_join(filter(star_log_df, reads == "unique"),
 	      filter(summary_5, FDR == "10%"), 
@@ -424,152 +395,11 @@ ase_by_coverage_plot <-
 ggsave("./plots/ase_by_coverage.png", ase_by_coverage_plot, width = 6, height = 5)
 
 
-## Number of SLE genes with ASE per donor
-## When there are more than 1 gene per locus, I followed the rule below:
-## - For Langefeld et al, I think it makes more sense to keep the first gene most of the times;
-## - For Bentham et al, I think it makes sense to keep both.
-#
-#langefeld <- 
-#    "./imbalance_screening/data/langefeld_hits.tsv" |>
-#    read_tsv() |>
-#    distinct(gene) |>
-#    pull(gene) |>
-#    str_split("-") |>
-#    map_chr(function(x) ifelse(any(grepl("IKZF", x)), x[grepl("IKZ", x)], x[1]))
-#
-#bentham <- "../../../sle_variants/paper_data/bentham_tab1.tsv" |>
-#    read_tsv() |>
-#    select(locus) |>
-#    filter(!grepl("^MHC", locus)) |>
-#    separate_rows(locus, sep = ", ") |>
-#    mutate(locus = recode(locus, "CXorf21" = "TASL")) |>
-#    pull(locus)
-#
-#gwas_genes <- 
-#    c(langefeld, bentham) |>
-#    unique() |>
-#    c("STAT1") |>
-#    sort()
-#    
-#ase_load <- ase_res |>
-#    filter(q_value <= 0.05) |>
-#    separate_rows(gene_id, gene_name, sep = "/") |>
-#    filter(gene_name %in% gwas_genes) |>
-#    count(sample_id, stim, gene_name) |>
-#    mutate(gene_name = factor(gene_name, levels = gwas_genes)) |>
-#    complete(sample_id, stim, gene_name, fill = list(n = 0)) |>
-#    arrange(sample_id, stim, gene_name) |>
-#    group_by(gene_name) |>
-#    filter(any(n > 0)) |>
-#    ungroup()
-#
-#
-#plot_tiles <- function(stim_name) {
-#
-#    plot_data <- filter(ase_load, stim == stim_name)
-#
-#    ggplot(plot_data, aes(x = sample_id, y = gene_name)) +
-#    geom_tile(aes(fill = n), alpha = .5) +
-#    geom_text(data = plot_data |> filter(n > 0),
-#	      aes(label = n), family = "Arial") +
-#    scale_fill_gradient(low = "white", high = stim_colors[[stim_name]]) +
-#    theme_bw() +
-#    theme(axis.text.x = element_text(size = 12, family = "Arial", angle = 45, hjust = 1, vjust = 1),
-#	  axis.text.y = element_text(size = 12, family = "Arial"),
-#	  panel.border = element_blank(),
-#	  plot.title = element_text(size = 16, family = "Arial", hjust = .5),
-#	  plot.background = element_rect(color = "white", fill = "white")) +
-#    labs(x = NULL, y = NULL, title = stim_name) +
-#    guides(fill = "none")
-#}
-#
-#tiles <- 
-#    plot_tiles("Day 0") + 
-#    plot_tiles("TLR7") + 
-#    plot_tiles("BCR") + 
-#    plot_tiles("DN2") + 
-#    plot_layout(nrow = 1)
-#
-#ggsave("./plots/tiles.png", tiles, width = 24, height = 7, dpi = 600)
-#
-################################################################################
-## Replication
-#compute_replication <- function(sample_1, sample_2) {
-#    
-#    temp1 <- 
-#	ref_ratios |>
-#	filter(sample_id == sample_1, q_value <= 0.05) |>
-#	select(sample_id:ref_r)
-#
-#    ref_ratios |>
-#	filter(sample_id == sample_2) |>
-#	inner_join(temp1, join_by(stim, var_id)) |>
-#	group_by(stim) |>
-#	summarise(r = cor(ref_r.x, ref_r.y)) |>
-#	ungroup()
-#}
-#
-#ref_ratios <- 
-#    ase_res |> 
-#    mutate(ref_r = ref_count/total) |>
-#    select(sample_id, stim, var_id, ref_r, q_value)
-#
-#cor_df <- 
-#    ref_ratios |>
-#    distinct(sample_id) |>
-#    expand_grid(sample_1 = sample_id, sample_2 = sample_id) |>
-#    distinct(sample_1, sample_2) |>
-#    mutate(data = map2(sample_1, sample_2, compute_replication)) |>
-#    unnest(cols = c(data))
-#
-#
-#plot_corr <- function(stim_i) {
-#
-#    lim <- round(range(cor_df$r), 1)
-#
-#    ggplot(cor_df |> filter(stim == stim_i), 
-#       aes(x = sample_1, y = sample_2)) +
-#    geom_tile(aes(fill = r), alpha = .8) +
-#    scale_fill_gradient(low = "white", high = stim_colors[stim_i]) +
-#    geom_text(aes(label = round(r, 2)),
-#	      size = 4, fontface = "bold", family = "Arial") +
-#    scale_x_discrete(labels = function(x) sub("^(\\d+)\\.(\\d)$", "\\1 rep #\\2", x))  +
-#    scale_y_discrete(labels = function(x) sub("^(\\d+)\\.(\\d)$", "\\1 rep #\\2", x))  +
-#    theme_minimal() +
-#    theme(
-#	  axis.text.x = element_text(size = 12, angle = 45, hjust = 1, vjust = 1, family = "Arial"),
-#	  axis.text.y = element_text(size = 12, family = "Arial"),
-#	  legend.text = element_text(size = 12, family = "Arial"),  
-#	  legend.title = element_text(size = 12, family = "Arial"),  
-#	  plot.title = element_text(size = 16, hjust = .5, family = "Arial", face = "bold"),
-#	  panel.grid = element_blank(),
-#	  plot.background = element_rect(color = "white", fill = "white")) +
-#    labs(x = NULL, y = NULL, title = stim_i) +
-#    guides(fill = "none")
-#}
-#
-#
-#corr_plot <- 
-#    plot_corr("Day 0") + plot_corr("TLR7") + plot_corr("BCR") + plot_corr("DN2") +
-#    plot_layout(ncol = 2) +
-#    plot_annotation(title = "Spearman correlation of reference allele ratios among samples at variants with significant ASE at 5% FDR.",
-#		    theme = theme(plot.title = element_text(size = 24, family = "Arial")))
-#
-#ggsave("./plots/reps_corr.png", corr_plot, height = 18, width = 18, dpi = 300)
-
 # Plot glm
-
-# Process results
-read_results <- function(f) {
-    read_rds(f) |>
-    map("result") |>
-    map_dfr("dat")
-}
-
-bcr_res_nr_df <- read_results("results_glm/bcr_nr.rds")
-tlr_res_nr_df <- read_results("results_glm/tlr_nr.rds")
-dn2_res_nr_df <- read_results("results_glm/dn2_nr.rds")
-res_norand_df <- bind_rows(bcr_res_nr_df, tlr_res_nr_df, dn2_res_nr_df)
+res_norand_df <- 
+    read_tsv("./results_glm/glm_res_df.tsv", col_types = "cfccdd") |>
+    mutate(stim = str_remove(stim, "Day 0-"),
+	   stim = factor(stim, levels = names(stim_colors)[-1]))
 
 qq_norand_df <- 
     res_norand_df |>
@@ -603,7 +433,7 @@ get_rep_betas <- function(d, s, r1, r2) {
     data_r1 <- 
 	res_norand_df |>
 	filter(donor_id == d, replic == r1, stim == s,
-	       qvalue::qvalue(p)$qvalue < 0.1) |>
+	       qvalue::qvalue(p)$qvalue < 0.05) |>
 	select(donor_id, stim, variant_id, beta_time)
 
     data_r2 <-
@@ -650,6 +480,8 @@ cor_data <-
 p_beta_reps <- 
     ggplot(plot_data, aes(x = beta_time.x, y = beta_time.y)) +
     geom_abline() +
+    geom_vline(xintercept = 0, color = "grey90") +
+    geom_hline(yintercept = 0, color = "grey90") +
     geom_point(aes(color = stim), alpha = .75) +
     scale_color_manual(values = stim_colors) +
     scale_x_continuous(breaks = scales::pretty_breaks(3)) +
@@ -657,12 +489,13 @@ p_beta_reps <-
     geom_text(data = cor_data, aes(x = xmin, y = ymax + .25, label = cor_lab),
 	      size = 3.5, family = "Arial", hjust = "inward") +
     facet_grid(lab~stim, scales = "free") +
+    coord_cartesian(clip = 'off') +
     theme_minimal() +
     theme(legend.position = "none",
 	  axis.title = element_blank(),
 	  strip.text.x = element_text(size = 12, family = "arial", face = "bold"),
 	  strip.text.y = element_text(size = 12, family = "arial", angle = 0),
-	  panel.grid.minor = element_blank(),
+	  panel.grid = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white"))
 
 ggsave("./plots/betas_replic.png", p_beta_reps, height = 8.5, width = 5)
@@ -708,3 +541,36 @@ p <-
     labs(y = NULL)
 
 ggsave("./plots/ase_time.png", p)
+
+# Explore variants that do not replicate well
+res_norand_df
+ase_res
+
+test_non <- 
+    plot_data |> 
+    filter((beta_time.x > 0 & beta_time.y < 0) |
+	   (beta_time.x < 0 & beta_time.y > 0)) |>
+    mutate(d = abs(beta_time.x - beta_time.y)) |>
+    select(donor_id, stim, variant_id, replic.x, replic.y, d) |>
+    mutate_at(vars(replic.x, replic.y), ~recode(., "A" = 1, "B" = 2, "C" = 3)) |> 
+    mutate_at(vars(replic.x, replic.y), ~paste(donor_id, ., sep = "_")) |>
+    select(donor_id, sample_1 = replic.x, sample_2 = replic.y, stim, variant_id, d) |>
+    arrange(desc(d))
+
+ix <- 6
+
+test_non |> slice(ix)
+
+ase_res |>
+    filter(sample_id %in% c(test_non$sample_1[ix], test_non$sample_2[ix]),
+	   variant_id == test_non$variant_id[ix],
+	   stim %in% c("Day 0", as.character(test_non$stim[ix])))
+
+
+# Test
+res_norand_df |>
+    filter(qvalue::qvalue(p)$qvalues <= 0.05) |>
+    count(donor_id, replic, stim) |>
+    arrange(n) |>
+    print(n = Inf)
+    
