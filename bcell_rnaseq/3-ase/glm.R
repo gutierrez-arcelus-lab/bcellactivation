@@ -34,7 +34,8 @@ run_model <- function(count_data) {
     
     lm1 <- glm(ref_r ~ stim, data = counts_df, family = binomial, weights = total) 
     anova_res <- anova(lm1, test = "Chisq")
-    out_df$p <- anova_res$P[2]
+    out_df$p_dev <- anova_res$P[2]
+    out_df$p_reg <- coef(summary(lm1))[2, 4]
     out_df$beta_stim <- coef(lm1)[[2]]
 
     list("dat" = out_df, "anova" = anova_res)
