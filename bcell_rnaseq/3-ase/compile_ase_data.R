@@ -91,7 +91,9 @@ write_tsv(ase_res, "./ase_data.tsv")
 
 
 # Dynamic ASE
-ase_data_dyn <- read_tsv("./results_glm/glm_res_df.tsv", col_types = "cfccdd") 
+ase_data_dyn <- 
+    "./results_glm/glm_res_df.tsv" |>
+    read_tsv(col_types = "cfccddd") 
 
 exonic_variants_dyn <- 
     ase_data_dyn |>
@@ -129,20 +131,14 @@ write_tsv(ase_dyn_annotated, "./results_glm/glm_res_df_annotated.tsv")
 #ase_dyn_annotated <- read_tsv("./results_glm/glm_res_df_annotated.tsv")
 
 # For LDSC
-tested_genes <- 
+ldsc_genes <- 
     ase_dyn_annotated |>
-    filter(grepl("^Day 0-", stim)) |>
-    filter(!is.na(gene_id)) |>
+    filter(grepl("^Day 0-", stim), 
+	   !is.na(gene_id)) |>
     separate_rows(gene_id, gene_name, sep = "/") |>
-    distinct(stim, gene_id, gene_name) |>
-    arrange(stim, gene_name, gene_id)
+    mutate(fdr = p.adjust(p_dev, method = "fdr")) |>
+    group_by(stim, gene_id, gene_name) |>
+    summarise(is_signif = any(fdr <= 0.1)) |>
+    ungroup()
 
-signif_genes <-
-    ase_dyn_annotated |>
-    filter(grepl("^Day 0-", stim)) |>
-    filter(!is.na(gene_id)) |>
-    filter(p.adjust(p, method = "fdr") <= 0.1) |>
-    separate_rows(gene_id, gene_name, sep = "/") |>
-    distinct(stim, gene_id, gene_name) |>
-    arrange(stim, gene_name, gene_id)
-
+write_tsv(ldsc_genes, "./ldsc_genes.tsv")
