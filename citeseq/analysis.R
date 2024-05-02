@@ -50,6 +50,10 @@ genes_df <- features_df |>
     filter(phenotype == "Gene Expression") |>
     select(gene_id, gene_name)
 
+mt_ribo_genes <- 
+    genes_df |>
+    filter(grepl("^MT-|^MRPS|^MRPL|^RPS|^RPL", gene_name))
+
 # Import Seurat objects
 lib1984 <- read_rds("./data/seurat_1984_qced.rds")
 lib1988 <- read_rds("./data/seurat_1988_qced.rds")
@@ -62,10 +66,15 @@ bcells <-
     merge(lib1984, y = c(lib1988, lib1990), add.cell.ids = c("1984", "1988", "1990"))
 
 # Scale and run PCA
+variable_genes <- 
+    bcells |>
+    {function(x) x[! rownames(x) %in% mt_ribo_genes$gene_id]}() |>
+    FindVariableFeatures() |>
+    VariableFeatures()
+
 bcells <- bcells |>
     {function(x) ScaleData(x, features = rownames(x))}() |>
-    FindVariableFeatures() |>
-    {function(x) RunPCA(x, features = VariableFeatures(x))}()
+    RunPCA(features = variable_genes)
 
 # Visualize PCA
 # Total variance in the data
@@ -168,9 +177,6 @@ umap_donor <-
 	  panel.grid = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white"))
 
-ggsave("./plots/umap_batch_donor.png", umap_batch + umap_donor, width = 10, height = 4)
-
-
 umap_stim <-
     ggplot(umap_df, aes(UMAP_1, UMAP_2)) +
     geom_point(aes(color = hto), size = .1) +
@@ -184,8 +190,6 @@ umap_stim <-
 	  axis.ticks = element_blank(),
 	  panel.grid = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white"))
-
-ggsave("./plots/umap.png", umap_stim, width = 5, height = 4)
 
 # Clusters
 bcells <- bcells |>
@@ -287,11 +291,9 @@ umap_mito <-
 	  ) +
     labs(color = "% Mito:")
 
-
 ggsave("./plots/umap.png", 
        umap_batch + umap_stim + umap_clust + umap_ki67 + umap_genes + umap_mito + plot_layout(ncol = 2),
-       width = 8, height = 7, dpi = 600) 
-
+       width = 8, height = 8, dpi = 600) 
 
 # Marker genes
 Idents(bcells) <- "RNA_snn_res.0.4"
@@ -311,7 +313,6 @@ cluster_markers_plot <- plot_markers(bcells, cluster_markers)
 ggsave("./plots/cluster_markers.png", 
        cluster_markers_plot,
        height = 11, width = 8, dpi = 600)
-
 
 # Memory clusters vs all others
 mem_markers <- 
