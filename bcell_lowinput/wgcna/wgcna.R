@@ -1,6 +1,7 @@
 # Data handling
 library(tidyverse)
 library(glue)
+library(furrr)
 
 # import data
 library(tximport)
@@ -19,8 +20,21 @@ library(RColorBrewer)
 library(tidytext)
 library(patchwork)
 
+# Functions
 count <- dplyr::count
 select <- dplyr::select
+
+run_enrichment <- function(gene_list) {
+
+    enrichGO(gene = gene_list,
+	OrgDb = org.Hs.eg.db,
+	ont = "BP",
+	keyType = "ENSEMBL",
+	pAdjustMethod = "fdr",
+	pvalueCutoff = 0.05,
+	qvalueCutoff = 0.05,
+	readable = TRUE)
+}
 
 
 # Set colors
@@ -36,6 +50,8 @@ recolor <- function(x) {
 	      TRUE ~ x)
 }
 
+# Set WGCNA cores
+allowWGCNAThreads(parallelly::availableCores())
 
 # Expression data
 dat <- read_rds("./data/gene_expression.rds")
@@ -47,18 +63,19 @@ sample_table <-
 
 edger_res <- read_tsv("../results/edger/results.tsv")
 
-stim_i <- "DN2"
-
 ## Use genes that are significant in the time course
 sig_genes <- edger_res |>
-    filter(stim == stim_i, FDR < 0.05) |>
-    pull(gene_id)
+    filter(FDR <= 0.05) |>
+    pull(gene_id) |>
+    unique()
     
 ## Create DESeq2 object for normalization of expression values.
 ## ~1 indicates no design, since we will not perform differential gene expression analysis here.
 ## Select samples with library size > 2MM reads.
 ## Filter for genes with normalized counts > 10 in at least 3 samples.
 ## Normalize counts using the variance-stabilizing transformation (VST)
+stim_i <- "TLR7"
+
 dds <- 
     DESeqDataSetFromTximport(dat, sample_table, ~1) |>
     estimateSizeFactors() |>
@@ -72,7 +89,6 @@ dds <-
 count_matrix <- t(assay(dds))
 
 # Run WGCNA
-allowWGCNAThreads()
 
 ## Explore multiple values of Beta (power) to find the one that satisfies scale-free topology
 betas <- c(1:10, seq(12, 30, by = 2))
@@ -108,52 +124,37 @@ meank_p <-
     geom_line() +
     theme_bw()
 
-ggsave(glue("./plots/wgcna_{stim_i}_sft.png"), 
+ggsave(glue("./plots/sft_{stim_i}.png"), 
        rsq_p | meank_p, height = 3, width = 7)
 
 ## Build WGCNA network 
 ## we need to reassing the 'cor()' function to avoid a bug in WGCNA
-cut_height <- 0.3
+merge_cut_height <- 0.3
+detect_cut_height <- 0.95
+
 beta_power <- ifelse(is.na(sft$powerEstimate), 30L, sft$powerEstimate)
 
 cor <- WGCNA::cor
 
 network <- 
     blockwiseModules(count_matrix,
-		     corType = "bicor",
+		     corType = "pearson",
 		     networkType = "signed",
 		     TOMType = "signed",
 		     power = beta_power, 
 		     maxBlockSize = ncol(count_matrix),
 		     minModuleSize = 30,
-		     mergeCutHeight = cut_height,
-		     detectCutHeight = 0.96,
+		     mergeCutHeight = merge_cut_height,
+		     detectCutHeight = detect_cut_height,
+		     minKMEtoStay = 0.7,
 		     numericLabels = FALSE,
 		     randomSeed = 1,
 		     verbose = 3)
 
 cor <- stats::cor
 
-## Gene classification into modules
-module_genes <- enframe(network$colors, "gene_id", "module")
-
-valid_modules <- module_genes |>
-    count(module, sort = T) |>
-    filter(module != "grey") |>
-    pull(module)
-
-
-## Module eigengenes
-## A module eigengene is like a hypothetical gene the represents the module
-module_eigen <- as_tibble(network$MEs, rownames = "sample_name")
-
-# Save data for analysis of module preservation across stims
-#write_tsv(module_genes, glue("./data/wgcna_{stim_i}_modules.tsv"))
-#write_tsv(module_eigen, glue("./data/wgcna_{stim_i}_eigen.tsv"))
-#write_rds(count_matrix, glue("./data/wgcna_{stim_i}_counts.rds"))
-
 ## plot dendogram to visualize modules
-png(glue("./plots/wgcna_{stim_i}_dendro.png"), 
+png(glue("./plots/dendro_{stim_i}.png"), 
     width = 10, height = 6, unit = "in", res = 200)
 plotDendroAndColors(network$dendrograms[[1]], 
 		    recolor(network$colors),
@@ -161,39 +162,58 @@ plotDendroAndColors(network$dendrograms[[1]],
 		    dendroLabels = FALSE,
 		    addGuide = TRUE,
 		    hang = 0.03, 
-		    guideHang = 0.05)
+		    guideHang = 0.05,
+		    abHeight = detect_cut_height)
 dev.off()
 
 # plot eigengene tree
 eigengene_tree <- 
-    as.dist(1 - bicor(select(network$MEs, -MEgrey))) |>
+    as.dist(1 - cor(select(network$MEs, -MEgrey))) |>
     hclust(method = "average")
 
-png(glue("./plots/wgcna_{stim_i}_metree.png"), 
+png(glue("./plots/metree_{stim_i}.png"), 
     width = 8, height = 8, unit = "in", res = 300)
 plot(eigengene_tree, main = "Clustering of module eigengenes", xlab = "", sub = "")
-abline(h = cut_height, col = "red")
+abline(h = merge_cut_height, col = "red")
 dev.off()
 
-# plot TOM
-#sim_tom <- 
-#    TOMsimilarityFromExpr(count_matrix, 
-#			  corType = "bicor",
-#			  networkType = "signed",
-#			  power = beta_power,
-#			  nThreads = 4)
-#	
-#diss_tom <- 1 - sim_tom
-#gene_tree <- hclust(as.dist(diss_tom), method = "average")
-#diag(diss_tom) <- NA
-#
-#png(glue("./plots/wgcna_{stim_i}_tom.png"), 
-#    unit = "in", height = 6, width = 6, res = 200)
-#TOMplot(diss_tom^8, gene_tree, Colors = network$colors, col = heat.colors(256))
-#dev.off()
 
+## Gene classification into modules
+kme_all_df <- 
+    signedKME(count_matrix, orderMEs(network$MEs)) |>
+    as_tibble(rownames = "gene_id") |>
+    select(-kMEgrey) |>
+    pivot_longer(-gene_id, names_to = "module") |>
+    mutate(module = str_remove(module, "^kME"))
+
+module_genes <- enframe(network$colors, "gene_id", "module")
+
+valid_modules <- module_genes |>
+    count(module, sort = TRUE) |>
+    filter(module != "grey") |>
+    pull(module)
+
+## Module eigengenes
+## A module eigengene is like a hypothetical gene the represents the module
+module_eigen <- as_tibble(network$MEs, rownames = "sample_name")
+
+# Save data for analysis of module preservation across stims
+signedKME(count_matrix, orderMEs(network$MEs)) |>
+    as_tibble(rownames = "gene_id") |>
+    write_tsv(glue("data/{stim_i}_kme.tsv"))
+
+write_rds(network, glue("data/{stim_i}_network.rds"))
+write_tsv(module_genes, glue("./data/{stim_i}_modules.tsv"))
+write_tsv(module_eigen, glue("./data/{stim_i}_eigen.tsv"))
+write_rds(count_matrix, glue("./data/{stim_i}_counts.rds"))
 
 ## Plot trends
+### Module assignment and higher kME are not always concordant.
+### While module eigengene is based on original assigments (based on adjacency not correlation).
+### Some genes have very low kME with the assigned module, and the threshold used in blockwideModules is not working properly.
+### I'm selecting top 500 genes by highest kME with a module to test with GO
+### By suggestion of WGCNA main author.
+
 scaled_mean_counts <- 
     count_matrix |>
     scale() |>
@@ -208,15 +228,13 @@ scaled_mean_counts <-
     ungroup()
 
 kme_df <- 
-    signedKME(count_matrix, orderMEs(network$MEs)) |>
-    as_tibble(rownames = "gene_id") |>
-    select(-kMEgrey) |>
-    pivot_longer(-gene_id, names_to = "module")
-
-top_kme <- kme_df |>
-    filter(value > .7) |>
+    kme_all_df |>
+    filter(value >= 0.9) |>
     group_by(gene_id) |>
     slice_max(value) |>
+    ungroup()
+
+top_kme <- kme_df |>
     group_by(module) |>
     top_n(500, abs(value)) |>
     ungroup() |>
@@ -261,13 +279,112 @@ trends_plot <-
 	  legend.position = "none") +
     labs(x = "Hours", y = "Average scaled expression")
 
-ggsave(glue("./plots/wgcna_{stim_i}_trends.png"), trends_plot, 
+ggsave(glue("./plots/trends_{stim_i}.png"), trends_plot, 
 	    height = 3.5, width = 7)
    
-# For presentation:
+# GO
+
+## Run GO
+## it takes a few minutes
+plan(multisession, workers = availableCores())
+
+go_res <- 
+    top_kme |>
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
+    {function(x) split(x, x$module)}() |>
+    map("gene_id") |>
+    future_map(run_enrichment)
+
+go_res_top <- go_res |>
+    map_df(as_tibble, .id = "module") |>
+    mutate(Description = str_trunc(Description, width = 36)) |>
+    group_by(module, Description) |>
+    slice_max(-log10(pvalue)) |>
+    group_by(module) |>
+    top_n(10, -log10(pvalue)) |>
+    ungroup() |>
+    mutate(module = factor(module, levels = valid_modules))
+
+go_plot <- 
+    ggplot(data = go_res_top, 
+       aes(x = "1", 
+	   y = reorder_within(Description, by = -log10(pvalue), within = module))) +
+    geom_point(aes(fill = -log10(pvalue), size = Count), shape = 21, stroke = .25) +
+    scale_y_reordered() +
+    scale_fill_gradient(low = "beige", high = "tomato4") +
+    facet_wrap(~module, nrow = 2, scale = "free_y", drop = FALSE) +
+    theme_minimal() +
+    theme(axis.text.x = element_blank(),
+	  axis.text.y = element_text(size = 10),
+	  axis.title = element_blank(),
+	  panel.grid = element_blank(),
+	  legend.position = "top",
+	  legend.text = element_text(size = 14),
+	  plot.background = element_rect(fill = "white", color = "white"),
+	  strip.text = element_text(size = 12, hjust = .5),
+	  strip.clip = "off") +
+    labs(fill = expression("-log"["10"]("p"))) +
+    guides(fill = guide_colorbar(barheight = .7, barwidth = 10),
+	   size = guide_legend(override.aes = list(fill = "black"))) +
+    coord_cartesian(clip = "off")
+
+ggsave(glue("./plots/go_{stim_i}.png"), 
+       go_plot, width = 11, height = 7, dpi = 300)
+
+# Plot correlation between Lupus-associated genes and modules in a heatmap
+# List of Lupus-associated genes
+sle_genes <- 
+    c("PTPN22", "FCGR2A", "TNFSF4", "NCF2", "SPRED2", "IFIH1", "STAT1", "STAT4",
+      "IKZF1", "IKZF2", "IKZF3", "PXK", "IL12A", "BANK1", "BLK", "MIR146A", 
+      "C4A", "C4B", "PRDM1", "TNFAIP3", "IRF5", "IRF7", "IRF8",
+      "WDFY4", "ARID5B", "CD44", "ETS1", "SH2B3", "SLC15A4", "CSK", "CIITA", "SOCS1", 
+      "CLEC16A", "ITGAM", "ITGAX", "TYK2", "UBE2L3", "TLR7", "IRAK1", "IKBKE", "IL10")
+
+gene_names <- distinct(edger_res, gene_id, gene_name)  
+
+sle_genes_cormatrix <- 
+    gene_names |>
+    filter(gene_name %in% sle_genes) |>
+    left_join(kme_all_df, join_by(gene_id)) |>
+    filter(!is.na(module)) |>
+    mutate(module = factor(module, levels = valid_modules)) |>
+    select(-gene_id) |>
+    pivot_wider(names_from = module, values_from = value) |>
+    column_to_rownames("gene_name") |>
+    data.matrix() |>
+    t()
+
+png(glue("./plots/slegenes_{stim_i}.png"), 
+    units = "in", height = 3, width = 8, res = 400)
+pheatmap(sle_genes_cormatrix,
+	 fontsize = 9, angle_col = 90, cluster_rows = TRUE, 
+	 color = colorRampPalette(rev(brewer.pal(n = 8, name ="RdYlBu")))(100),
+	 legend_breaks = seq(-1, 1, by = .2))
+dev.off()
+
+# plot TOM
+#sim_tom <- 
+#    TOMsimilarityFromExpr(count_matrix, 
+#			  corType = "bicor",
+#			  networkType = "signed",
+#			  power = beta_power,
+#			  nThreads = 4)
+#	
+#diss_tom <- 1 - sim_tom
+#gene_tree <- hclust(as.dist(diss_tom), method = "average")
+#diag(diss_tom) <- NA
+#
+#png(glue("./plots/wgcna_{stim_i}_tom.png"), 
+#    unit = "in", height = 6, width = 6, res = 200)
+#TOMplot(diss_tom^8, gene_tree, Colors = network$colors, col = heat.colors(256))
+#dev.off()
+
+
+###############################################################################
+## For presentation:
 #pres_order <- 
-#    c("Quick down and up", "Quick down and slow up", "Quick up – Quick down", 
-#      "Quick up – peak at 24 hrs", "Late activation", "Constant down")
+#    c("Constant down", "Quick down and up", "Quick down and slow up", 
+#      "Quick up – Quick down", "Quick up – peak at 24 hrs", "Late activation")
 #
 #top_kme_counts_pres <- 
 #    top_kme_counts |>
@@ -310,116 +427,23 @@ ggsave(glue("./plots/wgcna_{stim_i}_trends.png"), trends_plot,
 #ggsave(glue("./plots/wgcna_{stim_i}_trends_pres.png"), trends_plot_pres, 
 #	    height = 3.5, width = 7)
 #
+#kme_all_df <- 
+#    signedKME(count_matrix, orderMEs(network$MEs)) |>
+#    as_tibble(rownames = "gene_id") |>
+#    pivot_longer(-gene_id, names_to = "module") |>
+#    mutate(module = str_remove(module, "kME"))
 #
-
-# GO
-run_enrichment <- function(gene_list) {
-
-    enrichGO(gene = gene_list,
-	OrgDb = org.Hs.eg.db,
-	ont = "BP",
-	keyType = "ENSEMBL",
-	pAdjustMethod = "fdr",
-	pvalueCutoff = 0.05,
-	qvalueCutoff = 0.05,
-	readable = TRUE)
-}
-
-## Run GO
-## it takes a few minutes
-go_res <- 
-    top_kme |>
-    mutate(gene_id = str_remove(gene_id, "\\.\\d+$"),
-	   module = str_remove(module, "^kME")) |>
-    filter(module != "grey") |>
-    {function(x) split(x, x$module)}() |>
-    map("gene_id") |>
-    map(run_enrichment)
-
-# Use module classification for GO instead of correlation between genes and MEs
-#go_res2 <- 
-#    module_genes |>
-#    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
-#    filter(module != "grey") |>
-#    {function(x) split(x, x$module)}() |>
-#    map("gene_id") |>
-#    map(run_enrichment)
+#edger_res |> 
+#    filter(stim == "DN2") |>
+#    select(gene_id, gene_name) |>
+#    left_join(module_genes, join_by(gene_id)) |>
+#    left_join(kme_all_df, join_by(gene_id, module)) |>
+#    select(gene_id, gene_name, module, r = value) |>
+#    arrange(module, desc(r)) |>
+#    write_tsv("./data/wgcna_DN2_modules_all.tsv")
 #
-#go_res2 |>
-#    map_df(as_tibble, .id = "module") |>
-#    select(module, Description, gene_id = geneID) |>
-#    separate_rows(gene_id, sep = "/") |>
-#    filter(gene_id == "STAT1")
+###############################################################################
 
-go_res_top <- go_res |>
-    map_df(as_tibble, .id = "module") |>
-    mutate(Description = str_trunc(Description, width = 36)) |>
-    group_by(module, Description) |>
-    slice_max(-log10(pvalue)) |>
-    group_by(module) |>
-    top_n(10, -log10(pvalue)) |>
-    ungroup() |>
-    mutate(module = factor(module, levels = valid_modules))
-
-go_plot <- 
-    ggplot(data = go_res_top, 
-       aes(x = "1", 
-	   y = reorder_within(Description, by = -log10(pvalue), within = module))) +
-    geom_point(aes(fill = -log10(pvalue), size = Count), shape = 21, stroke = .25) +
-    scale_y_reordered() +
-    scale_fill_gradient(low = "beige", high = "tomato4") +
-    facet_wrap(~module, nrow = 2, scale = "free_y", drop = FALSE) +
-    theme_minimal() +
-    theme(axis.text.x = element_blank(),
-	  axis.text.y = element_text(size = 12),
-	  axis.title = element_blank(),
-	  panel.grid = element_blank(),
-	  legend.position = "top",
-	  legend.text = element_text(size = 14),
-	  plot.background = element_rect(fill = "white", color = "white"),
-	  plot.margin = margin(r = 1, l = 1, unit = "cm"),
-	  strip.text = element_text(size = 14),
-	  strip.clip = "off") +
-    labs(fill = expression("-log"["10"]("p"))) +
-    guides(fill = guide_colorbar(barheight = .7, barwidth = 10),
-	   size = guide_legend(override.aes = list(fill = "black"))) +
-    coord_cartesian(clip = "off")
-
-ggsave(glue("./plots/wgcna_{stim_i}_go.png"), 
-       go_plot, width = 11, height = 7, dpi = 300)
-#
-
-# Plot correlation between Lupus-associated genes and modules in a heatmap
-# List of Lupus-associated genes
-sle_genes <- 
-    c("PTPN22", "FCGR2A", "TNFSF4", "NCF2", "SPRED2", "IFIH1", "STAT1", "STAT4",
-      "IKZF1", "IKZF2", "IKZF3", "PXK", "IL12A", "BANK1", "BLK", "TCF7", "SKP1",
-      "TNIP1", "MIR3142HG", "C4A", "C4B", "PRDM1", "TNFAIP3", "IRF5", "IRF7", "IRF8",
-      "WDFY4", "ARID5B", "CD44", "ETS1", "SH2B3", "SLC15A4", "CSK", "CIITA", "SOCS1", 
-      "CLEC16A", "ITGAM", "ITGAX", "GSDMB", "ORMDL3", "TYK2", "UBE2L3", "NR4A1", "MYC", "TREX1",
-      "TLR7", "IRAK1")
-
-gene_names <- distinct(edger_res, gene_id, gene_name)  
-
-sle_genes_cormatrix <- 
-    gene_names |>
-    filter(gene_name %in% sle_genes) |>
-    left_join(kme_df, join_by(gene_id)) |>
-    mutate(module = str_remove(module, "^kME")) |>
-    filter(!is.na(module), module != "grey") |>
-    mutate(module = factor(module, levels = valid_modules)) |>
-    select(-gene_id) |>
-    pivot_wider(names_from = module, values_from = value) |>
-    column_to_rownames("gene_name") |>
-    data.matrix()
-
-png(glue("./plots/wgcna_{stim_i}_slegenes.png"), 
-    units = "in", height = 8, width = 4, res = 400)
-pheatmap(sle_genes_cormatrix,
-	 fontsize = 9,
-	 color = colorRampPalette(rev(brewer.pal(n = 7, name ="RdYlBu")))(100),
-	 legend_breaks = seq(-1, 1, by = .25))
-dev.off()
 
 ## Interferon genes
 #pathways <- 
@@ -499,25 +523,27 @@ dev.off()
 
 
 ## Try dynamic tree cut instead of a fixed height cut to call modules
-#dissTOM <- 1 - TOMsimilarityFromExpr(vst_dn2, power = 24, networkType = "signed")
+#dissTOM <- 1 - TOMsimilarityFromExpr(count_matrix, power = 24, networkType = "signed")
 #geneTree <- hclust(as.dist(dissTOM), method = "average" )
 #
 #dynamic_mods <-
-#    cutreeDynamic(dendro = geneTree, distM = dissTOM,
-#		  deepSplit = 2, pamRespectsDendro = FALSE,
+#    cutreeDynamic(dendro = geneTree, 
+#		  distM = dissTOM,
+#		  deepSplit = 2, 
+#		  pamRespectsDendro = FALSE,
 #		  minClusterSize = 30)
 #
 #dynamic_colors <- labels2colors(dynamic_mods)
 #
 ## merge similar modules
-#me_list <- moduleEigengenes(vst_dn2, colors = dynamic_colors)
+#me_list <- moduleEigengenes(count_matrix, colors = dynamic_colors)
 #mes <- me_list$eigengenes
 #me_diss <- 1 - cor(mes)
 #me_tree <- hclust(as.dist(me_diss), method = "average")
 #
 #png("./plots/wgcna_metree_dn2.png", width = 8, height = 6, unit = "in", res = 300)
 #plot(me_tree, main = "Clustering of module eigengenes", xlab = "", sub = "")
-#abline(h=0.25, col = "red")
+#abline(h=0.3, col = "red")
 #dev.off()
 #
 #
