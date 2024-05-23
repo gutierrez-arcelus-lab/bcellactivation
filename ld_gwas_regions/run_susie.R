@@ -12,7 +12,7 @@ ld_vcf <-
     unite("ID", c(ID, REF, ALT), sep = "-")
 
 ld_plink <- 
-    "./data/chr2:190970120-192970120.ld" |>
+    "./data/chr2:190970120-192970120_r.ld" |>
     data.table::fread() |>
     data.matrix()
 
@@ -49,29 +49,24 @@ condz_df <-
     as_tibble() |>
     bind_cols(select(langefeld_final, snp_id))
 
-condz_plot <- 
-    ggplot(condz_df, aes(x = condmean, y = z)) +
-    geom_abline() +
-    geom_point() +
-    geom_text_repel(data = top_n(condz_df, 2, abs(z_std_diff)),
-		    aes(x = condmean, y = z, label = snp_id)) +
-    theme_bw() +
-    labs(x = "Expected value", y = "Observed value")
-
-ggsave("./plots/susie_kriging_rss_STAT4.png", condz_plot, width = 5, height = 5)
+#condz_plot <- 
+#    ggplot(condz_df, aes(x = condmean, y = z)) +
+#    geom_abline() +
+#    geom_point(size = .5) +
+#    geom_text_repel(data = top_n(condz_df, 3, abs(z_std_diff)),
+#		    aes(x = condmean, y = z, label = snp_id),
+#		    min.segment.length = 0.1) +
+#    theme_bw() +
+#    labs(x = "Expected value", y = "Observed value")
+#
+#ggsave("./plots/susie_kriging_rss_STAT4.png", condz_plot, width = 5, height = 5)
 
 # if it does not converge, remove problematic SNPs and repeat until convergence
 iter <- 0L
 fit <- list()
 fit$converged <- FALSE
-summ_stats <- 
-    condz_df |>
-    filter(abs(z_std_diff) < 5) |>
-    select(snp_id) |>
-    inner_join(langefeld_final)
-
-ldmat <- ld_plink_final[as.character(summ_stats$snp_id), 
-			as.character(summ_stats$snp_id)]
+summ_stats <- langefeld_final
+ldmat <- ld_plink_final
 
 while ( !fit$converged & iter <= 30 ) {
 
@@ -118,4 +113,4 @@ pip_df <-
     left_join(cs_df, join_by(rowid)) |>
     mutate(cs = ifelse(!is.na(cs), paste0(cs, " (", coverage, ")"), NA))
 
-    
+write_tsv(pip_df, "./data/susie_stat4.tsv")

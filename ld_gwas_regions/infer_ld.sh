@@ -17,4 +17,5 @@ bcftools view --threads 4 -r $REGION $VCF1K |\
     bcftools view --threads 4 -e INFO/AC==INFO/AN - |\
     bcftools annotate --threads 4 -x FORMAT -O z -o $VCFOUT -
 
-plink --vcf $VCFOUT --r2 square spaces --real-ref-alleles --threads 4 --out ${PREFIX}
+plink --vcf $VCFOUT --r square spaces --real-ref-alleles --threads 4 --out ${PREFIX}_r
+plink --vcf $VCFOUT --r2 square spaces --real-ref-alleles --threads 4 --out ${PREFIX}_r2

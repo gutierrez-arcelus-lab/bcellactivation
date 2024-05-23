@@ -34,7 +34,7 @@ ld_vcf <-
     unite("ID", c(ID, REF, ALT), sep = "-")
 
 ld_plink <- 
-    "./data/chr2:190970120-192970120.ld" |>
+    "./data/chr2:190970120-192970120_r2.ld" |>
     data.table::fread() |>
     as_tibble() |>
     setNames(ld_vcf$ID) |>
@@ -176,32 +176,44 @@ ggsave("./plots/locuszoom.png",
        width = 6, height = 7)
 
 # Susie
-susie_langefeld <- 
-    read_tsv("../colocalization/finemap/susie_results_langefeld.tsv")
-
-susie_langefeld_stat4 <- 
-    susie_langefeld |>
-    filter(locus == "STAT4")
-
-susie_langefeld_stat4 |>
-    filter(!is.na(cs))
-
-loc_langefeld$data |>
-    as_tibble() |>
-    left_join(susie_langefeld_stat4, 
-	      join_by(pos))
-
+susie <- 
+    read_tsv("data/susie_stat4.tsv") |>
+    left_join(langefeld_ld, join_by(rsid, ref == other_allele, alt == effect_allele))
 
 gwas_stat4_plot <- 
-    ggplot(langefeld_ld, aes(pos, -log10(p))) +
-    geom_point() +
+    ggplot() +
+    geom_point(data = langefeld_ld, 
+	       aes(pos, -log10(p))) +
+    geom_point(data = filter(susie, !is.na(cs)), 
+	       aes(x = pos, -log10(p), color = cs),
+	       shape = 21, size = 4, fill = NA, stroke = 1) +
     scale_x_continuous(labels = function(x) x/1e6L) +
     theme_minimal() +
-    theme(panel.grid = element_blank(),
+    theme(legend.position = "top",
+	  panel.grid = element_blank(),
 	  plot.background = element_rect(fill = "white", color = "white")) +
     coord_cartesian(xlim = range(loc_langefeld$data$pos)) +
     labs(x = "Chromosome 2 (Mb)",
-	 y = expression("-log"["10"]("p")))
+	 y = expression("-log"["10"]("p")),
+	 color = "Credible set:")
 
-ggsave("./plots/gwas_stat4.png", gwas_stat4_plot, width = 6, height = 3)
+pip_plot <-
+    ggplot(susie, aes(x = pos, y = pip)) +
+    geom_point() +
+    geom_point(data = filter(susie, !is.na(cs)), 
+	       aes(x = pos, y = pip, color = cs),
+	       shape = 21, size = 4, fill = NA, stroke = 1) +
+    scale_x_continuous(labels = function(x) x/1e6L) +
+    theme_minimal() +
+    theme(legend.position = "none",
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    coord_cartesian(xlim = range(loc_langefeld$data$pos)) +
+    labs(x = "Chromosome 2 (Mb)",
+	 y = "PIP")
+
+
+ggsave("./plots/gwas_stat4.png", 
+       gwas_stat4_plot / pip_plot / g, 
+       width = 6, height = 8)
 
