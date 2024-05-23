@@ -5,6 +5,7 @@ library(AnnotationHub)
 library(locuszoomr)
 library(patchwork)
 library(rtracklayer)
+library(ggrepel)
 
 select <- dplyr::select
 filter <- dplyr::filter
@@ -42,22 +43,22 @@ ld_plink <-
 
 ld_risk_var <-
     ld_plink |>
-    dplyr::filter(grepl(risk_var, snp_id)) |>
+    filter(grepl(risk_var, snp_id)) |>
     pivot_longer(-snp_id, names_to = "var_id", values_to = "r2") |>
-    dplyr::select(var_id, r2) |>
+    select(var_id, r2) |>
     separate(var_id, c("rsid", "ref", "alt"), sep = "-", convert = TRUE)
 
 langefeld <- 
     "./data/langefeld_stat4.tsv" |>
     data.table::fread() |>
-    dplyr::mutate(chrom = "2") |>
-    dplyr::select(chrom, pos, rsid, other_allele = alleleA, effect_allele = alleleB, p)
+    mutate(chrom = "2") |>
+    select(chrom, pos, rsid, other_allele = alleleA, effect_allele = alleleB, p)
 
 langefeld_grch38 <- 
     "./data/langefeld_hg38.bed" |>
     read_tsv(col_names = FALSE) |>
-    dplyr::select(chrom = X1, pos = X3, rsid = X4) |>
-    dplyr::mutate(chrom = str_remove(chrom, "chr")) |>
+    select(chrom = X1, pos = X3, rsid = X4) |>
+    mutate(chrom = str_remove(chrom, "chr")) |>
     distinct()
 
 langefeld_ld <-
@@ -67,7 +68,7 @@ langefeld_ld <-
     nest() |>
     ungroup() |>
     inner_join(langefeld_grch38, join_by(chrom, rsid)) |>
-    dplyr::select(chrom, pos = pos.y, rsid, data) |>
+    select(chrom, pos = pos.y, rsid, data) |>
     unnest(cols = data) |>
     data.table::as.data.table()
 
@@ -216,4 +217,165 @@ pip_plot <-
 ggsave("./plots/gwas_stat4.png", 
        gwas_stat4_plot / pip_plot / g, 
        width = 6, height = 8)
+
+
+
+
+
+# hg19
+library(EnsDb.Hsapiens.v75)
+
+sentinels <- 
+    "./data/langefeld_sentinels.tsv" |>
+    read_tsv() |>
+    select(gene_region, snp_id)
+
+regions_df <- read_tsv("./data/langefeld_regions.tsv", col_names = c("region", "gene_region"))
+
+plot_susie <- function(ix) {
+    
+    gene_ix <- regions_df$gene_region[ix]
+    region_ix <- regions_df$region[ix]
+
+    risk_var <- 
+	sentinels |>
+	filter(gene_region == gene_ix) |>
+	pull(snp_id)
+
+    ld_vcf <- 
+	glue("./data/chr{region_ix}.vcf.gz") |>
+	data.table::fread(skip = "#CHROM") |>
+	as_tibble() |>
+	unite("ID", c(ID, REF, ALT), sep = "-")
+
+    ld_plink <- 
+	glue("./data/chr{region_ix}_r2.ld") |>
+	data.table::fread() |>
+	as_tibble() |>
+	setNames(ld_vcf$ID) |>
+	add_column(snp_id = ld_vcf$ID, .before = 1)
+
+    ld_risk_var <-
+	ld_plink |>
+	filter(grepl(paste0(risk_var, "-"), snp_id)) |>
+	pivot_longer(-snp_id, names_to = "var_id", values_to = "r2") |>
+	select(var_id, r2) |>
+	separate(var_id, c("rsid", "ref", "alt"), sep = "-", convert = TRUE)
+
+    stats <- 
+	read_tsv("./data/langefeld_summ_stats.tsv") |>
+	filter(gene_region == gene_ix) |>
+	select(chr, pos, rsid, alleleA, alleleB, p) |>
+	left_join(ld_risk_var, join_by(rsid, alleleA == ref, alleleB == alt)) |>
+	data.table::as.data.table()
+
+    loc <- 
+	locus(data = stats, 
+	      gene = str_split(gene_ix, "-")[[1]][1],
+	      flank = 4e5,
+	      LD = "r2",
+	      ens_db = "EnsDb.Hsapiens.v75")
+
+    # Gene tracks
+    g <- 
+	gg_genetracks(loc, cex.text = 0.7, cex.axis = 0.9) +
+	coord_cartesian(xlim = range(loc$data$pos)) +
+	scale_x_continuous(labels = function(x) x/1e6L)
+
+    pip_df <- 
+	glue("data/susie_{gene_ix}_pip.tsv") |>
+	read_tsv() |>
+	left_join(stats, join_by(rsid, ref == alleleA, alt == alleleB)) |>
+	mutate(r2interval = case_when(r2 >= 0 & r2 < .2 ~ "0.0 - 0.2",
+				      r2 >= .2 & r2 < .4 ~ "0.2 - 0.4",
+				      r2 >= .4 & r2 < .6 ~ "0.4 - 0.6",
+				      r2 >= .6 & r2 < .8 ~ "0.6 - 0.8",
+				      r2 >= .8 & r2 <= 1 ~ "0.8 - 1.0")) |>
+	arrange(r2) |>
+	mutate(r2interval = fct_rev(r2interval))
+
+    gwas_plot <- 
+	ggplot() +
+	geom_point(data = pip_df, 
+		   aes(x = pos, y = -log10(p), fill = r2interval), 
+		   size = 2, shape = 21, stroke = .25) +
+	geom_point(data = filter(pip_df, !is.na(cs)), 
+		   aes(x = pos, -log10(p), color = cs),
+		   shape = 21, size = 4, fill = NA, stroke = .75) +
+	scale_x_continuous(labels = function(x) x/1e6L) +
+	scale_color_manual(values = c("black", "purple", "Saddle Brown")) +
+	scale_fill_manual(values = c("0.0 - 0.2" = "#486CD9",
+				     "0.2 - 0.4" = "#6BEBEC",
+				     "0.4 - 0.6" = "#5DC83B",
+				     "0.6 - 0.8" = "#F3A83B",
+				     "0.8 - 1.0" = "#EB3223")) +
+	theme_minimal() +
+	theme(axis.title = element_text(size = 10),
+	      panel.grid = element_blank(),
+	      legend.title = element_text(size = 9),
+	      legend.text = element_text(size = 9),
+	      legend.key.height = unit(.5, "lines"),
+	      legend.spacing.y = unit(-0.25, "cm"),
+	      plot.background = element_rect(fill = "white", color = "white")) +
+	coord_cartesian(xlim = range(loc$data$pos)) +
+	labs(x = NULL,
+	     y = expression("-log"["10"]("p")),
+	     color = "Credible set:",
+	     fill = "r2:")
+
+    pip_plot <-
+	ggplot() +
+	geom_point(data = pip_df,
+		   aes(x = pos, y = pip, fill = r2interval),
+		   size = 2, shape = 21, stroke = .25) +
+	geom_point(data = filter(pip_df, !is.na(cs)), 
+		   aes(x = pos, y = pip, color = cs),
+		   shape = 21, size = 4, fill = NA, stroke = .75) +
+	geom_label_repel(data = pip_df |> filter(!is.na(cs)) |> group_by(cs) |> top_n(1, pip) |> ungroup(),
+			aes(x = pos, y = pip, label = rsid),
+			min.segment.length = 0, segment.size = .25, 
+			size = 2.5, alpha = .75) +
+	scale_x_continuous(labels = function(x) x/1e6L) +
+	scale_y_continuous(limits = c(0, 1), breaks = c(0, .5, 1)) +
+	scale_color_manual(values = c("black", "purple", "Saddle Brown")) +
+	scale_fill_manual(values = c("0.0 - 0.2" = "#486CD9",
+				     "0.2 - 0.4" = "#6BEBEC",
+				     "0.4 - 0.6" = "#5DC83B",
+				     "0.6 - 0.8" = "#F3A83B",
+				     "0.8 - 1.0" = "#EB3223")) +
+	theme_minimal() +
+	theme(axis.title = element_text(size = 10),
+	      legend.position = "none",
+	      panel.grid = element_blank(),
+	      plot.background = element_rect(fill = "white", color = "white")) +
+	coord_cartesian(xlim = range(loc$data$pos)) +
+	labs(x = NULL,
+	     y = "PIP")
+    
+    condz_df <- 
+	glue("./data/susie_{gene_ix}_krss.tsv") |>
+	read_tsv() |>
+	mutate(flag = logLR > 2 & abs(z) > 2)
+
+    condz_plot <- 
+        ggplot(condz_df, aes(x = condmean, y = z, color = flag)) +
+        geom_abline() +
+        geom_point(size = .5) +
+	scale_color_manual(values = c("FALSE" = "black", "TRUE" = "red")) +
+        theme_bw() +
+	theme(legend.position = "none") +
+        labs(x = "Expected value", y = "Observed value",
+	     title = "Susie 'kriging_rss'")
+
+    ggsave(glue("./plots/gwas_{gene_ix}.pdf"), 
+	   (gwas_plot / pip_plot / g) + 
+	       (plot_spacer()) +
+	       (condz_plot + plot_spacer() + plot_spacer()) + 
+	       plot_spacer() +
+	       plot_annotation(title = gene_ix) +
+	       plot_layout(ncol = 1, heights = c(1, 1, 1, .25, 1, .25)),
+	   width = 8.5, height = 11)
+}
+
+walk(1:nrow(regions_df), plot_susie)
 

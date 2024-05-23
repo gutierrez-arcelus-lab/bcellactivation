@@ -29,19 +29,11 @@ read_langefeld <- function(tab_path, sheet_number) {
     select(snp_id, chr, pos, gene_region, region_rank, ref_allele, p, p_stepwise, or)
 }
 
-if (!file.exists("data")) dir.create("data")
-
-
-tier1_ea <-
-    "../sle_variants/paper_data/langefeld_tableS2.xlxs" |>
-    read_langefeld(1)
-
-# GWAS summary statistics
-## Langefeld
-langefeld_chr2 <- 
-    "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Langefeld/ea.imputed.chr2.out" |>
-    read_delim(comment = "#", delim = " ") |>
-    filter(all_maf >= 0.002) |>
+read_summ_stats <- function(chrom) { 
+    glue("/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Langefeld/ea.imputed.chr{chrom}.out") |>
+    data.table::fread(skip = "alternate_ids") |>
+    as_tibble() |>
+    filter(all_maf >= 0.005) |>
     select(rsid, 
 	   pos = position, 
 	   alleleA, 
@@ -49,53 +41,125 @@ langefeld_chr2 <-
 	   beta = `frequentist_add_beta_1:add/sle=1`, 
 	   se = frequentist_add_se_1, 
 	   p = frequentist_add_wald_pvalue_1) |>
-    drop_na(beta, se) 
+    drop_na(beta, se) |>
+    mutate(chr = chrom) |>
+    select(chr, everything())
+}
 
-stat4_risk_var <- 
-    tier1_ea |>
-    filter(gene_region == "STAT4") |>
+if (!file.exists("data")) dir.create("data")
+
+tier1_ea <-
+    "../sle_variants/paper_data/langefeld_tableS2.xlxs" |>
+    read_langefeld(1) |>
+    group_by(gene_region) |>
     slice_min(p) |>
-    pull(pos)
+    filter(n() == 1 | (n() > 1 & is.na(p_stepwise))) |>
+    ungroup() |>
+    mutate(chr = sub("^(\\d+)[qp]\\d+$", "\\1", chr)) |>
+    mutate(chr = factor(chr, levels = c(1:22, "X", "Y"))) |>
+    arrange(chr, pos)
 
-langefeld_stat4 <- langefeld_chr2 |>
-    filter(between(pos, stat4_risk_var - 5e5, stat4_risk_var + 5e5)) |>
-    add_column(chrom = "2", .before = 1) |>
-    drop_na(beta, se, p) |>
-    mutate(rsid = str_extract(rsid, "rs\\d+")) |>
-    select(rsid, pos, alleleA, alleleB, beta, se, p)
+write_tsv(tier1_ea, "./data/langefeld_sentinels.tsv")
+
+
+tier1_regions <- 
+    tier1_ea |>
+    mutate(start = pos - 2.5e5, end = pos + 2.5e5) |>
+    mutate(region = glue("{chr}:{start}-{end}")) |>
+    select(gene_region, chr, start, end, region)
+
+tier1_regions |>
+    select(region, gene_region) |>
+    write_tsv("./data/langefeld_regions.tsv", col_names = FALSE)
+
+gwas_chromosomes <- as.character(unique(tier1_regions$chr))
+
+gwas_stats_regions <- 
+    gwas_chromosomes |>
+    map_dfr(~read_summ_stats(.) |>
+	    inner_join(tier1_regions, join_by(chr, between(pos, start, end))) |>
+	    select(chr, gene_region, rsid, pos, alleleA, alleleB, beta, se, p)) |>
+    mutate(rsid = str_extract(rsid, "rs\\d+"))
+
 
 # Update and get missing RsIDs by matching position and alleles to dbSNP
-dbsnp_meta <- 
-    "/lab-share/IM-Gutierrez-e2/Public/References/dbSNP/GCF_000001405.25_GRCh37.p13_assembly_report.txt" |>
-    data.table::fread(skip = "# Sequence-Name") 
-
-refseq_chr_id <- dbsnp_meta |>
-    filter(`UCSC-style-name` == "chr2") |>
-    pull(`RefSeq-Accn`)
-
-dbsnp_stat4_window <- 
-    paste0(refseq_chr_id, ":", paste(stat4_risk_var + c(-1e6, 1e6), collapse = "-"))
-
 dbsnp_vcf <- 
     "/lab-share/IM-Gutierrez-e2/Public/References/dbSNP/GCF_000001405.25.gz"
 
-glue("tabix {dbsnp_vcf} {dbsnp_stat4_window}") |>
-    paste("| awk '{ print $2,$3,$4,$5 }' > data/dbsnp_stat4.vcf") |>
-    system()
+dbsnp_meta <- 
+    "/lab-share/IM-Gutierrez-e2/Public/References/dbSNP/GCF_000001405.25_GRCh37.p13_assembly_report.txt" |>
+    data.table::fread(skip = "# Sequence-Name") |>
+    as_tibble() |>
+    select(chr = `UCSC-style-name`, chr_accn = `RefSeq-Accn`) |>
+    filter(chr %in% glue("chr{gwas_chromosomes}"))
 
-dbsnp_stat4 <- "./data/dbsnp_stat4.vcf" |>  
-    read_delim(delim = " ", col_names = c("pos", "rsid", "ref", "alt")) |>
-    separate_rows(alt, sep = ",")
+dbsnp_cmds <- 
+    tier1_regions |>
+    select(gene_region, chr, start, end) |>
+    mutate(chr = paste0("chr", chr)) |>
+    left_join(dbsnp_meta) |>
+    mutate(region = glue("{chr_accn}:{start}-{end}")) |>
+    select(gene = gene_region, region) |>
+    mutate(awk = "| awk '{ print $2,$3,$4,$5 }'",
+	   cmd = glue("tabix {dbsnp_vcf} {region} {awk} > data/dbsnp_{gene}.vcf")) |>
+    pull(cmd)
 
-langefeld_stat4_dbsnp <- 
-    langefeld_stat4 |>
-    left_join(dbsnp_stat4, join_by(pos, alleleA == ref, alleleB == alt)) |>
+walk(dbsnp_cmds, system)
+
+dbsnp_data <- 
+    tier1_regions |>
+    mutate(dbsnp_file = glue("data/dbsnp_{gene_region}.vcf")) |>
+    select(gene_region, dbsnp_file) |>
+    deframe() |>
+    map_dfr(~read_delim(., delim = " ", col_names = c("pos", "rsid", "ref", "alt")) |>
+	    separate_rows(alt, sep = ","), .id = "gene_region")
+    
+gwas_stats_regions_2 <- 
+    gwas_stats_regions |>
+    left_join(dbsnp_data, join_by(gene_region, pos, alleleA == ref, alleleB == alt)) |>
+    filter(!is.na(rsid.x), !is.na(rsid.y), rsid.x != rsid.y)
     mutate(rsid = ifelse(!is.na(rsid.y), rsid.y, rsid.x)) |>
-    select(rsid, pos, alleleA, alleleB, beta, se, p) |>
+    select(chr, gene_region, rsid, pos, alleleA, alleleB, beta, se, p) |>
     filter(!is.na(rsid))
 
 # Save GWAS data
-write_tsv(langefeld_stat4_dbsnp, "./data/langefeld_stat4.tsv")
+write_tsv(gwas_stats_regions_2, "./data/langefeld_summ_stats.tsv")
+
+
+
+
+# Save KGP IDs for LD reference panel
+dat <- 
+    "http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000G_2504_high_coverage/1000G_2504_high_coverage.sequence.index" |>
+    read_tsv(comment = "##")
+
+europeans <- c("CEU", "TSI", "GBR", "IBS", "FIN")
+
+dat |>
+    distinct(SAMPLE_NAME, POPULATION) |>
+    filter(POPULATION %in% europeans) |>
+    arrange(SAMPLE_NAME) |>
+    pull(SAMPLE_NAME) |>
+    write_lines("./data/eur_kgp.txt")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Save coords in hg19 for LD estimation
 paste0("2:", stat4_risk_var - 1e6, "-", stat4_risk_var + 1e6) |>
@@ -120,18 +184,4 @@ write_tsv(bed19, bed19_file, col_names = FALSE)
 
 command <- sprintf("liftOver %s %s %s %s", bed19_file, chain_file, bed38_file, fail_file)
 system(command)
-
-# Save KGP IDs for LD reference panel
-dat <- 
-    "http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000G_2504_high_coverage/1000G_2504_high_coverage.sequence.index" |>
-    read_tsv(comment = "##")
-
-europeans <- c("CEU", "TSI", "GBR", "IBS", "FIN")
-
-dat |>
-    distinct(SAMPLE_NAME, POPULATION) |>
-    filter(POPULATION %in% europeans) |>
-    arrange(SAMPLE_NAME) |>
-    pull(SAMPLE_NAME) |>
-    write_lines("./data/eur_kgp.txt")
 
