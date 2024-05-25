@@ -227,10 +227,11 @@ library(EnsDb.Hsapiens.v75)
 
 sentinels <- 
     "./data/langefeld_sentinels.tsv" |>
-    read_tsv() |>
-    select(gene_region, snp_id)
+    read_tsv()
 
-regions_df <- read_tsv("./data/langefeld_regions.tsv", col_names = c("region", "gene_region"))
+regions_df <-
+    "./data/langefeld_regions.tsv" |>
+    read_tsv(col_names = c("region", "gene_region"))
 
 plot_susie <- function(ix) {
     
@@ -269,22 +270,27 @@ plot_susie <- function(ix) {
 	left_join(ld_risk_var, join_by(rsid, alleleA == ref, alleleB == alt)) |>
 	data.table::as.data.table()
 
+    gene_lab <- str_split(gene_ix, "-")[[1]][1] 
+    
+    edb <- get("EnsDb.Hsapiens.v75")
+    locus_i <- genes(edb, filter = GeneNameFilter(gene_lab))
+    
+    flank_left <- start(locus_i) - min(stats$pos)
+    flank_right <- max(stats$pos) - end(locus_i)
+
     loc <- 
 	locus(data = stats, 
-	      gene = str_split(gene_ix, "-")[[1]][1],
-	      flank = 4e5,
+	      gene = gene_lab,
+	      flank = c(flank_left + 1, flank_right + 1),
 	      LD = "r2",
 	      ens_db = "EnsDb.Hsapiens.v75")
 
     # Gene tracks
-    g <- 
-	gg_genetracks(loc, cex.text = 0.7, cex.axis = 0.9) +
-	coord_cartesian(xlim = range(loc$data$pos)) +
-	scale_x_continuous(labels = function(x) x/1e6L)
+    g <- gg_genetracks(loc, cex.text = 0.7, cex.axis = 0.9)
 
     pip_df <- 
 	glue("data/susie_{gene_ix}_pip.tsv") |>
-	read_tsv() |>
+	read_tsv(col_types = "icccdcc") |>
 	left_join(stats, join_by(rsid, ref == alleleA, alt == alleleB)) |>
 	mutate(r2interval = case_when(r2 >= 0 & r2 < .2 ~ "0.0 - 0.2",
 				      r2 >= .2 & r2 < .4 ~ "0.2 - 0.4",
@@ -301,9 +307,10 @@ plot_susie <- function(ix) {
 		   size = 2, shape = 21, stroke = .25) +
 	geom_point(data = filter(pip_df, !is.na(cs)), 
 		   aes(x = pos, -log10(p), color = cs),
-		   shape = 21, size = 4, fill = NA, stroke = .75) +
-	scale_x_continuous(labels = function(x) x/1e6L) +
-	scale_color_manual(values = c("black", "purple", "Saddle Brown")) +
+		   shape = 21, size = 4, fill = NA, stroke = 1) +
+	scale_x_continuous(limits = loc$xrange,
+			   labels = function(x) x/1e6L) +
+	scale_color_manual(values = c("black", "Blue Violet", "blue")) +
 	scale_fill_manual(values = c("0.0 - 0.2" = "#486CD9",
 				     "0.2 - 0.4" = "#6BEBEC",
 				     "0.4 - 0.6" = "#5DC83B",
@@ -317,7 +324,6 @@ plot_susie <- function(ix) {
 	      legend.key.height = unit(.5, "lines"),
 	      legend.spacing.y = unit(-0.25, "cm"),
 	      plot.background = element_rect(fill = "white", color = "white")) +
-	coord_cartesian(xlim = range(loc$data$pos)) +
 	labs(x = NULL,
 	     y = expression("-log"["10"]("p")),
 	     color = "Credible set:",
@@ -330,14 +336,15 @@ plot_susie <- function(ix) {
 		   size = 2, shape = 21, stroke = .25) +
 	geom_point(data = filter(pip_df, !is.na(cs)), 
 		   aes(x = pos, y = pip, color = cs),
-		   shape = 21, size = 4, fill = NA, stroke = .75) +
+		   shape = 21, size = 4, fill = NA, stroke = 1) +
 	geom_label_repel(data = pip_df |> filter(!is.na(cs)) |> group_by(cs) |> top_n(1, pip) |> ungroup(),
 			aes(x = pos, y = pip, label = rsid),
 			min.segment.length = 0, segment.size = .25, 
-			size = 2.5, alpha = .75) +
-	scale_x_continuous(labels = function(x) x/1e6L) +
+			size = 3, alpha = .75) +
+	scale_x_continuous(limits = loc$xrange,
+			   labels = function(x) x/1e6L) +
 	scale_y_continuous(limits = c(0, 1), breaks = c(0, .5, 1)) +
-	scale_color_manual(values = c("black", "purple", "Saddle Brown")) +
+	scale_color_manual(values = c("black", "Blue Violet", "blue")) +
 	scale_fill_manual(values = c("0.0 - 0.2" = "#486CD9",
 				     "0.2 - 0.4" = "#6BEBEC",
 				     "0.4 - 0.6" = "#5DC83B",
@@ -348,7 +355,6 @@ plot_susie <- function(ix) {
 	      legend.position = "none",
 	      panel.grid = element_blank(),
 	      plot.background = element_rect(fill = "white", color = "white")) +
-	coord_cartesian(xlim = range(loc$data$pos)) +
 	labs(x = NULL,
 	     y = "PIP")
     
@@ -365,16 +371,21 @@ plot_susie <- function(ix) {
         theme_bw() +
 	theme(legend.position = "none") +
         labs(x = "Expected value", y = "Observed value",
-	     title = "Susie 'kriging_rss'")
+	     title = "Susie 'kriging_rss'") +
+	coord_fixed()
 
-    ggsave(glue("./plots/gwas_{gene_ix}.pdf"), 
-	   (gwas_plot / pip_plot / g) + 
-	       (plot_spacer()) +
-	       (condz_plot + plot_spacer() + plot_spacer()) + 
-	       plot_spacer() +
-	       plot_annotation(title = gene_ix) +
-	       plot_layout(ncol = 1, heights = c(1, 1, 1, .25, 1, .25)),
-	   width = 8.5, height = 11)
+    p1 <- plot_spacer()
+    p2 <- (gwas_plot / pip_plot / g) 
+    p3 <- plot_spacer()
+    p4 <- (condz_plot + plot_spacer() + plot_spacer())
+    p5 <- plot_spacer()
+    
+    p_out <- 
+	p1 / p2 / p3 / p4 + 
+	plot_annotation(title = gene_ix) +
+	plot_layout(heights = c(.1, 1, .1, .5, .1))
+    
+    ggsave(glue("./plots/susie_{ix}.pdf"), p_out, width = 8.5, height = 11)
 }
 
 walk(1:nrow(regions_df), plot_susie)
