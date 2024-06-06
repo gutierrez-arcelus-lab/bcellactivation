@@ -123,7 +123,7 @@ fig_a_title <-
 
 fig_a_grid <- 
     plot_grid(
-	      pca_title,
+	      fig_a_title,
 	      plot_grid(
 			pca_plot, 
 			plot_grid(NULL, legend_plot, NULL, ncol = 1, rel_heights = c(.1, 1, .5)), 
@@ -132,11 +132,45 @@ fig_a_grid <-
 			),
 	      ncol = 1, 
 	      rel_heights = c(.1, 1),
-	      labels = c(NULL, "A)"), label_size = 10
+	      labels = c(NULL, "a"), label_size = 10
     )
 
 
 # Fig C DN2 modules
+module_sizes <-
+    list.files("./bcell_lowinput/wgcna/data",
+	       pattern = "_network\\.rds",
+	       full.names = TRUE) |>
+    {function(x) setNames(x, str_extract(basename(x), "[^_]+"))}() |>
+    map_dfr(~read_rds(.) |>
+	    {function(x) table(x$colors)}() |>
+	    enframe("module", "n") |>
+	    filter(module != "grey") |>
+	    mutate(n = as.integer(n)) |>
+	    arrange(desc(n)) |>
+	    mutate(ix = fct_inorder(module),
+		   ix = as.integer(ix)),
+	    .id = "stim")
+
+eigengenes_df <-
+    list.files("./bcell_lowinput/wgcna/data",
+	       pattern = "eigen\\.tsv",
+	       full.names = TRUE) |>
+    {function(x) setNames(x, str_extract(basename(x), "[^_]+"))}() |>
+    map_dfr(~read_tsv(.) |>
+	    separate(sample_name, 
+		     c("donor_id", "stim", "time"), 
+		     sep = "_") |>
+	    pivot_longer(starts_with("ME"), names_to = "module") |>
+	    mutate(module = str_remove(module, "^ME"),
+		   time = parse_number(time),
+		   time = factor(time, levels = sort(unique(time)))) |>
+	    filter(module != "grey"),
+	    .id = "stim") |>
+    left_join(module_sizes, join_by(stim, module)) |>
+    select(stim, donor_id, module_ix = ix, module, time, value) |>
+    arrange(stim, module_ix, donor_id, time)
+
 go_res <-
     "./bcell_lowinput/wgcna/data/DN2_go.tsv" |>
     read_tsv() |>
@@ -148,7 +182,7 @@ go_res <-
 	   gene_r = map_dbl(GeneRatio, ~eval(parse(text = .)))) |>
     left_join(module_sizes, join_by(stim, module)) |>
     select(module = ix, Description, pvalue, gene_r) |>
-    mutate(module = factor(module, levels = unique(kim_df$module))) 
+    mutate(module = factor(module, levels = sort(unique(module_sizes$ix)))) 
 
 dn2_modules_df <-
     eigengenes_df |>
@@ -254,7 +288,7 @@ fig_c_grid <-
 			nrow = 1, align = "h", rel_widths = c(.6, .45, .1, 1)),
 	      ncol = 1, 
 	      rel_heights = c(.1, 1),
-	      labels = c(NULL, "C)"), label_size = 10)
+	      labels = c(NULL, "c"), label_size = 10)
 
 left_grid <-
     plot_grid(
@@ -266,39 +300,7 @@ left_grid <-
 # Right-hand side ##############################################################
 
 # Fig B
-module_sizes <-
-    list.files("./bcell_lowinput/wgcna/data",
-	       pattern = "_network\\.rds",
-	       full.names = TRUE) |>
-    {function(x) setNames(x, str_extract(basename(x), "[^_]+"))}() |>
-    map_dfr(~read_rds(.) |>
-	    {function(x) table(x$colors)}() |>
-	    enframe("module", "n") |>
-	    filter(module != "grey") |>
-	    mutate(n = as.integer(n)) |>
-	    arrange(desc(n)) |>
-	    mutate(ix = fct_inorder(module),
-		   ix = as.integer(ix)),
-	    .id = "stim")
 
-eigengenes_df <-
-    list.files("./bcell_lowinput/wgcna/data",
-	       pattern = "eigen\\.tsv",
-	       full.names = TRUE) |>
-    {function(x) setNames(x, str_extract(basename(x), "[^_]+"))}() |>
-    map_dfr(~read_tsv(.) |>
-	    separate(sample_name, 
-		     c("donor_id", "stim", "time"), 
-		     sep = "_") |>
-	    pivot_longer(starts_with("ME"), names_to = "module") |>
-	    mutate(module = str_remove(module, "^ME"),
-		   time = parse_number(time),
-		   time = factor(time, levels = sort(unique(time)))) |>
-	    filter(module != "grey"),
-	    .id = "stim") |>
-    left_join(module_sizes, join_by(stim, module)) |>
-    select(stim, donor_id, module_ix = ix, module, time, value) |>
-    arrange(stim, module_ix, donor_id, time)
 
 stim_colors_single <-
     stim_colors |>
@@ -343,7 +345,7 @@ fig_b_grid <-
     plot_grid(
 	      fig_b_title, wgcna_plot,
 	      ncol = 1, rel_heights = c(.1, 1),
-	      labels = c(NULL, "B)"), label_size = 10
+	      labels = c(NULL, "b"), label_size = 10
     )
 
 
@@ -355,12 +357,17 @@ sle_genes <-
       "WDFY4", "ARID5B", "CD44", "ETS1", "SLC15A4", "CSK", "SOCS1", 
       "CLEC16A", "ITGAM", "TYK2", "UBE2L3", "TLR7", "IRAK1", "IKBKE")
 
+gene_names <- 
+    read_tsv("./bcell_lowinput/results/edger/results.tsv") |>
+    mutate(stim = factor(stim, levels = rev(levels(legend_df$stim)))) |>
+    distinct(gene_id, gene_name)
+
 kme_df <- 
     "./bcell_lowinput/wgcna/data/DN2_kme.tsv" |>
     read_tsv() |>
     pivot_longer(-gene_id, names_to = "module", values_to = "kme") |>
     filter(module != "grey") |>
-    left_join(distinct(edger_results, gene_id, gene_name), join_by(gene_id)) |>
+    left_join(gene_names, join_by(gene_id)) |>
     left_join(filter(module_sizes, stim == "DN2"), join_by(module)) |>
     select(gene_name, module = ix, kme) |>
     mutate(module = factor(module))
@@ -404,7 +411,7 @@ fig_d_title <-
 fig_d_grid <- 
     plot_grid(fig_d_title, sle_heatmap,
 	      ncol = 1, rel_heights = c(.1, 1),
-	      labels = c("D)", NULL), label_size = 10)
+	      labels = c("d", NULL), label_size = 10)
 
 
 # Fig E LDSC
@@ -455,7 +462,7 @@ fig_e_title <-
 fig_e_grid <- 
     plot_grid(fig_e_title, ldsc_plot,
 	      ncol = 1, rel_heights = c(.1, 1),
-	      labels = c("E)", NULL), label_size = 10)
+	      labels = c("e", NULL), label_size = 10)
 
 right_grid <- 
     plot_grid(
@@ -490,9 +497,6 @@ ggsave("./paper_plots/fig2.pdf",
 #    unnest(cols = data) |>
 #    select(donor_id, condition, stim, hours, gene_id, gene_name, obs_cpm, obs_logcpm)
 #
-#edger_results <- 
-#    read_tsv("./bcell_lowinput/results/edger/results.tsv") |>
-#    mutate(stim = factor(stim, levels = rev(levels(legend_df$stim))))
 #
 #genes_dn2_mod7 <- c("TK1", "DLGAP5", "CDCA5") 
 #genes_tlr9_mod7 <- c("RPL36", "RPL32", "RPS3A")
