@@ -7,12 +7,19 @@ library(clusterProfiler)
 library(org.Hs.eg.db)
 library(patchwork)
 library(cowplot)
+library(ggbeeswarm)
 
 slice <- dplyr::slice
 count <- dplyr::count
 select <- dplyr::select
 
 if (!file.exists("paper_plots")) dir.create("paper_plots")
+
+
+
+# Left-hand side ##############################################################
+
+# Fig A PCA
 
 stim_colors <- 
     "./figure_colors.txt" |>
@@ -94,7 +101,7 @@ legend_plot <-
 pca_plot <- 
     ggplot(pca_df, aes(PC1, PC2)) +
     geom_point(aes(fill = condition), 
-	       size = 2.5, shape = 21, stroke = .25) +
+	       size = 2.5, shape = 21, stroke = .15) +
     scale_fill_manual(values = stim_colors) +
     theme_minimal() +
     theme(text = element_text(size = 9),
@@ -103,7 +110,7 @@ pca_plot <-
     guides(fill = "none") +
     labs(x = pc_varexp$lab[1], y = pc_varexp$lab[2])
 
-pca_title <- 
+fig_a_title <- 
     ggdraw() + 
     draw_label(
 	       "PCA shows separation of stimuli and time points",
@@ -112,23 +119,153 @@ pca_title <-
 	       hjust = 0
 	       ) +
     theme(text = element_text(size = 9),
-	  plot.margin = margin(0, 1.25, 0, 1.25, unit = "lines"))
+	  plot.margin = margin(0, 1.25, 0, 2, unit = "lines"))
 
-pca_grid <- 
+fig_a_grid <- 
     plot_grid(
 	      pca_title,
 	      plot_grid(
 			pca_plot, 
-			plot_grid(NULL, legend_plot, NULL, ncol = 1, rel_heights = c(.1, 1, .8)), 
+			plot_grid(NULL, legend_plot, NULL, ncol = 1, rel_heights = c(.1, 1, .5)), 
 			nrow = 1, 
 			rel_widths = c(1, .6)
 			),
 	      ncol = 1, 
-	      rel_heights = c(.1, 1)
+	      rel_heights = c(.1, 1),
+	      labels = c(NULL, "A)"), label_size = 10
     )
 
 
-# WGCNA
+# Fig C DN2 modules
+go_res <-
+    "./bcell_lowinput/wgcna/data/DN2_go.tsv" |>
+    read_tsv() |>
+    group_by(module) |>
+    top_n(5, -log10(pvalue)) |>
+    ungroup() |>
+    mutate(stim = "DN2",
+	   Description = str_trunc(Description, width = 30),
+	   gene_r = map_dbl(GeneRatio, ~eval(parse(text = .)))) |>
+    left_join(module_sizes, join_by(stim, module)) |>
+    select(module = ix, Description, pvalue, gene_r) |>
+    mutate(module = factor(module, levels = unique(kim_df$module))) 
+
+dn2_modules_df <-
+    eigengenes_df |>
+    filter(stim == "DN2") |>
+    filter(module_ix %in% unique(go_res$module)) |>
+    group_by(stim, module = module_ix, time) |>
+    summarise(value = mean(value)) |>
+    ungroup() |>
+    mutate(module = fct_inorder(as.character(module)))
+
+dn2_modules_plot <- 
+    ggplot() +
+    geom_line(data = dn2_modules_df,
+	      aes(x = time, y = value, group = module),
+	      linewidth = 1.25) +
+    facet_wrap(~module, ncol = 1) +
+    theme_minimal() +
+    theme(text = element_text(size = 9),
+	  axis.text = element_blank(),
+	  axis.ticks.y = element_blank(),
+	  panel.grid = element_blank(),
+	  strip.text = element_text(size = 9,
+				    margin = margin(t = 0, b = 0)),
+	  strip.background = element_rect(fill = "grey80", color = NA),
+	  plot.margin = unit(c(5.5, 0, 5.5, 5.5), "pt")
+	  ) +
+    labs(x = NULL, y = "Average Eigengene expression")
+
+
+kim_df <- 
+    "./bcell_lowinput/wgcna/data/DN2_kim.tsv" |>
+    read_tsv() |>
+    group_by(module) |>
+    top_n(5, kim) |>
+    ungroup() |>
+    mutate(stim = "DN2") |>
+    left_join(module_sizes, join_by(stim, module)) |>
+    select(module = ix, gene_name, kim) |>
+    filter(module %in% unique(go_res$module)) |>
+    arrange(module, desc(kim))
+
+kim_plot <-
+    ggplot(data = kim_df,
+	   aes(x = 1, 
+	       y = reorder_within(gene_name, by = kim, within = module))) +
+    geom_tile(aes(fill = kim), show.legend = FALSE) +
+    scale_y_reordered(position = "right") +
+    scale_fill_continuous(low = "beige", high = "firebrick") +
+    facet_wrap(~module, scale = "free_y", ncol = 1) +
+    theme_minimal() +
+    theme(text = element_text(size = 9),
+	  axis.text.x = element_blank(),
+	  axis.text.y.right = element_text(hjust = 0, 
+					   margin = margin(l = -.25, unit = "lines")),
+	  panel.grid = element_blank(),
+	  strip.text = element_blank(),
+	  plot.margin = unit(c(5.5, 5.5, 5.5, 2.5), "pt")
+	  ) +
+    labs(x = NULL, y = NULL)
+
+# GO
+go_plot <- 
+    ggplot(data = go_res, 
+       aes(x = "1", 
+	   y = reorder_within(Description, by = -log10(pvalue), within = module))) +
+    geom_point(aes(fill = -log10(pvalue), size = gene_r), 
+	       shape = 21, stroke = .5) +
+    scale_y_reordered(position = "right") +
+    scale_fill_gradient(low = "white", high = "black") +
+    scale_size(range = c(.5, 3.5)) +
+    facet_wrap(~module,
+	       ncol = 1, scale = "free_y") +
+    theme_minimal() +
+    theme(text = element_text(size = 9),
+	  axis.text.x = element_blank(),
+	  legend.text = element_text(size = 9, margin = margin(l = -0, unit = "lines")),
+	  legend.title = element_text(size = 9),
+	  legend.key.size = unit(.25, "cm"),
+	  strip.text = element_blank(),
+	  panel.grid = element_blank(),
+	  plot.margin = unit(c(5.5, 5.5, 5.5, 5.5), "pt")
+	  ) +
+    labs(x = NULL, y = NULL) +
+    guides(fill = guide_colorbar("logP:", barheight = 5, barwidth = .25),
+	   size = guide_legend("Gene\nRatio:")) +
+    coord_cartesian(clip = "off")
+
+fig_c_title <- 
+    ggdraw() + 
+    draw_label(
+	       "DN2 condition: gene programs are enriched in\ndifferent biological processes",
+	       x = 0,
+	       size = 9,
+	       hjust = 0
+	       ) +
+    theme(text = element_text(size = 9),
+	  plot.margin = margin(-1, 1.25, -1, 2, unit = "lines"))
+
+fig_c_grid <-
+    plot_grid(
+	      fig_c_title,
+	      plot_grid(dn2_modules_plot, kim_plot, NULL, go_plot,
+			nrow = 1, align = "h", rel_widths = c(.6, .45, .1, 1)),
+	      ncol = 1, 
+	      rel_heights = c(.1, 1),
+	      labels = c(NULL, "C)"), label_size = 10)
+
+left_grid <-
+    plot_grid(
+	      fig_a_grid, NULL, fig_c_grid,
+	      ncol = 1, rel_heights = c(0.5, .025, 1)
+	      )
+
+
+# Right-hand side ##############################################################
+
+# Fig B
 module_sizes <-
     list.files("./bcell_lowinput/wgcna/data",
 	       pattern = "_network\\.rds",
@@ -178,159 +315,311 @@ wgcna_plot <-
     facet_grid(factor(stim, levels = names(stim_colors_single)) ~ factor(module_ix),
 	       scales = "free_y") +
     theme_minimal() +
-    theme(text = element_text(size = 8),
+    theme(text = element_text(size = 9),
 	  axis.text = element_blank(),
 	  panel.grid.minor.x = element_blank(),
 	  panel.grid.minor.y = element_blank(),
 	  panel.grid.major.x = element_line(color = "grey90", linewidth = .2),
 	  panel.grid.major.y = element_blank(),
-	  strip.text.y = element_text(angle = 0, hjust = 0),
+	  strip.text.y = element_text(angle = 0, hjust = 0,
+				      margin = margin(l = 0)
+				      ),
 	  panel.spacing = unit(0.1, "lines")
 	  ) +
     labs(x = "hours", y = "Eigengene expression")
 
-wgcna_title <- 
+fig_b_title <- 
     ggdraw() + 
     draw_label(
-	       "Gene programs in stimulated B cells",
+	       "Gene programs in B cells",
 	       x = 0,
 	       size = 9,
 	       hjust = 0
 	       ) +
     theme(text = element_text(size = 9),
-	  plot.margin = margin(0, 1, 0, 1, unit = "lines"))
+	  plot.margin = margin(l = 2, r = 0, unit = "lines"))
 
-wgcna_grid <- 
+fig_b_grid <- 
     plot_grid(
-	      wgcna_title, wgcna_plot,
-	      ncol = 1, rel_heights = c(.1, 1)
+	      fig_b_title, wgcna_plot,
+	      ncol = 1, rel_heights = c(.1, 1),
+	      labels = c(NULL, "B)"), label_size = 10
     )
 
-fig2_top_grid <-
-    plot_grid(pca_grid, NULL, wgcna_grid, 
-	      nrow = 1, rel_widths = c(1, 0.05, .85),
-	      labels = c("A)", "B)"), label_size = 10, label_x = -0.0125)
 
+# Fig D SLE genes
+sle_genes <- 
+    c("PTPN22", "FCGR2A", "TNFSF4", "IL10", "NCF2", "SPRED2", "IFIH1", "STAT1", "STAT4",
+      "IKZF1", "IKZF2", "IKZF3", "PXK", "IL12A", "BANK1", "BLK", "MIR146A", 
+      "TNFAIP3", "IRF5", "IRF7", "IRF8", "TNIP1", "ATG5",
+      "WDFY4", "ARID5B", "CD44", "ETS1", "SLC15A4", "CSK", "SOCS1", 
+      "CLEC16A", "ITGAM", "TYK2", "UBE2L3", "TLR7", "IRAK1", "IKBKE")
 
-# Fig 2 bottom
-
-dn2_modules_df <-
-    eigengenes_df |>
-    filter(stim == "DN2") |>
-    group_by(stim, module = module_ix, time) |>
-    summarise(value = mean(value)) |>
-    ungroup() |>
-    mutate(module = fct_inorder(as.character(module)))
-
-dn2_modules_plot <- 
-    ggplot() +
-    geom_line(data = dn2_modules_df,
-	      aes(x = time, y = value, group = module),
-	      linewidth = 1.25) +
-    facet_wrap(~module, scale = "free_y", ncol = 1) +
-    theme_minimal() +
-    theme(text = element_text(size = 9),
-	  axis.text.y = element_blank(),
-	  axis.ticks.y = element_blank(),
-	  panel.grid = element_blank(),
-	  strip.text = element_text(size = 9,
-				    margin = margin(t = 0, b = 0)),
-	  strip.background = element_rect(fill = "grey80", color = NA)) +
-    labs(x = "hours", y = "Average Eigengene expression")
-
-
-kim_df <- 
-    "./bcell_lowinput/wgcna/data/DN2_kim.tsv" |>
+kme_df <- 
+    "./bcell_lowinput/wgcna/data/DN2_kme.tsv" |>
     read_tsv() |>
-    group_by(module) |>
-    top_n(5, kim) |>
+    pivot_longer(-gene_id, names_to = "module", values_to = "kme") |>
+    filter(module != "grey") |>
+    left_join(distinct(edger_results, gene_id, gene_name), join_by(gene_id)) |>
+    left_join(filter(module_sizes, stim == "DN2"), join_by(module)) |>
+    select(gene_name, module = ix, kme) |>
+    mutate(module = factor(module))
+
+kme_sle_df <- 
+    kme_df |>
+    filter(gene_name %in% sle_genes) |>
+    group_by(gene_name) |>
+    filter(any(kme >= 0.8)) |>
+    mutate(max_kme_mod = module[which.max(kme)]) |>
     ungroup() |>
-    mutate(stim = "DN2") |>
-    left_join(module_sizes, join_by(stim, module)) |>
-    select(module = ix, gene_name, kim) |>
-    arrange(module, desc(kim))
+    arrange(max_kme_mod, desc(kme)) |>
+    mutate(gene_name = fct_inorder(gene_name))
 
-kim_plot <-
-    ggplot(data = kim_df,
-	   aes(x = kim, 
-	       y = reorder_within(gene_name, by = kim, within = module))) +
-    geom_col() +
-    scale_x_continuous(breaks = c(.5, 1),
-		       labels = c("0.5", "1")) +
-    scale_y_reordered(position = "right") +
-    facet_wrap(~module, scale = "free_y", ncol = 1) +
+sle_heatmap <- 
+    ggplot(data = kme_sle_df, 
+       aes(x = module, y = gene_name)) +
+    geom_tile(aes(fill = kme)) +
+    scale_fill_gradient2(low = "Navy Blue",
+			 mid = "white",
+			 high = "firebrick",
+			 limits = c(-1, 1),
+			 breaks = c(-1, 0, 1),
+			 labels = c("-1", "0.5", "1")) +
     theme_minimal() +
-    theme(text = element_text(size = 9),
-	  axis.text.y.right = element_text(hjust = 0, 
-					   margin = margin(l = -.5, unit = "lines")),
-	  panel.grid = element_blank(),
-	  strip.text = element_blank()) +
-    labs(x = "kIM", y = NULL) + 
-    coord_cartesian(xlim = c(0.5, 1))
-
-# GO
-go_res <-
-    "./bcell_lowinput/wgcna/data/DN2_go.tsv" |>
-    read_tsv() |>
-    group_by(module) |>
-    top_n(5, -log10(pvalue)) |>
-    ungroup() |>
-    mutate(stim = "DN2",
-	   Description = str_trunc(Description, width = 30),
-	   gene_r = map_dbl(GeneRatio, ~eval(parse(text = .)))) |>
-    left_join(module_sizes, join_by(stim, module)) |>
-    select(module = ix, Description, pvalue, gene_r) |>
-    mutate(module = factor(module, levels = unique(kim_df$module))) 
-
-go_plot <- 
-    ggplot(data = go_res, 
-       aes(x = "1", 
-	   y = reorder_within(Description, by = -log10(pvalue), within = module))) +
-    geom_point(aes(fill = -log10(pvalue), size = gene_r), 
-	       shape = 21, stroke = .5) +
-    scale_y_reordered(position = "right") +
-    scale_fill_gradient(low = "beige", high = "firebrick") +
-    scale_size(range = c(.5, 3.5)) +
-    facet_wrap(~module, drop = FALSE,
-	       ncol = 1, scale = "free_y") +
-    theme_minimal() +
-    theme(text = element_text(size = 9),
-	  axis.text.x = element_blank(),
-	  legend.text = element_text(size = 9, margin = margin(l = -0, unit = "lines")),
-	  legend.title = element_text(size = 9),
-	  strip.text = element_blank(),
-	  panel.grid = element_blank()) +
+    theme(text = element_text(size = 9)) +
     labs(x = NULL, y = NULL) +
-    guides(fill = guide_colorbar("logP:", barheight = 5, barwidth = .5),
-	   size = guide_legend("Gene\nRatio:")) +
-    coord_cartesian(clip = "off")
+    guides(fill = guide_colorbar("kME:", barheight = 5, barwidth = .5))
 
-dn2_title <- 
+fig_d_title <- 
     ggdraw() + 
     draw_label(
-	       "DN2 condition: gene programs are enriched\nin different biological processes",
+	       "Module membership of SLE\ngenes into 'DN2 modules'",
 	       x = 0,
 	       size = 9,
 	       hjust = 0
 	       ) +
     theme(text = element_text(size = 9),
-	  plot.margin = margin(-1, 2, -1, 2, unit = "lines"))
+	  plot.margin = margin(0, 0, 0, 2, unit = "lines"))
 
-dn2_grid <-
+fig_d_grid <- 
+    plot_grid(fig_d_title, sle_heatmap,
+	      ncol = 1, rel_heights = c(.1, 1),
+	      labels = c("D)", NULL), label_size = 10)
+
+
+# Fig E LDSC
+ldsc <- 
+    "./bcell_lowinput/wgcna/gene_modules_LDSC.tsv" |>
+    read_tsv() |>
+    select(module = group, coefficient = Coefficient, std = Std, 
+	   trait = Analysis, pfdr) |>
+    mutate(trait = str_remove(trait, "_geneModules-DN2"),
+	   trait = recode(trait, 
+			  "AdultOnset" = "AO Asthma", 
+			  "ChildOnset" = "CO Asthma",
+			  "AllergyEczema" = "AllerEcz",
+			  "Lupus" = "SLE",
+			  "UKBAsthma" = "UO Asthma"),
+	   trait = factor(trait, levels = c("Height", "UO Asthma", "CO Asthma", "AO Asthma", 
+					    "AllerEcz", "PBC", "Arthritis", "SLE"))) |>
+    left_join(filter(module_sizes, stim == "DN2"), join_by(module)) |>
+    select(module = ix, trait, coefficient, std, pfdr) |>
+    mutate(module = factor(module, levels = sort(unique(module))))
+
+
+ldsc_plot <- 
+    ggplot(data = ldsc,
+	   aes(x = module, y = trait)) +
+    geom_tile(aes(fill = coefficient)) +
+    geom_point(data = filter(ldsc, pfdr <= 0.05),
+	      aes(x = module, y = trait),
+	      size = 1, shape = 8, color = "black") +
+    scale_fill_gradient2(low = "Navy Blue", mid = "white", high = "firebrick") +
+    theme_minimal() +
+    theme(text = element_text(size = 9),
+	  axis.title = element_blank(),
+	  panel.grid = element_blank()) +
+    guides(fill = guide_colorbar("Coef:", barheight = 5, barwidth = .5))
+
+fig_e_title <- 
+    ggdraw() + 
+    draw_label(
+	       "DN2 module #3 is enriched in\nSLE heritability",
+	       x = 0,
+	       size = 9,
+	       hjust = 0
+	       ) +
+    theme(text = element_text(size = 9),
+	  plot.margin = margin(0, 0, 0, 2, unit = "lines"))
+
+fig_e_grid <- 
+    plot_grid(fig_e_title, ldsc_plot,
+	      ncol = 1, rel_heights = c(.1, 1),
+	      labels = c("E)", NULL), label_size = 10)
+
+right_grid <- 
     plot_grid(
-	      dn2_title,
-	      plot_grid(dn2_modules_plot, kim_plot, NULL, go_plot,
-			nrow = 1, align = "h", rel_widths = c(.6, .5, .1, 1)),
-	      ncol = 1, rel_heights = c(.1, 1))
+	      fig_b_grid, NULL, fig_d_grid, NULL, fig_e_grid, 
+	      ncol = 1, rel_heights = c(.7, .05, 1, .05, 1)
+	      )
 
-fig2_bottom_grid <-
-    plot_grid(dn2_grid, NULL, 
-	      nrow = 1, rel_widths = c(1, .6),
-	      labels = c("C)", "D)"), label_size = 10, label_x = -0.0125)
 
-fig2_grid <- 
-    plot_grid(fig2_top_grid, fig2_bottom_grid, ncol = 1, rel_heights = c(0.4, 1)) +
-    theme(plot.background = element_rect(fill = "white", color = "white"))
+ggsave("./paper_plots/fig2.png", 
+       plot_grid(left_grid, NULL, right_grid, nrow = 1, rel_widths = c(1, .1, 0.625)),
+       width = 6.5, height = 6.5, dpi = 600)
 
-ggsave("./paper_plots/fig2.png", fig2_grid, width = 6.5, height = 2.25 + 5.5)
+ggsave("./paper_plots/fig2.pdf", 
+       plot_grid(left_grid, NULL, right_grid, nrow = 1, rel_widths = c(1, .1, 0.625)),
+       width = 6.5, height = 6.5)
+
+
+## Fig D Example Hub genes
+#
+#cpm_df <- 
+#    "./bcell_lowinput/results/edger/cpm.tsv" |>
+#    read_tsv() |>
+#    group_by(sample_id, stim) |>
+#    nest() |>
+#    ungroup() |>
+#    separate(sample_id, c("donor_id", "dummy", "time"), sep = "_") |>
+#    mutate(hours = parse_number(time),
+#	   hours = factor(hours, levels = sort(unique(hours))),
+#           condition = paste(dummy, time, sep = " "),
+#	   condition = factor(condition, levels = names(stim_colors)),
+#	   stim = factor(stim, levels = rev(levels(legend_df$stim)))) |>
+#    unnest(cols = data) |>
+#    select(donor_id, condition, stim, hours, gene_id, gene_name, obs_cpm, obs_logcpm)
+#
+#edger_results <- 
+#    read_tsv("./bcell_lowinput/results/edger/results.tsv") |>
+#    mutate(stim = factor(stim, levels = rev(levels(legend_df$stim))))
+#
+#genes_dn2_mod7 <- c("TK1", "DLGAP5", "CDCA5") 
+#genes_tlr9_mod7 <- c("RPL36", "RPL32", "RPS3A")
+#
+#cpm_plot_df <-
+#    cpm_df |>
+#    filter(gene_name %in% c(genes_dn2_mod7, genes_tlr9_mod7),
+#	   stim != "IL4")
+#
+#mod7_dn2 <- 
+#    ggplot(data = cpm_plot_df |> 
+#	   filter(gene_name %in% genes_dn2_mod7) |>
+#	   mutate(gene_name = factor(gene_name, levels = genes_dn2_mod7)),
+#	   aes(x = hours, y = obs_cpm)) +
+#    geom_quasirandom(aes(color = condition),
+#		     method = "smiley", width = .2, 
+#		     size = .5, alpha = .7) +
+#    geom_line(aes(group = stim), 
+#	      stat = "smooth", method = "loess", span = 1, se = FALSE, 
+#              linewidth = .7) +
+#    scale_y_continuous(breaks = scales::pretty_breaks(2)) +
+#    scale_color_manual(values = stim_colors) + 
+#    facet_grid(gene_name ~ stim, scale = "free_y", drop = TRUE) +
+#    theme_minimal() +
+#    theme(text = element_text(size = 9),
+#	  axis.text.x = element_blank(),
+#	  panel.grid.minor = element_blank(),
+#	  panel.grid.major.x = element_blank(),
+#	  panel.grid.major.y = element_line(linetype = 3, 
+#					    linewidth = .2,
+#					    color = "grey66"),
+#	  strip.text.x = element_blank(),
+#	  strip.text.y = element_text(size = 8, 
+#				      angle = 0, hjust = 1,
+#				      margin = unit(c(0, 0, 0, 1), "pt")),
+#	  plot.margin = unit(c(11, 5.5, 5.5, 5.5), "pt")
+#	  ) +
+#    labs(x = NULL, y = "CPM") +
+#    guides(color = "none") +
+#    coord_cartesian(clip = "off")
+#
+#mod7_tlr9 <- 
+#    ggplot(data = cpm_plot_df |> 
+#	   filter(gene_name %in% genes_tlr9_mod7) |>
+#	   mutate(gene_name = factor(gene_name, levels = genes_tlr9_mod7)),
+#	   aes(x = hours, y = obs_cpm)) +
+#    geom_quasirandom(aes(color = condition),
+#		     method = "smiley", width = .2, 
+#		     size = .5, alpha = .7) +
+#    geom_line(aes(group = stim), 
+#	      stat = "smooth", method = "loess", span = 1, se = FALSE, 
+#              linewidth = .7) +
+#    scale_y_continuous(breaks = scales::pretty_breaks(2)) +
+#    scale_color_manual(values = stim_colors) + 
+#    facet_grid(gene_name ~ stim, scale = "free_y", drop = TRUE) +
+#    theme_minimal() +
+#    theme(text = element_text(size = 9),
+#	  axis.text.x = element_blank(),
+#	  panel.grid.minor = element_blank(),
+#	  panel.grid.major.x = element_blank(),
+#	  panel.grid.major.y = element_line(linetype = 3, 
+#					    linewidth = .2,
+#					    color = "grey66"),
+#	  strip.text.x = element_blank(),
+#	  strip.text.y = element_text(size = 8, 
+#				      angle = 0, hjust = 1,
+#				      margin = unit(c(0, 0, 0, 1), "pt")),
+#	  plot.margin = unit(c(5.5, 5.5, 5.5, 5.5), "pt")
+#	  ) +
+#    labs(x = NULL, y = "CPM") +
+#    guides(color = "none") +
+#    coord_cartesian(clip = "off")
+#
+#
+#fig_d_title_1 <- 
+#    ggdraw() + 
+#    draw_label(
+#	       "Genes in DN2 module #7",
+#	       x = 0,
+#	       size = 9,
+#	       hjust = 0
+#	       ) +
+#    theme(text = element_text(size = 9),
+#	  plot.margin = margin(1, 1.25, 1, 2, unit = "lines"))
+#
+#fig_d_title_2 <- 
+#    ggdraw() + 
+#    draw_label(
+#	       "Genes in TLR9 module #7",
+#	       x = 0,
+#	       size = 9,
+#	       hjust = 0
+#	       ) +
+#    theme(text = element_text(size = 9),
+#	  plot.margin = margin(1, 1.25, 1, 2, unit = "lines"))
+#
+#fig_d_grid <- 
+#    plot_grid(fig_d_title_1,
+#	      mod7_dn2,
+#	      fig_d_title_2,
+#	      mod7_tlr9, 
+#	      ncol = 1, rel_heights = c(.1, 1, .1, 1),
+#	      labels = c("D)", NULL, NULL), label_size = 10)
+#
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
