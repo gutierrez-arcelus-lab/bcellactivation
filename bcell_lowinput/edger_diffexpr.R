@@ -1,60 +1,7 @@
 library(tximport)
 library(edgeR)
 library(tidyverse)
-
-# Functions
-run_edger <- function(stim, dge) {
-
-    # subset for stim of interest
-    # using Unstim_0hrs as starting point for all stims
-    pattern <- sprintf("Unstim_0hrs|_%s_", stim)
-    dge_s <- dge[, grepl(pattern, colnames(dge))] 
-
-    # get timepoint of each sample
-    time_vector <- 
-	str_split(colnames(dge_s), "_") |>
-	map_chr(3) |>
-	str_remove("hrs$") |>
-	as.integer()
-   
-    dge_s$samples$group <- factor(time_vector, levels = sort(unique(time_vector)))
-
-    # Create design matrix
-    degrees <- case_when(n_distinct(time_vector) <= 3 ~ 2L,
-			 n_distinct(time_vector) > 3 ~ 3L,
-			 TRUE ~ NA_integer_)
-
-    X <- ns(time_vector, df = degrees)
-    design <- model.matrix(~X)
-
-    # Estimate dispersion
-    dge_s <- estimateDisp(dge_s, design)
-   
-    # Time course trend analysis
-    fit <- dge_s |>
-	glmQLFit(design, robust = TRUE) |>
-	glmQLFTest(coef = 2:ncol(design))
-
-    # Obtain results
-    res_df <- topTags(fit, n = Inf) |>
-	as.data.frame() |>
-	as_tibble(rownames = "gene_id")
-
-    # Obtain observed and fitted CPM values
-    obs_logcpm <- 
-	cpm(dge_s, offset = dge_s$offset, log = TRUE) |>
-	as_tibble(rownames = "gene_id") |>
-	pivot_longer(-gene_id, names_to = "sample_id", values_to = "obs_logcpm")
-    
-    obs_cpm <- 
-	cpm(dge_s, offset = dge_s$offset, log = FALSE) |>
-	as_tibble(rownames = "gene_id") |>
-	pivot_longer(-gene_id, names_to = "sample_id", values_to = "obs_cpm")
-   
-    # Return results
-    list("results" = res_df, "cpm" = left_join(obs_cpm, obs_logcpm, join_by(gene_id, sample_id)))
-}
-
+library(furrr)
 
 # Transcript to Gene map
 tx_to_gene <- 
@@ -68,11 +15,25 @@ tx_to_gene <-
     select(tx_id, gene_id, gene_name)
 
 # Import expression data
-meta_data <- read_tsv("./data/metadata_pooledreps.tsv", col_names = c("sample_id", "f1", "f2"))
+stims <- c("Unstim", "IL4", "CD40L", "TLR9", "TLR7", "BCR", "BCR_TLR7", "DN2")
+
+sample_table <- 
+    "./data/metadata_pooledreps.tsv" |>
+    read_tsv(col_names = c("sample_id", "f1", "f2")) |>
+    select(sample_id) |>
+    separate(sample_id, c("donor", "treat", "time"), sep = "_", remove = FALSE) |>
+    mutate(treat = sub("-", "_", treat),
+	   treat = factor(treat, levels = stims),
+	   time = parse_number(time)) |>
+    unite("group", c(treat, time), sep = ".", remove = FALSE) |>
+    select(sample_id, group, donor, treat, time) |>
+    arrange(treat, time, donor) |>
+    mutate(group = fct_inorder(group)) |>
+    column_to_rownames("sample_id")
 
 salmon_files <- 
-    sprintf("./results/salmon_pooledreps/%s/quant.sf", meta_data$sample_id) |>
-    setNames(meta_data$sample_id)
+    sprintf("./results/salmon_pooledreps/%s/quant.sf", rownames(sample_table)) |>
+    setNames(rownames(sample_table))
 
 txi <- 
     tximport(salmon_files, 
@@ -103,32 +64,70 @@ y <- scaleOffset(y, normMat)
 # Remove samples that failed
 y <- y[, y$samples$lib.size > 2e6]
 
-# Filtering using the design information
-sample_table <- 
-    y$samples |>
-    as_tibble(rownames = "sample_id") |>
-    separate(sample_id, c("donor", "treat", "time"), sep = "_", remove = FALSE) |>
-    unite("group", c(treat, time), sep = "_", remove = FALSE) |>
-    filter(! treat %in% c("Unstim", "IL4")) |>
-    mutate(time = factor(time, levels = c("4hrs", "24hrs", "48hrs", "72hrs")),
-	   treat = factor(treat)) |>
-    select(sample_id, group, donor, treat, time) |>
-    arrange(treat, donor, time) |>
+sample_table_filt <- 
+    sample_table |>
+    rownames_to_column("sample_id") |>
+    filter(sample_id %in% colnames(y$counts)) |>
     column_to_rownames("sample_id")
 
-y <- y[, rownames(sample_table)]
+y <- y[, rownames(sample_table_filt)]
 
 # Specify design
-design <- model.matrix(~donor + treat + treat:time, data = sample_table)
-keep_y <- filterByExpr(y, design, group = sample_table$group)
+design <- model.matrix(~0 + group, data = sample_table_filt)
+
+colnames(design) <- sub("group", "", colnames(design))
+
+colnames(design)
+
+keep_y <- filterByExpr(y, design, group = sample_table_filt$group)
 y <- y[keep_y, ]
 
 # Run edgeR
 y <- estimateDisp(y, design)
 fit <- glmQLFit(y, design, robust = TRUE)
 
-colnames(design)
+# Test for all
+gs <- colnames(design)
 
-qlf <- glmQLFTest(fit, coef = 27)
-topTags(qlf)
+combinations <- combn(seq_len(length(gs)), 2)
+
+run_qlf <- function(i) {
+    
+    comb_i <- combinations[ , i]
+    contrasts_i <- rep(0, length(gs)) 
+    contrasts_i[comb_i[1]] <- -1
+    contrasts_i[comb_i[2]] <- 1
+
+    qlf <- glmQLFTest(fit, contrast = contrasts_i)
+
+    res <- 
+	topTags(qlf, n = Inf, p.value = 0.05) |> 
+	as.data.frame() |>
+	as_tibble(rownames = "gene_id")
+
+    if (nrow(res) > 0) {
+
+	res |>
+	    mutate(group1 = gs[comb_i[1]], group2 = gs[comb_i[2]]) |>
+	    select(group1, group2, everything())
+
+    } else {
+	
+	tibble(group1 = gs[comb_i[1]], group2 = gs[comb_i[2]])
+    }
+
+}
+
+plan(multisession, workers = availableCores())
+
+qlf_all <- 
+    future_map_dfr(1:ncol(combinations), run_qlf) |>
+    left_join(distinct(tx_to_gene, gene_id, gene_name), join_by(gene_id)) |>
+    select(group1, group2, gene_id, gene_name, everything())
+
+write_tsv(qlf_all, "./results/edger/diff_expr_all_times.tsv")
+
+
+
+
 

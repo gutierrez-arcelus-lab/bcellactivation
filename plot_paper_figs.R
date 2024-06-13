@@ -299,8 +299,82 @@ left_grid <-
 
 # Right-hand side ##############################################################
 
-# Fig B
+#### Test
+stims <- c("Unstim", "IL4", "CD40L", "TLR9", "TLR7", "BCR", "BCR-TLR7", "DN2")
 
+diff_expr <- 
+    "./bcell_lowinput/results/edger/diff_expr_all_times.tsv" |>
+    read_tsv()
+
+diff_expr_summ <-
+    diff_expr |>
+    group_by(group1, group2) |>
+    summarise(n = sum(!is.na(gene_id))) |>
+    ungroup() |>
+    separate(group1, c("stim1", "t1"), sep = "\\.", remove = FALSE, convert = TRUE) |>
+    separate(group2, c("stim2", "t2"), sep = "\\.", remove = FALSE, convert = TRUE) |>
+    mutate_at(vars(stim1, stim2), ~recode(., "BCR_TLR7" = "BCR-TLR7")) |>
+    mutate_at(vars(stim1, stim2), ~factor(., levels = stims)) |>
+    complete(group1, group2, fill = list(n = NA)) |>
+    arrange(stim1, stim2, t1, t2) |>
+    mutate_at(vars(group1, group2), ~factor(., levels = unique(c(group1, group2))))
+
+x_lines_df <- 
+    diff_expr_summ |>
+    filter(!is.na(n)) |>
+    distinct(group1, stim1, t1) |>
+    rowid_to_column() |>
+    group_by(stim1) |>
+    summarise(avg = mean(rowid), 
+	      rowid = max(rowid) + 0.5) |>
+    ungroup()
+
+y_lines_df <- 
+    diff_expr_summ |>
+    filter(!is.na(n)) |>
+    distinct(group2, stim2, t2) |>
+    rowid_to_column() |>
+    group_by(stim2) |>
+    summarise(avg = mean(rowid), 
+	      rowid = max(rowid) + 0.5) |>
+    ungroup()
+
+testp <- 
+    ggplot(data = diff_expr_summ, 
+       aes(x = group1, y = group2)) +
+    geom_tile(aes(fill = n), alpha = .9) +
+    geom_vline(xintercept = head(x_lines_df$rowid, -1), 
+	       color = "midnightblue", linewidth = .35) +
+    geom_hline(yintercept = head(y_lines_df$rowid, -1), 
+	       color = "midnightblue", linewidth = .35) +
+    scale_x_discrete(labels = function(x) str_extract(x, "\\d+$")) +
+    scale_y_discrete(labels = function(x) str_extract(x, "\\d+$")) +
+    scale_fill_viridis_c(option = "cividis",
+			 na.value = "white",
+			 labels = scales::comma) +
+    theme_minimal() +
+    theme(
+	  axis.title = element_blank(),
+	  panel.grid.major = element_line(color = "black", linewidth = .35),
+	  legend.position = "top",
+	  legend.title.position = "top",
+	  plot.margin = margin(b = 0.25, l = 0.75, unit = "in"),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(fill = "Number of DE genes:") +
+    guides(fill = guide_colorbar(barwidth = 15, barheight = .5)) +
+    annotate("text", x = x_lines_df$avg, y = -1, label = x_lines_df$stim1, 
+	     size = 9, size.unit = "pt") +
+    annotate("text", x = -1, y = y_lines_df$avg, label = y_lines_df$stim2, 
+	     size = 9, size.unit = "pt", hjust = 1) +
+    coord_cartesian(xlim = c(1, 28), ylim = c(1, 28), clip = "off")
+
+ggsave("./paper_plots/testp.png", testp, width = 6, height = 6) 
+
+
+########
+
+
+# Fig B
 
 stim_colors_single <-
     stim_colors |>
