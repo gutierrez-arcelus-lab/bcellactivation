@@ -8,18 +8,13 @@ library(org.Hs.eg.db)
 library(patchwork)
 library(cowplot)
 library(ggbeeswarm)
+library(glue)
 
 slice <- dplyr::slice
 count <- dplyr::count
 select <- dplyr::select
 
 if (!file.exists("paper_plots")) dir.create("paper_plots")
-
-
-
-# Left-hand side ##############################################################
-
-# Fig A PCA
 
 stim_colors <- 
     "./figure_colors.txt" |>
@@ -28,6 +23,7 @@ stim_colors <-
 	   condition = paste0(condition, "hrs")) |>
     deframe()
 
+# Fig A PCA
 dat <- read_rds("./bcell_lowinput/wgcna/data/gene_expression.rds")
 
 sample_table <- 
@@ -82,19 +78,29 @@ legend_df <-
 	   time = fct_inorder(time),
 	   stim = fct_inorder(stim),
 	   stim = fct_rev(stim)) |>
-    select(stim, time, condition)
+    select(stim, time, condition) |>
+    mutate(stim = paste0(stim, ":"),
+	   stim = fct_inorder(stim))
 
 legend_plot <-
-    ggplot(legend_df, aes(x = time, y = stim, fill = condition)) +
+    ggplot(legend_df, aes(x = time, y = 1, fill = condition)) +
     geom_point(size = 2.5, shape = 21, stroke = .25) +
     scale_fill_manual(values = stim_colors) +
+    facet_wrap(~stim, ncol = 1) +
     theme_minimal() +
     theme(text = element_text(size = 9),
-	  axis.text.y = element_text(margin = margin(r = -.5, l = .25, unit = "lines")),
+	  axis.text.y = element_blank(),
 	  axis.title.y =  element_blank(),
+	  axis.ticks.x = element_line(linewidth = .25),
+	  axis.ticks.y = element_blank(),
 	  panel.grid = element_blank(),
-	  plot.title = element_text(size = 9),
-	  plot.margin = unit(c(0, 0, 0, 0), "lines")) +
+	  panel.border = element_rect(color = NA, fill = NA),
+	  panel.spacing = unit(0, "lines"),
+	  strip.clip = "off",
+	  strip.text = element_text(margin = margin(t = 0, b = 0)),
+	  strip.background = element_rect(color = NA, fill = "grey90"),
+	  plot.margin = margin(l = 0, r = 0.1, unit = "cm")
+	  ) +
     labs(x = "hours") +
     guides(fill = "none")
 
@@ -106,6 +112,7 @@ pca_plot <-
     theme_minimal() +
     theme(text = element_text(size = 9),
 	  panel.grid = element_blank(),
+	  plot.margin = margin(r = 0),
 	  plot.title = element_text(size = 9)) +
     guides(fill = "none") +
     labs(x = pc_varexp$lab[1], y = pc_varexp$lab[2])
@@ -119,21 +126,168 @@ fig_a_title <-
 	       hjust = 0
 	       ) +
     theme(text = element_text(size = 9),
-	  plot.margin = margin(0, 1.25, 0, 2, unit = "lines"))
+	  plot.margin = margin(l = 1, unit = "lines"))
 
 fig_a_grid <- 
     plot_grid(
 	      fig_a_title,
 	      plot_grid(
 			pca_plot, 
-			plot_grid(NULL, legend_plot, NULL, ncol = 1, rel_heights = c(.1, 1, .5)), 
+			plot_grid(NULL, legend_plot, NULL, ncol = 1, rel_heights = c(.1, 1, .4)), 
 			nrow = 1, 
-			rel_widths = c(1, .6)
+			rel_widths = c(1, .33)
 			),
 	      ncol = 1, 
 	      rel_heights = c(.1, 1),
-	      labels = c(NULL, "a"), label_size = 10
+	      labels = c("a", NULL), label_size = 12
     )
+
+
+# Fig B #######################################################################
+all_stims <-
+    names(stim_colors) |>
+    str_split(" ") |>
+    map_chr(1) |>
+    unique()
+
+diff_expr <- 
+    "./bcell_lowinput/results/edger/diff_expr_all_times.tsv" |>
+    read_tsv()
+
+diff_expr_summ <-
+    diff_expr |>
+    group_by(group1, group2) |>
+    summarise(n = sum(!is.na(gene_id))) |>
+    ungroup() |>
+    separate(group1, c("stim1", "t1"), sep = "\\.", remove = FALSE, convert = TRUE) |>
+    separate(group2, c("stim2", "t2"), sep = "\\.", remove = FALSE, convert = TRUE) |>
+    mutate_at(vars(stim1, stim2), ~recode(., "BCR_TLR7" = "BCR-TLR7")) |>
+    mutate_at(vars(stim1, stim2), ~factor(., levels = all_stims)) |>
+    complete(group1, group2, fill = list(n = NA)) |>
+    arrange(stim1, stim2, t1, t2) |>
+    mutate_at(vars(group1, group2), ~factor(., levels = unique(c(group1, group2))))
+
+x_lines_df <- 
+    diff_expr_summ |>
+    filter(!is.na(n)) |>
+    distinct(group1, stim1, t1) |>
+    rowid_to_column() |>
+    group_by(stim1) |>
+    summarise(avg = mean(rowid), 
+	      rowid = max(rowid) + 0.5) |>
+    ungroup()
+
+y_lines_df <- 
+    diff_expr_summ |>
+    filter(!is.na(n)) |>
+    distinct(group2, stim2, t2) |>
+    rowid_to_column() |>
+    group_by(stim2) |>
+    summarise(avg = mean(rowid), 
+	      rowid = max(rowid) + 0.5) |>
+    ungroup()
+
+diff_plot <- 
+    ggplot(data = diff_expr_summ, 
+       aes(x = group1, y = group2)) +
+    geom_tile(aes(fill = n), alpha = 1) +
+    scale_fill_viridis_c(option = "cividis",
+			 na.value = "white",
+			 labels = scales::comma) +
+    theme_minimal() +
+    theme(text = element_text(size = 9),
+	  axis.text = element_blank(),
+	  axis.title = element_blank(),
+	  panel.grid.major = element_blank(),
+	  legend.text = element_text(margin = margin(l = 0)),
+	  legend.box.spacing = unit(c(l = -.25), "lines"),
+	  legend.margin = margin(0, 0, 0, -.25, unit = "lines"),
+	  plot.margin = margin(0, 0, 0, 0)
+	  ) +
+    labs(fill = "DE\ngenes:") +
+    guides(fill = guide_colorbar(barwidth = .5, barheight = 7)) +
+    coord_cartesian(xlim = c(1, 28), ylim = c(1, 28))
+
+b_legend <- get_plot_component(diff_plot, 'guide-box-right', return_all = TRUE)
+
+b_axis_x_df <- 
+    diff_expr_summ |>
+    filter(!is.na(stim1)) |>
+    distinct(group1, stim1, t1) |>
+    mutate(condition1 = glue("{stim1} {t1}hrs")) |>
+    select(group1, condition1)
+
+b_axis_y_df <- 
+    diff_expr_summ |>
+    filter(!is.na(stim2)) |>
+    distinct(group2, stim2, t2) |>
+    mutate(condition2 = glue("{stim2} {t2}hrs")) |>
+    select(group2, condition2)
+
+b_axis_x_plot <-
+    ggplot(data = b_axis_x_df, 
+	   aes(y = factor(1), x = group1)) +
+    geom_tile(aes(fill = condition1)) +
+    scale_fill_manual(values = stim_colors) +
+    theme_minimal() +
+    theme(axis.text = element_blank(),
+	  axis.title = element_blank(),
+	  plot.margin = margin(0, 0, 0, 0)
+	  ) +
+    guides(fill = "none") +
+    coord_cartesian(xlim = c(1, 28), ylim = c(1, 1))
+
+b_axis_y_plot <-
+    ggplot(data = b_axis_y_df, 
+	   aes(x = factor(1), y = group2)) +
+    geom_tile(aes(fill = condition2)) +
+    scale_fill_manual(values = stim_colors) +
+    theme_minimal() +
+    theme(axis.text = element_blank(),
+	  axis.title = element_blank(),
+	  plot.margin = margin(0, 0, 0, 0)
+	  ) +
+    guides(fill = "none") +
+    coord_cartesian(xlim = c(1, 1), ylim = c(1, 28))
+
+fig_b_title <- 
+    ggdraw() + 
+    draw_label(
+	       "Number of differentially expressed genes\nacross all conditions and time points",
+	       x = 0,
+	       size = 9,
+	       hjust = 0
+	       ) +
+    theme(text = element_text(size = 9),
+	  plot.margin = margin(b = .5, l = 1.25, unit = "lines"))
+		 
+b_tmp <- 
+    plot_grid(NULL, b_axis_x_plot, b_axis_y_plot, diff_plot + guides(fill = "none"),
+	      ncol = 2, nrow = 2, align = "v", rel_heights = c(.05, 1), rel_widths = c(0.05, 1))
+
+fig_b_grid <- 
+    plot_grid(
+	      fig_b_title, 
+	      plot_grid(b_tmp, b_legend, rel_widths = c(1, .175), nrow = 1),
+	      ncol = 1, 
+	      rel_heights = c(.175, 1),
+	      labels = c("b"), label_size = 12
+    )
+
+ggsave("./paper_plots/testp2.png", fig_b_grid, width = 6.5/2, height = 3)
+
+
+top_grid <- 
+    plot_grid(fig_a_grid, NULL, fig_b_grid, nrow = 1, rel_widths = c(1, .1, 1))
+
+
+ggsave("./paper_plots/fig2_top.png", top_grid, width = 6.5, height = 3)
+
+
+
+
+
+
 
 
 # Fig C DN2 modules
@@ -297,132 +451,56 @@ left_grid <-
 	      )
 
 
-# Right-hand side ##############################################################
-
-#### Test
-stims <- c("Unstim", "IL4", "CD40L", "TLR9", "TLR7", "BCR", "BCR-TLR7", "DN2")
-
-diff_expr <- 
-    "./bcell_lowinput/results/edger/diff_expr_all_times.tsv" |>
-    read_tsv()
-
-diff_expr_summ <-
-    diff_expr |>
-    group_by(group1, group2) |>
-    summarise(n = sum(!is.na(gene_id))) |>
-    ungroup() |>
-    separate(group1, c("stim1", "t1"), sep = "\\.", remove = FALSE, convert = TRUE) |>
-    separate(group2, c("stim2", "t2"), sep = "\\.", remove = FALSE, convert = TRUE) |>
-    mutate_at(vars(stim1, stim2), ~recode(., "BCR_TLR7" = "BCR-TLR7")) |>
-    mutate_at(vars(stim1, stim2), ~factor(., levels = stims)) |>
-    complete(group1, group2, fill = list(n = NA)) |>
-    arrange(stim1, stim2, t1, t2) |>
-    mutate_at(vars(group1, group2), ~factor(., levels = unique(c(group1, group2))))
-
-x_lines_df <- 
-    diff_expr_summ |>
-    filter(!is.na(n)) |>
-    distinct(group1, stim1, t1) |>
-    rowid_to_column() |>
-    group_by(stim1) |>
-    summarise(avg = mean(rowid), 
-	      rowid = max(rowid) + 0.5) |>
-    ungroup()
-
-y_lines_df <- 
-    diff_expr_summ |>
-    filter(!is.na(n)) |>
-    distinct(group2, stim2, t2) |>
-    rowid_to_column() |>
-    group_by(stim2) |>
-    summarise(avg = mean(rowid), 
-	      rowid = max(rowid) + 0.5) |>
-    ungroup()
-
-testp <- 
-    ggplot(data = diff_expr_summ, 
-       aes(x = group1, y = group2)) +
-    geom_tile(aes(fill = n), alpha = .9) +
-    geom_vline(xintercept = head(x_lines_df$rowid, -1), 
-	       color = "midnightblue", linewidth = .35) +
-    geom_hline(yintercept = head(y_lines_df$rowid, -1), 
-	       color = "midnightblue", linewidth = .35) +
-    scale_x_discrete(labels = function(x) str_extract(x, "\\d+$")) +
-    scale_y_discrete(labels = function(x) str_extract(x, "\\d+$")) +
-    scale_fill_viridis_c(option = "cividis",
-			 na.value = "white",
-			 labels = scales::comma) +
-    theme_minimal() +
-    theme(
-	  axis.title = element_blank(),
-	  panel.grid.major = element_line(color = "black", linewidth = .35),
-	  legend.position = "top",
-	  legend.title.position = "top",
-	  plot.margin = margin(b = 0.25, l = 0.75, unit = "in"),
-	  plot.background = element_rect(fill = "white", color = "white")) +
-    labs(fill = "Number of DE genes:") +
-    guides(fill = guide_colorbar(barwidth = 15, barheight = .5)) +
-    annotate("text", x = x_lines_df$avg, y = -1, label = x_lines_df$stim1, 
-	     size = 9, size.unit = "pt") +
-    annotate("text", x = -1, y = y_lines_df$avg, label = y_lines_df$stim2, 
-	     size = 9, size.unit = "pt", hjust = 1) +
-    coord_cartesian(xlim = c(1, 28), ylim = c(1, 28), clip = "off")
-
-ggsave("./paper_plots/testp.png", testp, width = 6, height = 6) 
-
-
-########
-
-
-# Fig B
-
-stim_colors_single <-
-    stim_colors |>
-    {function(x) keep(x, !grepl("Unstim|IL4", names(x)))}() |>
-    {function(x) keep(x, grepl("48hrs", names(x)))}() |>
-    {function(x) setNames(x, str_extract(names(x), "[^ ]+"))}()
-
-wgcna_plot <- 
-    ggplot(data = eigengenes_df, 
-       aes(x = time, y = value)) +
-    geom_line(aes(group = donor_id),
-	      linewidth = .5, alpha = .5, 
-	      show.legend = FALSE) +
-    facet_grid(factor(stim, levels = names(stim_colors_single)) ~ factor(module_ix),
-	       scales = "free_y") +
-    theme_minimal() +
-    theme(text = element_text(size = 9),
-	  axis.text = element_blank(),
-	  panel.grid.minor.x = element_blank(),
-	  panel.grid.minor.y = element_blank(),
-	  panel.grid.major.x = element_line(color = "grey90", linewidth = .2),
-	  panel.grid.major.y = element_blank(),
-	  strip.text.y = element_text(angle = 0, hjust = 0,
-				      margin = margin(l = 0)
-				      ),
-	  panel.spacing = unit(0.1, "lines")
-	  ) +
-    labs(x = "hours", y = "Eigengene expression")
-
-fig_b_title <- 
-    ggdraw() + 
-    draw_label(
-	       "Gene programs in B cells",
-	       x = 0,
-	       size = 9,
-	       hjust = 0
-	       ) +
-    theme(text = element_text(size = 9),
-	  plot.margin = margin(l = 2, r = 0, unit = "lines"))
-
-fig_b_grid <- 
-    plot_grid(
-	      fig_b_title, wgcna_plot,
-	      ncol = 1, rel_heights = c(.1, 1),
-	      labels = c(NULL, "b"), label_size = 10
-    )
-
-
+#
+## Fig B
+#
+#stim_colors_single <-
+#    stim_colors |>
+#    {function(x) keep(x, !grepl("Unstim|IL4", names(x)))}() |>
+#    {function(x) keep(x, grepl("48hrs", names(x)))}() |>
+#    {function(x) setNames(x, str_extract(names(x), "[^ ]+"))}()
+#
+#wgcna_plot <- 
+#    ggplot(data = eigengenes_df, 
+#       aes(x = time, y = value)) +
+#    geom_line(aes(group = donor_id),
+#	      linewidth = .5, alpha = .5, 
+#	      show.legend = FALSE) +
+#    facet_grid(factor(stim, levels = names(stim_colors_single)) ~ factor(module_ix),
+#	       scales = "free_y") +
+#    theme_minimal() +
+#    theme(text = element_text(size = 9),
+#	  axis.text = element_blank(),
+#	  panel.grid.minor.x = element_blank(),
+#	  panel.grid.minor.y = element_blank(),
+#	  panel.grid.major.x = element_line(color = "grey90", linewidth = .2),
+#	  panel.grid.major.y = element_blank(),
+#	  strip.text.y = element_text(angle = 0, hjust = 0,
+#				      margin = margin(l = 0)
+#				      ),
+#	  panel.spacing = unit(0.1, "lines")
+#	  ) +
+#    labs(x = "hours", y = "Eigengene expression")
+#
+#fig_b_title <- 
+#    ggdraw() + 
+#    draw_label(
+#	       "Gene programs in B cells",
+#	       x = 0,
+#	       size = 9,
+#	       hjust = 0
+#	       ) +
+#    theme(text = element_text(size = 9),
+#	  plot.margin = margin(l = 2, r = 0, unit = "lines"))
+#
+#fig_b_grid <- 
+#    plot_grid(
+#	      fig_b_title, wgcna_plot,
+#	      ncol = 1, rel_heights = c(.1, 1),
+#	      labels = c(NULL, "b"), label_size = 10
+#    )
+#
+#
 # Fig D SLE genes
 sle_genes <- 
     c("PTPN22", "FCGR2A", "TNFSF4", "IL10", "NCF2", "SPRED2", "IFIH1", "STAT1", "STAT4",
@@ -552,152 +630,5 @@ ggsave("./paper_plots/fig2.png",
 ggsave("./paper_plots/fig2.pdf", 
        plot_grid(left_grid, NULL, right_grid, nrow = 1, rel_widths = c(1, .1, 0.625)),
        width = 6.5, height = 6.5)
-
-
-## Fig D Example Hub genes
-#
-#cpm_df <- 
-#    "./bcell_lowinput/results/edger/cpm.tsv" |>
-#    read_tsv() |>
-#    group_by(sample_id, stim) |>
-#    nest() |>
-#    ungroup() |>
-#    separate(sample_id, c("donor_id", "dummy", "time"), sep = "_") |>
-#    mutate(hours = parse_number(time),
-#	   hours = factor(hours, levels = sort(unique(hours))),
-#           condition = paste(dummy, time, sep = " "),
-#	   condition = factor(condition, levels = names(stim_colors)),
-#	   stim = factor(stim, levels = rev(levels(legend_df$stim)))) |>
-#    unnest(cols = data) |>
-#    select(donor_id, condition, stim, hours, gene_id, gene_name, obs_cpm, obs_logcpm)
-#
-#
-#genes_dn2_mod7 <- c("TK1", "DLGAP5", "CDCA5") 
-#genes_tlr9_mod7 <- c("RPL36", "RPL32", "RPS3A")
-#
-#cpm_plot_df <-
-#    cpm_df |>
-#    filter(gene_name %in% c(genes_dn2_mod7, genes_tlr9_mod7),
-#	   stim != "IL4")
-#
-#mod7_dn2 <- 
-#    ggplot(data = cpm_plot_df |> 
-#	   filter(gene_name %in% genes_dn2_mod7) |>
-#	   mutate(gene_name = factor(gene_name, levels = genes_dn2_mod7)),
-#	   aes(x = hours, y = obs_cpm)) +
-#    geom_quasirandom(aes(color = condition),
-#		     method = "smiley", width = .2, 
-#		     size = .5, alpha = .7) +
-#    geom_line(aes(group = stim), 
-#	      stat = "smooth", method = "loess", span = 1, se = FALSE, 
-#              linewidth = .7) +
-#    scale_y_continuous(breaks = scales::pretty_breaks(2)) +
-#    scale_color_manual(values = stim_colors) + 
-#    facet_grid(gene_name ~ stim, scale = "free_y", drop = TRUE) +
-#    theme_minimal() +
-#    theme(text = element_text(size = 9),
-#	  axis.text.x = element_blank(),
-#	  panel.grid.minor = element_blank(),
-#	  panel.grid.major.x = element_blank(),
-#	  panel.grid.major.y = element_line(linetype = 3, 
-#					    linewidth = .2,
-#					    color = "grey66"),
-#	  strip.text.x = element_blank(),
-#	  strip.text.y = element_text(size = 8, 
-#				      angle = 0, hjust = 1,
-#				      margin = unit(c(0, 0, 0, 1), "pt")),
-#	  plot.margin = unit(c(11, 5.5, 5.5, 5.5), "pt")
-#	  ) +
-#    labs(x = NULL, y = "CPM") +
-#    guides(color = "none") +
-#    coord_cartesian(clip = "off")
-#
-#mod7_tlr9 <- 
-#    ggplot(data = cpm_plot_df |> 
-#	   filter(gene_name %in% genes_tlr9_mod7) |>
-#	   mutate(gene_name = factor(gene_name, levels = genes_tlr9_mod7)),
-#	   aes(x = hours, y = obs_cpm)) +
-#    geom_quasirandom(aes(color = condition),
-#		     method = "smiley", width = .2, 
-#		     size = .5, alpha = .7) +
-#    geom_line(aes(group = stim), 
-#	      stat = "smooth", method = "loess", span = 1, se = FALSE, 
-#              linewidth = .7) +
-#    scale_y_continuous(breaks = scales::pretty_breaks(2)) +
-#    scale_color_manual(values = stim_colors) + 
-#    facet_grid(gene_name ~ stim, scale = "free_y", drop = TRUE) +
-#    theme_minimal() +
-#    theme(text = element_text(size = 9),
-#	  axis.text.x = element_blank(),
-#	  panel.grid.minor = element_blank(),
-#	  panel.grid.major.x = element_blank(),
-#	  panel.grid.major.y = element_line(linetype = 3, 
-#					    linewidth = .2,
-#					    color = "grey66"),
-#	  strip.text.x = element_blank(),
-#	  strip.text.y = element_text(size = 8, 
-#				      angle = 0, hjust = 1,
-#				      margin = unit(c(0, 0, 0, 1), "pt")),
-#	  plot.margin = unit(c(5.5, 5.5, 5.5, 5.5), "pt")
-#	  ) +
-#    labs(x = NULL, y = "CPM") +
-#    guides(color = "none") +
-#    coord_cartesian(clip = "off")
-#
-#
-#fig_d_title_1 <- 
-#    ggdraw() + 
-#    draw_label(
-#	       "Genes in DN2 module #7",
-#	       x = 0,
-#	       size = 9,
-#	       hjust = 0
-#	       ) +
-#    theme(text = element_text(size = 9),
-#	  plot.margin = margin(1, 1.25, 1, 2, unit = "lines"))
-#
-#fig_d_title_2 <- 
-#    ggdraw() + 
-#    draw_label(
-#	       "Genes in TLR9 module #7",
-#	       x = 0,
-#	       size = 9,
-#	       hjust = 0
-#	       ) +
-#    theme(text = element_text(size = 9),
-#	  plot.margin = margin(1, 1.25, 1, 2, unit = "lines"))
-#
-#fig_d_grid <- 
-#    plot_grid(fig_d_title_1,
-#	      mod7_dn2,
-#	      fig_d_title_2,
-#	      mod7_tlr9, 
-#	      ncol = 1, rel_heights = c(.1, 1, .1, 1),
-#	      labels = c("D)", NULL, NULL), label_size = 10)
-#
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
