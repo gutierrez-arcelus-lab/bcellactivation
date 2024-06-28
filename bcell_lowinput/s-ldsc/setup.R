@@ -73,10 +73,8 @@ gene_list <-
     {function(x) split(x, x$module)}() |>
     map(~pull(., gene_id))
 
-
 walk2(gene_list, names(gene_list), 
      ~write_lines(.x, glue::glue("./data/gene_sets/genes/{.y}.txt")))
-
 
 # Gene TSS file
 strand_df <- 
@@ -86,9 +84,8 @@ strand_df <-
 
 bed19 |>
     left_join(strand_df, join_by(gene_id)) |>
-    mutate(START = case_when(strand == "+" ~ start,
+    mutate(TSS = case_when(strand == "+" ~ start,
 			     strand == "-" ~ end),
-	   END = case_when(strand == "+" ~ end,
-			   strand == "-" ~ start)) |>
-    select(GENE = gene_id, CHR = chr, START, END) |>
+	   START = TSS - 1L) |>
+    select(GENE = gene_id, CHR = chr, START, END = TSS) |>
     write_tsv("./data/gene_sets/ENSG_coord.txt")
