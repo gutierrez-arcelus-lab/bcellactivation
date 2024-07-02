@@ -57,13 +57,16 @@ out <-
     mutate(chr = str_remove(chr, "chr"),
 	   f = glue::glue("./data/gene_sets/bed/{module}.{chr}.bed"))
 
-# Save a BED file for each gene set
+# slurm array specification
 out |>
     select(chr, module) |>
+    mutate(chr = factor(chr, levels = 1:22),
+	   module = factor(module)) |>
+    complete(chr, module) |>
     write_tsv("./data/gene_sets/array_spec.tsv", col_names = FALSE)
 
+# Save a BED file for each gene set
 walk2(out$data, out$f, ~write_tsv(.x, .y, col_names = FALSE))
-
 
 # Save Gene IDS for each module
 
