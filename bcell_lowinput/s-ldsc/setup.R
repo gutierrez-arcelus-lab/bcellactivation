@@ -5,9 +5,9 @@ gene_sets <-
     read_tsv() |>
     select(-grey) |>
     pivot_longer(-gene_id, names_to = "module", values_to = "kme") |>
-    group_by(gene_id) |>
-    slice_max(kme) |>
-    ungroup() |>
+    #group_by(gene_id) |>
+    #slice_max(kme) |>
+    #ungroup() |>
     arrange(module, desc(kme))
 
 # Gene annotations
@@ -26,12 +26,16 @@ bed38 <-
     left_join(annot, join_by(gene_id)) |>
     filter(chr %in% paste0("chr", c(1:22))) |>
     group_by(module) |>
-    top_n(250, kme) |>
+    #top_n(250, kme) |>
+    top_n(500, kme) |>
     ungroup() |>
     mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
     select(chr, start, end, gene_id, module) |>
     mutate(chr = factor(chr, levels = paste0("chr", 1:22)),
 	   start = start - 1L) |>
+    group_by(chr, start, end, gene_id) |>
+    summarise(module = paste(module, collapse = "/")) |>
+    ungroup() |>
     arrange(chr, start, end)
 
 # lift over to hg19
@@ -46,7 +50,8 @@ glue::glue("liftOver {bed38_file} {chain_file} {bed19_file} {fail_file}") |>
     system()
 
 bed19 <- 
-    read_tsv(bed19_file, col_names = c("chr", "start", "end", "gene_id", "module"))
+    read_tsv(bed19_file, col_names = c("chr", "start", "end", "gene_id", "module")) |>
+    separate_rows(module, sep = "/")
 
 out <- 
     bed19 |>
@@ -54,22 +59,19 @@ out <-
     group_by(chr, module) |>
     nest() |>
     ungroup() |>
-    mutate(chr = str_remove(chr, "chr"),
-	   f = glue::glue("./data/gene_sets/bed/{module}.{chr}.bed"))
+    mutate(chr = str_remove(chr, "chr"))
 
 # slurm array specification
 out |>
     select(chr, module) |>
+    bind_rows(tibble(chr = as.character(1:22), module = "control")) |>
     mutate(chr = factor(chr, levels = 1:22),
-	   module = factor(module)) |>
+	   module = factor(module),
+	   module = fct_relevel(module, "control", after = Inf)) |>
     complete(chr, module) |>
     write_tsv("./data/gene_sets/array_spec.tsv", col_names = FALSE)
 
-# Save a BED file for each gene set
-walk2(out$data, out$f, ~write_tsv(.x, .y, col_names = FALSE))
-
 # Save Gene IDS for each module
-
 gene_list <- 
     bed19 |>
     select(module, gene_id) |>
@@ -79,6 +81,9 @@ gene_list <-
 walk2(gene_list, names(gene_list), 
      ~write_lines(.x, glue::glue("./data/gene_sets/genes/{.y}.txt")))
 
+write_lines(unique(bed19$gene_id), "./data/gene_sets/genes/control.txt")
+
+
 # Gene TSS file
 strand_df <- 
     annot |>
@@ -86,9 +91,23 @@ strand_df <-
     mutate(gene_id = str_remove(gene_id, "\\.\\d+$"))
 
 bed19 |>
+    distinct(chr, start, end, gene_id) |>
     left_join(strand_df, join_by(gene_id)) |>
     mutate(TSS = case_when(strand == "+" ~ start,
 			     strand == "-" ~ end),
 	   START = TSS - 1L) |>
     select(GENE = gene_id, CHR = chr, START, END = TSS) |>
     write_tsv("./data/gene_sets/ENSG_coord.txt")
+
+
+# Write CTS file
+module_order <- c("turquoise", "blue", "brown", "yellow", "green", "red", "black")
+
+out |>
+    distinct(module) |>
+    mutate(module = factor(module, levels = module_order)) |>
+    arrange(module) |>
+    mutate(annot = glue::glue("data/gene_sets/ldscores500/{module}."),
+	   control = "data/gene_sets/ldscores500/control.") |>
+    unite("ldscores", c(annot, control), sep = ",") |>
+    write_tsv("./data/gene_sets/module.ldcts", col_names = FALSE)

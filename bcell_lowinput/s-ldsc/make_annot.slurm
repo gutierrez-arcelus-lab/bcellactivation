@@ -4,8 +4,8 @@
 #SBATCH -c 1
 #SBATCH --mem=8gb
 #SBATCH -t 24:00:00
-#SBATCH -p bch-compute
-#SBATCH -a 1-154
+#SBATCH -p bch-compute,bch-compute-pe
+#SBATCH -a 1-176
 #SBATCH -J ldsc
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
@@ -27,9 +27,10 @@ BIM=data/1000G_Phase3_plinkfiles/1000G_EUR_Phase3_plink/1000G.EUR.QC.${CHROM}.bi
 COORD=data/gene_sets/ENSG_coord.txt
 GENESET=data/gene_sets/genes/${MODULE}.txt
 HAPMAP=data/print_snps.txt
-OUT=data/gene_sets/ldscores/${MODULE}.${CHROM}
+OUT=data/gene_sets/ldscores500/${MODULE}.${CHROM}
 ANNOT=${OUT}.annot
 
+# Make annotation
 python.pybedtools /lab-share/IM-Gutierrez-e2/Public/vitor/software/ldsc/make_annot.py \
     --gene-set-file $GENESET \
     --gene-coord-file $COORD \
@@ -37,6 +38,7 @@ python.pybedtools /lab-share/IM-Gutierrez-e2/Public/vitor/software/ldsc/make_ann
     --windowsize 100000 \
     --annot-file $ANNOT
 
+# Compute LD scores
 python2.7 /lab-share/IM-Gutierrez-e2/Public/vitor/software/ldsc/ldsc.py \
     --l2 \
     --bfile ${BIM%.*} \
@@ -45,5 +47,9 @@ python2.7 /lab-share/IM-Gutierrez-e2/Public/vitor/software/ldsc/ldsc.py \
     --ld-wind-cm 1 \
     --thin-annot \
     --out $OUT
+
+# Rename annotation
+zcat ${OUT}.l2.ldscore.gz | sed "1,1s/L2/L2${MODULE}/" | gzip > ${OUT}.l2.tmp.gz
+mv ${OUT}.l2.tmp.gz ${OUT}.l2.ldscore.gz 
 
 conda deactivate
