@@ -36,7 +36,7 @@ parse_log <- function(trait) {
 }
 
 annots <- 
-    expand_grid(module = unique(ldsc_df$module), 
+    expand_grid(module = unique(ldsc_df$Name), 
 		chr = 1:22) |>
     mutate(f = glue::glue("./data/gene_sets/ldscores/{module}.{chr}.annot"),
 	   annot = map(f, ~read_tsv(.) |> pull(ANNOT)))
