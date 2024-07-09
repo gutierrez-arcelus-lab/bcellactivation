@@ -4,6 +4,7 @@ gene_sets <-
     "../wgcna/data/DN2_kme.tsv" |>
     read_tsv() |>
     select(-grey) |>
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
     pivot_longer(-gene_id, names_to = "module", values_to = "kme") |>
     #group_by(gene_id) |>
     #slice_max(kme) |>
@@ -11,31 +12,37 @@ gene_sets <-
     arrange(module, desc(kme))
 
 # Gene annotations
-annot <- 
+annot19 <- 
+    file.path("/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens",
+	      "gencode.v19.chr_patch_hapl_scaff.annotation.gtf") |>
+    read_tsv(comment = "#", col_names = FALSE) |>
+    filter(X1 %in% paste0("chr", 1:22), X3 == "gene") |>
+    mutate(gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
+	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+"),
+	   gene_id = str_remove(gene_id, "\\.\\d+$")) |>
+    select(chr = X1, start = X4, end = X5, gene_id, gene_name, strand = X7)
+
+annot38 <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens",
 	      "gencode.v38.primary_assembly.annotation.gtf.gz") |>
     read_tsv(comment = "#", col_names = FALSE) |>
-    filter(X3 == "gene") |>
+    filter(X1 %in% paste0("chr", 1:22), X3 == "gene") |>
     mutate(gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
-	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+")) |>
+	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+"),
+	   gene_id = str_remove(gene_id, "\\.\\d+$")) |>
     select(chr = X1, start = X4, end = X5, gene_id, gene_name, strand = X7)
 
-# Create BED file
+# Run liftOver for genes not annotated in hg19
 bed38 <- 
     gene_sets |>
-    left_join(annot, join_by(gene_id)) |>
-    filter(chr %in% paste0("chr", c(1:22))) |>
-    group_by(module) |>
-    #top_n(250, kme) |>
-    top_n(500, kme) |>
-    ungroup() |>
-    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
-    select(chr, start, end, gene_id, module) |>
+    distinct(gene_id) |>
+    left_join(annot19, join_by(gene_id)) |>
+    filter(is.na(start)) |>
+    select(gene_id) |>
+    inner_join(annot38, join_by(gene_id)) |>
+    select(chr, start, end, gene_id) |>
     mutate(chr = factor(chr, levels = paste0("chr", 1:22)),
 	   start = start - 1L) |>
-    group_by(chr, start, end, gene_id) |>
-    summarise(module = paste(module, collapse = "/")) |>
-    ungroup() |>
     arrange(chr, start, end)
 
 # lift over to hg19
@@ -49,49 +56,24 @@ write_tsv(bed38, bed38_file, col_names = FALSE)
 glue::glue("liftOver {bed38_file} {chain_file} {bed19_file} {fail_file}") |>
     system()
 
-bed19 <- 
-    read_tsv(bed19_file, col_names = c("chr", "start", "end", "gene_id", "module")) |>
-    separate_rows(module, sep = "/")
+bedlift <- 
+    read_tsv(bed19_file, col_names = c("chr", "start", "end", "gene_id"))
 
-out <- 
-    bed19 |>
-    select(-gene_id) |>
-    group_by(chr, module) |>
-    nest() |>
-    ungroup() |>
-    mutate(chr = str_remove(chr, "chr"))
-
-# slurm array specification
-out |>
-    select(chr, module) |>
-    bind_rows(tibble(chr = as.character(1:22), module = "control")) |>
-    mutate(chr = factor(chr, levels = 1:22),
-	   module = factor(module),
-	   module = fct_relevel(module, "control", after = Inf)) |>
-    complete(chr, module) |>
-    write_tsv("./data/gene_sets/array_spec.tsv", col_names = FALSE)
-
-# Save Gene IDS for each module
-gene_list <- 
-    bed19 |>
-    select(module, gene_id) |>
-    {function(x) split(x, x$module)}() |>
-    map(~pull(., gene_id))
-
-walk2(gene_list, names(gene_list), 
-     ~write_lines(.x, glue::glue("./data/gene_sets/genes/{.y}.txt")))
-
-write_lines(unique(bed19$gene_id), "./data/gene_sets/genes/control.txt")
-
+# Merge and create final BED
+bed_out <- 
+    gene_sets |>
+    distinct(gene_id) |>
+    inner_join(annot19, join_by(gene_id)) |>
+    select(chr, start, end, gene_id) |>
+    bind_rows(bedlift) |>
+    mutate(chr = factor(chr, levels = paste0("chr", 1:22))) |>
+    arrange(chr, start, end)
 
 # Gene TSS file
 strand_df <- 
-    annot |>
-    select(gene_id, strand) |>
-    mutate(gene_id = str_remove(gene_id, "\\.\\d+$"))
+    select(annot38, gene_id, strand)
 
-bed19 |>
-    distinct(chr, start, end, gene_id) |>
+bed_out |>
     left_join(strand_df, join_by(gene_id)) |>
     mutate(TSS = case_when(strand == "+" ~ start,
 			     strand == "-" ~ end),
@@ -99,15 +81,35 @@ bed19 |>
     select(GENE = gene_id, CHR = chr, START, END = TSS) |>
     write_tsv("./data/gene_sets/ENSG_coord.txt")
 
-
-# Write CTS file
+# slurm array specification
 module_order <- c("turquoise", "blue", "brown", "yellow", "green", "red", "black")
 
-out |>
-    distinct(module) |>
-    mutate(module = factor(module, levels = module_order)) |>
-    arrange(module) |>
-    mutate(annot = glue::glue("data/gene_sets/ldscores500/{module}."),
-	   control = "data/gene_sets/ldscores500/control.") |>
+expand_grid(chr = 1:22, 
+	    module = c(unique(gene_sets$module), "control")) |>
+    mutate(module = factor(module, levels = c(module_order, "control"))) |>
+    arrange(chr, module) |>
+    write_tsv("./data/gene_sets/array_spec.tsv", col_names = FALSE)
+
+# Write CTS file
+tibble(module = module_order) |>
+    mutate(annot = glue::glue("data/gene_sets/ldscores/{module}."),
+	   control = "data/gene_sets/ldscores/control.") |>
     unite("ldscores", c(annot, control), sep = ",") |>
     write_tsv("./data/gene_sets/module.ldcts", col_names = FALSE)
+
+# Write gene IDS for each module
+write_lines(bed_out$gene_id, "./data/gene_sets/genes/control.txt")
+
+gene_list <- 
+    gene_sets |>
+    group_by(module) |>
+    top_n(500, kme) |>
+    ungroup() |>
+    left_join(bed_out, join_by(gene_id)) |>
+    arrange(chr, start, end) |>
+    select(module, gene_id) |>
+    {function(x) split(x, x$module)}() |>
+    map(~pull(., gene_id))
+
+walk2(gene_list, names(gene_list), 
+     ~write_lines(.x, glue::glue("./data/gene_sets/genes/{.y}.txt")))

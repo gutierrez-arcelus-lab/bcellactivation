@@ -36,13 +36,13 @@ BLACK=data/gene_sets/ldscores/black.
 CTS=data/gene_sets/module.ldcts
 
 # Run S-LDSC
-#python2.7 /lab-share/IM-Gutierrez-e2/Public/vitor/software/ldsc/ldsc.py \
-#    --h2 $GWAS \
-#    --ref-ld-chr $BASELINE,$TURQ,$BLUE,$BROWN,$YELLOW,$GREEN,$RED,$BLACK \
-#    --w-ld-chr $WEIGHTS \
-#    --frqfile-chr $FREQ \
-#    --overlap-annot --print-coefficients \
-#    --out results/modules_500_str_${GWASID}
+python2.7 /lab-share/IM-Gutierrez-e2/Public/vitor/software/ldsc/ldsc.py \
+    --h2 $GWAS \
+    --ref-ld-chr $BASELINE,$TURQ,$BLUE,$BROWN,$YELLOW,$GREEN,$RED,$BLACK \
+    --w-ld-chr $WEIGHTS \
+    --frqfile-chr $FREQ \
+    --overlap-annot --print-coefficients \
+    --out results/modules_500_str_${GWASID}
 
 # Run LDSC-SEG
 python2.7 /lab-share/IM-Gutierrez-e2/Public/vitor/software/ldsc/ldsc.py \

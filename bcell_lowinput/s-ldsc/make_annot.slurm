@@ -27,7 +27,7 @@ BIM=data/1000G_Phase3_plinkfiles/1000G_EUR_Phase3_plink/1000G.EUR.QC.${CHROM}.bi
 COORD=data/gene_sets/ENSG_coord.txt
 GENESET=data/gene_sets/genes/${MODULE}.txt
 HAPMAP=data/print_snps.txt
-OUT=data/gene_sets/ldscores500/${MODULE}.${CHROM}
+OUT=data/gene_sets/ldscores/${MODULE}.${CHROM}
 ANNOT=${OUT}.annot
 
 # Make annotation
