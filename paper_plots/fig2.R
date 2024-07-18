@@ -418,7 +418,7 @@ fig_c_grid <-
        
 fig_c <- 
     plot_grid(fig_c_title, fig_c_grid, ncol = 1, rel_heights = c(.1, 1),
-	      labels = "c", label_size = 12)
+	      labels = "c", label_size = 12, label_y = 1.75)
 
 # Fig D #######################################################################
 module_sizes <-
