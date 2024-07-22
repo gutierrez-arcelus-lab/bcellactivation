@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 #SBATCH -N 1
-#SBATCH -c 1
+#SBATCH -c 4
 #SBATCH --mem=16gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute,bch-compute-pe
@@ -24,6 +24,6 @@ VCFIN=/lab-share/IM-Gutierrez-e2/Public/External_datasets/mgb_biobank/${BATCH}/v
 VCFOUT=${TEMP_WORK}/vcf/tmp/chr${CHROM}_${BATCH}.vcf.gz
 
 bcftools view --threads $SLURM_CPUS_PER_TASK --samples $IDS $VCFIN |\
-    bcftools view --threads $SLURM_CPUS_PER_TASK -i 'INFO/TYPED==1 || INFO/TYPED_ONLY==1' -O z -o $VCFOUT -
+    bcftools view --threads $SLURM_CPUS_PER_TASK -i 'INFO/R2>=0.9' -O z -o $VCFOUT -
 
 tabix -p vcf $VCFOUT

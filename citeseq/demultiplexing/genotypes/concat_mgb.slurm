@@ -15,7 +15,7 @@ source /programs/biogrids.shrc
 export BCFTOOLS_X=1.12
 
 VCFS=( $(echo ${TEMP_WORK}/vcf/tmp/chr{{1..22},X}_merged.vcf.gz ) )
-VCFOUT=${SLURM_SUBMIT_DIR}/data/allchroms_typed_mgb.vcf.gz
+VCFOUT=${SLURM_SUBMIT_DIR}/data/allchroms_mgb.vcf.gz
 
 bcftools concat $VCFS |\
     bcftools annotate -x QUAL,FILTER,INFO,FORMAT -O z -o $VCFOUT -
@@ -23,4 +23,4 @@ bcftools concat $VCFS |\
 tabix -p vcf $VCFOUT
 
 # Create VCF with variants only (no individual information)
-bcftools view -G -O z -o ${SLURM_SUBMIT_DIR}/data/allchroms_typed_mgb_variants.vcf.gz $VCFOUT
+bcftools view -G -O z -o ${SLURM_SUBMIT_DIR}/data/allchroms_mgb_variants.vcf.gz $VCFOUT
