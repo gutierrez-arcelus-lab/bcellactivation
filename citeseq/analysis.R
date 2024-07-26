@@ -5,13 +5,9 @@ unix::rlimit_as(1e12)
 library(Seurat)
 library(SeuratDisk)
 library(harmony)
-devtools::load_all("/lab-share/IM-Gutierrez-e2/Public/vitor/sclibr")
 
 # Data wrangling
 library(tidyverse)
-
-# Parallelization
-library(furrr)
 
 # Plotting
 library(scales)
@@ -27,15 +23,11 @@ library(patchwork)
 
 # Colors
 stim_colors <- 
-    c("Day 0" = "grey60", 
-      "IL4 24h" = "grey40",
-      "IL4 72h"  = "#000000",
-      "BCR 24h" = "#6996e3",
-      "BCR 72h" = "#1a318b",
-      "TLR7 24h" = "#748f46",
-      "TLR7 72h" = "#275024",
-      "DN2 24h" = "#d76b51",
-      "DN2 72h" = "#b00000")
+    "../figure_colors.txt" |>
+    read_tsv(col_names = c("stim", "color")) |>
+    mutate(stim = sub("_", " ", stim),
+	   stim = paste0(stim, "h")) |>
+    deframe()
 
 cellranger_dir_1984 <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_citeseq",
@@ -54,151 +46,81 @@ mt_ribo_genes <-
     genes_df |>
     filter(grepl("^MT-|^MRPS|^MRPL|^RPS|^RPL", gene_name))
 
-# Import Seurat objects
-lib1984 <- read_rds("./data/seurat_1984_qced.rds")
-lib1988 <- read_rds("./data/seurat_1988_qced.rds")
-lib1990 <- read_rds("./data/seurat_1990_qced.rds")
-
-DefaultAssay(lib1984) <- DefaultAssay(lib1988) <- DefaultAssay(lib1990) <- "RNA"
-
-# Merge datasets and run PCA
-bcells <- 
-    merge(lib1984, y = c(lib1988, lib1990), add.cell.ids = c("1984", "1988", "1990"))
+# Import Seurat object
+bcells <- read_rds("./data/seurat_qced.rds")
 
 # Scale and run PCA
-variable_genes <- 
-    bcells |>
-    {function(x) x[! rownames(x) %in% mt_ribo_genes$gene_id]}() |>
-    FindVariableFeatures() |>
-    VariableFeatures()
-
 bcells <- bcells |>
-    {function(x) ScaleData(x, features = rownames(x))}() |>
-    RunPCA(features = variable_genes)
-
-# Visualize PCA
-# Total variance in the data
-#total_variance <- bcells@assays$RNA@scale.data |>
-#    matrixStats::rowVars() |>
-#    sum()
-#
-# Total variance in the variable genes
-total_variance <- bcells@reductions$pca@misc$total.variance 
-
-sdev_plot <- tibble(sdev = bcells@reductions$pca@stdev) |>
-    rownames_to_column("pc") |>
-    mutate(pc = fct_inorder(pc)) |>
-    ggplot(aes(pc, sdev)) +
-    geom_line(aes(group = 1)) +
-    scale_x_discrete(breaks = c(1, seq(5, 50, 5))) +
-    scale_y_continuous(sec.axis = sec_axis(trans = ~ (.^2) / total_variance,
-					   labels = percent,
-					   name = "% variance explained")) +
-    theme_bw() +
-    theme(panel.grid.minor = element_blank()) +
-    labs(x = "Principal component", y = "Standard deviation")
-
-ggsave("./plots/pca_sdev.png", sdev_plot, width = 4, height = 3)
+    FindVariableFeatures() |>
+    ScaleData(vars.to.regress = c("nCount_RNA", "percent_mt")) |>
+    RunPCA()
 
 # Run Harmony correcting for batch
-## Add donor data to Seurat metadata
-read_demuxlet <- function(f) {
-    read_tsv(f) |>
-    select(barcode = BARCODE, best = BEST) |>
-    extract(best, c("status", "sample"), "([^-]+)-(.+)")
-}
-
-batches <- unique(bcells@meta.data$orig.ident)
-
-demuxlet_df <- 
-    sprintf("./demultiplexing/demuxlet/demuxlet_%s_results.best", batches) |>
-    setNames(batches) |>
-    map_dfr(read_demuxlet, .id = "orig.ident") |>
-    unite("barcode", c(orig.ident, barcode), sep = "_") |>
-    filter(status == "SNG") |>
-    mutate(donor_id = sub("^[^_]+_[^-]+-(\\d+)$", "\\1", sample)) |>
-    select(barcode, donor_id)
-
-updated_metadata <-
-    as_tibble(bcells@meta.data, rownames = "barcode") |>
-    left_join(demuxlet_df, join_by(barcode)) |>
-    column_to_rownames("barcode")
-
-bcells@meta.data <- updated_metadata
-
 set.seed(1L)
 bcells <- bcells |>
     RunHarmony(group.by.vars = c("orig.ident", "donor_id"),
 	       max.iter.harmony = 30,
-	       reduction.save = "harmony")
-
-# UMAP
-bcells <- bcells |>
+	       reduction.save = "harmony") |>
+    FindNeighbors(dims = 1:30, reduction = "harmony", nn.eps = .5) |>
+    FindClusters(resolution = 0.4) |>
     RunUMAP(reduction = "harmony", 
-	    dims = 1:35,
+	    dims = 1:30,
 	    seed.use = 1L,
 	    reduction.name = "umap")
 
 # Plots
 umap_df <- 
     Embeddings(bcells, "umap") |>
-    as_tibble(rownames = "barcode") |> 
-    left_join(as_tibble(updated_metadata, rownames = "barcode"), join_by(barcode)) |>
-    mutate(orig.ident = paste0("BRI-", orig.ident)) |>
+    as_tibble(rownames = "barcode") |>
+    left_join(as_tibble(bcells@meta.data, rownames = "barcode"), join_by(barcode)) |>
+    select(barcode, lib = orig.ident, donor_id, hto = dmm_hto_call, UMAP_1, UMAP_2) |>
     sample_frac(1L) |>
     mutate(barcode = fct_inorder(barcode),
 	   hto = factor(hto, levels = names(stim_colors)))
 
 umap_batch <-
     ggplot(umap_df, aes(UMAP_1, UMAP_2)) +
-    geom_point(aes(color = orig.ident), size = .1) +
+    geom_point(aes(color = lib), size = .1) +
     scale_color_manual(values = c("#C5000B", "midnightblue", "#FFB022")) +
-    guides(color = guide_legend(title = "Batch:", 
-				override.aes = list(size = 4, alpha = 1))) +
     theme_minimal() +
     theme(axis.title = element_blank(),
 	  axis.text = element_blank(),
 	  strip.text.y = element_blank(),
 	  axis.ticks = element_blank(),
 	  panel.grid = element_blank(),
-	  plot.background = element_rect(fill = "white", color = "white"))
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    guides(color = guide_legend(title = "Batch:", 
+				override.aes = list(size = 4, alpha = 1)))
 
 umap_donor <-
     ggplot(umap_df, aes(UMAP_1, UMAP_2)) +
     geom_point(aes(color = donor_id), size = .1) +
     scale_color_manual(values = RColorBrewer::brewer.pal(n = 5, "Set1")) +
-    guides(color = guide_legend(title = "Donor ID:", 
-				override.aes = list(size = 4, alpha = 1))) +
     theme_minimal() +
     theme(axis.title = element_blank(),
 	  axis.text = element_blank(),
 	  strip.text.y = element_blank(),
 	  axis.ticks = element_blank(),
 	  panel.grid = element_blank(),
-	  plot.background = element_rect(fill = "white", color = "white"))
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    guides(color = guide_legend(title = "Donor ID:", 
+				override.aes = list(size = 4, alpha = 1)))
 
 umap_stim <-
     ggplot(umap_df, aes(UMAP_1, UMAP_2)) +
     geom_point(aes(color = hto), size = .1) +
     scale_color_manual(values = stim_colors) +
-    guides(color = guide_legend(title = "Stim:", 
-				override.aes = list(size = 4, alpha = 1))) +
     theme_minimal() +
     theme(axis.title = element_blank(),
 	  axis.text = element_blank(),
 	  strip.text.y = element_blank(),
 	  axis.ticks = element_blank(),
 	  panel.grid = element_blank(),
-	  plot.background = element_rect(fill = "white", color = "white"))
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    guides(color = guide_legend(title = "Stim:", 
+				override.aes = list(size = 4, alpha = 1)))
 
 # Clusters
-bcells <- bcells |>
-    FindNeighbors(dims = 1:35, reduction = "harmony", nn.eps = .5) |>
-    FindClusters(resolution = 0.4)
-
-#write_rds(bcells, "./bcells.rds")
-#bcells <- read_rds("./bcells.rds")
-
 cluster_df <- bcells@meta.data |>
     as_tibble(rownames = "barcode") |>
     select(barcode, cluster = RNA_snn_res.0.4)
@@ -207,18 +129,10 @@ umap_df_clu <- umap_df |>
     left_join(cluster_df, join_by(barcode)) |>
     select(barcode, cluster, UMAP_1, UMAP_2)
 
-# Plot clusters and features
-clust_colors <- 
-    c("cornflowerblue", "mediumvioletred", "orange3", "red3", 
-      "black", "forestgreen", "indianred1", "blueviolet",
-      "firebrick4", "tan4", "yellowgreen", "darkgrey",
-      "tomato3", "blue", "goldenrod2", "lightsalmon",
-      "darkgreen")
-
 umap_clust <- 
     ggplot(umap_df_clu, aes(UMAP_1, UMAP_2)) +
     geom_point(aes(color = cluster), size = .1) +
-    scale_color_manual(values = clust_colors) +
+    scale_color_manual(values = pals::kelly(n = length(unique(cluster_df$cluster)) + 1 )[-1] ) +
     theme_minimal() +
     theme(panel.grid = element_blank(),
           axis.title = element_blank(),
@@ -293,12 +207,72 @@ umap_mito <-
 
 ggsave("./plots/umap.png", 
        umap_batch + umap_stim + umap_clust + umap_ki67 + umap_genes + umap_mito + plot_layout(ncol = 2),
-       width = 8, height = 8, dpi = 600) 
+       width = 8, height = 7, dpi = 600) 
+
 
 # Marker genes
-Idents(bcells) <- "RNA_snn_res.0.4"
+plot_markers <- function(seurat_obj, cluster_df) {
+  
+    top_markers <- cluster_df |>
+        as_tibble() |>
+        group_by(cluster) |>
+        top_n(10, avg_log2FC) |>
+        ungroup() |>
+        select(cluster, gene_name, gene_id = gene, avg_log2FC)
+  
+    cluster_cell <- Idents(seurat_obj) |>
+        enframe(name = "barcode", value = "cluster_cell") |>
+        mutate(cluster_cell = factor(cluster_cell, levels = levels(top_markers$cluster)))
+  
+    cell_gene_expr <- seurat_obj@assays$RNA@data |>
+        {function(x) x[unique(top_markers$gene_id), ]}() |>
+        as_tibble(rownames = "gene_id") |>
+        pivot_longer(-gene_id, names_to = "barcode", values_to = "logexpr")
+  
+    top_marker_expr <- cell_gene_expr |>
+        left_join(cluster_cell, join_by(barcode)) |>
+        inner_join(top_markers, join_by(gene_id), relationship = "many-to-many")
+  
+    top_marker_perc_exp <- top_marker_expr |>
+        group_by(cluster = cluster_cell, gene_name) |>
+        summarise(prop_expr = mean(logexpr > 0)) |>
+        ungroup()
+  
+    top_marker_avg_exp <- top_marker_expr |>
+        filter(logexpr > 0) |>
+        group_by(cluster = cluster_cell, gene_name) |>
+        summarise(scaled_expr = mean(logexpr)) |>
+        ungroup()
+  
+    top_marker_summary <- 
+	left_join(top_marker_perc_exp, top_marker_avg_exp, join_by(cluster, gene_name)) |>
+        left_join(select(top_markers, cluster_top = cluster, gene_name, avg_log2FC), 
+		  join_by(gene_name),
+                  relationship = "many-to-many") |>
+        mutate_at(vars(cluster, cluster_top), factor) |>
+        arrange(cluster_top, avg_log2FC) |>
+        mutate(gene_name = fct_inorder(gene_name)) 
+  
+    ggplot(top_marker_summary, aes(cluster, gene_name)) +
+        geom_point(aes(size = prop_expr, fill = scaled_expr), 
+                   color = "black", shape = 21) +
+        scale_size(range = c(0.1, 4), labels = scales::percent) +
+        scale_fill_viridis_c(option = "magma") +
+        facet_wrap(~cluster_top, scales = "free", ncol = 3) +
+        theme_bw() +
+        theme(axis.line = element_blank(),
+              axis.text.x = element_text(size = 8, angle = 45, hjust = 1, vjust = 1),
+              axis.text.y = element_text(size = 8),
+              panel.grid = element_line(color = "grey96"),
+              panel.border = element_blank(),
+              legend.position = "top") +
+        labs(x = NULL, y = NULL, 
+             fill = "Scaled\nExpression", 
+             size = "% of cells") +
+        guides(fill = guide_colorbar(barheight = .5))
+}
 
-plan(multicore, workers = availableCores())
+Idents(bcells) <- "RNA_snn_res.0.4"
 
 cluster_markers <- 
     FindAllMarkers(bcells, 
@@ -312,50 +286,8 @@ cluster_markers_plot <- plot_markers(bcells, cluster_markers)
 
 ggsave("./plots/cluster_markers.png", 
        cluster_markers_plot,
-       height = 11, width = 8, dpi = 600)
+       height = 10, width = 8, dpi = 600)
 
-# Memory clusters vs all others
-mem_markers <- 
-    FindMarkers(bcells,
-	    ident.1 = c(3, 8),
-	    only.pos = TRUE,
-	    min.pct = 0.2,
-	    logfc.threshold = .5) |>
-    as_tibble(rownames = "gene_id") |>
-    left_join(genes_df, join_by(gene_id)) |>
-    select(gene_id, gene_name, everything()) |>
-    arrange(desc(abs(avg_log2FC)))
-
-# Gene diff expressed between mem clusters
-mem_dist_markers <- 
-    FindMarkers(bcells,
-	    ident.1 = 3,
-	    ident.2 = 8,
-	    only.pos = TRUE,
-	    min.pct = 0.2,
-	    logfc.threshold = .5) |>
-    as_tibble(rownames = "gene_id") |>
-    left_join(genes_df, join_by(gene_id)) |>
-    select(gene_id, gene_name, everything()) |>
-    arrange(desc(abs(avg_log2FC)))
-
-
-
-
-
-
-# test batch effects
-Idents(bcells) <- "orig.ident"
-
-batch_markers <- 
-    FindAllMarkers(bcells, 
-                   only.pos = TRUE,
-                   min.pct = 0.1,
-                   logfc.threshold = .5) |>
-    as_tibble() |>
-    left_join(filter(features_df, phenotype == "Gene Expression"), 
-	      join_by(gene == gene_id)) |>
-    select(-phenotype)
 
 
 
@@ -511,11 +443,6 @@ bcell_prot_plot <- plot_grid(plotlist = c(list(umap_stim_int), bcell_prot_plot_l
 ggsave("./plots/bcell_prots.png", bcell_prot_plot, width = 10, height = 10, dpi = 600)
 
 # Poster
-umap_df3 <- umap_df |>
-    filter(reduction == "Harmony (batch)") |>
-    select(barcode, hto, UMAP_1, UMAP_2) |>
-    mutate(hto = factor(hto, levels = stim_order))
-
 #sle_genes <- 
 #    "../sle_variants/paper_data/langefeld_top.tsv" |>
 #    read_tsv() |>
@@ -546,8 +473,9 @@ sle_gene_quant <- bcells@assays$RNA@data |>
     sample_frac(1L) |>
     mutate(barcode = fct_inorder(barcode))
 
-sle_genes_plot_list <- sle_gene_quant |>
-    left_join(umap_df3) |>
+sle_genes_plot_list <- 
+    sle_gene_quant |>
+    left_join(umap_df) |>
     {function(x) split(x, x$gene_name)}() |>
     map(~ggplot(data = ., aes(UMAP_1, UMAP_2, color = gene_exp)) +
 	    geom_point(size = .1) +
@@ -562,13 +490,12 @@ sle_genes_plot_list <- sle_gene_quant |>
 		  strip.background = element_blank(),
 		  axis.line = element_blank(),
 		  axis.ticks = element_blank(),
-		  strip.text = element_text(size = 10, face = "bold"),
-		  legend.position = "none"))
+		  strip.text = element_text(size = 10, face = "bold")))
 
 sle_genes_plot <- plot_grid(plotlist = sle_genes_plot_list) +
     theme(plot.background = element_rect(fill = "white", color = "white"))
 
-ggsave("./plots/sle_genes.png", sle_genes_plot, width = 5, height = 5, dpi = 600)
+ggsave("./plots/sle_genes.png", sle_genes_plot, width = 9, height = 8, dpi = 600)
 
 
 

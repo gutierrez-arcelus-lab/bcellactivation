@@ -276,15 +276,10 @@ bcells <-
 
 bcells@meta.data$orig.ident <- paste0("BRI-", bcells@meta.data$orig.ident)
 
-variable_genes <- 
-    bcells |>
-    {function(x) x[! rownames(x) %in% mt_ribo_genes$gene_id]}() |>
-    FindVariableFeatures() |>
-    VariableFeatures()
-
 bcells <- bcells |>
-    {function(x) ScaleData(x, features = rownames(x))}() |>
-    RunPCA(features = variable_genes)
+    FindVariableFeatures() |>
+    ScaleData(vars.to.regress = c("nCount_RNA", "percent_mt")) |>
+    RunPCA()
 
 set.seed(1L)
 bcells <- bcells |>
@@ -305,14 +300,12 @@ sdev_plot <-
 
 ggsave("./plots/hpcs_sdev.png", sdev_plot, width = 4, height = 3)
 
+# Umap and clustering
 bcells <- bcells |>
     RunUMAP(reduction = "harmony", 
 	    dims = 1:30,
 	    seed.use = 1L,
-	    reduction.name = "umap")
-
-# Clusters
-bcells <- bcells |>
+	    reduction.name = "umap") |>
     FindNeighbors(dims = 1:30, reduction = "harmony", nn.eps = .5) |>
     FindClusters(resolution = 0.4)
 
@@ -341,5 +334,7 @@ bad_cells <- bcells@meta.data |>
     pull(barcode)
 
 bcells <- subset(bcells, cells = bad_cells, invert = TRUE)
+
+bcells <- DietSeurat(bcells, dimreducs = NULL)
 
 write_rds(bcells, "./data/seurat_qced.rds")
