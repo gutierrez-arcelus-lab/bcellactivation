@@ -1,13 +1,13 @@
 library(tidyverse)
 
-donors <- read_lines("./demultiplexing/genotypes/data/mgb_sample_ids.txt")
+donors <- read_lines("./genotypes/data/mgb_sample_ids.txt")
 
 demuxlet_df <- 
-    "./demultiplexing/demuxlet/results/demuxlet_calls.tsv" |>
+    "./demuxlet/results/demuxlet_calls.tsv" |>
     read_tsv()
 
 vireo_df <-
-    "./demultiplexing/vireo/results/vireo_calls.tsv" |>
+    "./vireo/results/vireo_calls.tsv" |>
     read_tsv()
 
 demux_df <-
@@ -32,3 +32,16 @@ p <-
     guides(fill = "none")
 
 ggsave("testp.png", p, width = 4.25, height = 4)
+
+# Compare with HTODemux
+htodemux_df <- 
+    "../htodemux_calls.tsv" |>
+    read_tsv() |>
+    select(barcode, batch = orig.ident, hto_call = hto_global)
+
+demux_df |>
+    filter(status_vireo == "unassigned") |>
+    select(barcode, batch, vireo_call = donor_id_vireo, demuxlet_call = donor_id_demuxlet) |>
+    left_join(htodemux_df, join_by(barcode, batch)) |>
+    count(vireo_call, demuxlet_call, hto_call, sort = TRUE) |>
+    print(n = Inf)
