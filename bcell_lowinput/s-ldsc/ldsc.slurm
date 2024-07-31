@@ -36,7 +36,7 @@ BLACK=data/gene_sets/ldscores/black.
 CTS=data/gene_sets/module.ldcts
 
 # Run S-LDSC
-python2.7 /lab-share/IM-Gutierrez-e2/Public/vitor/software/ldsc/ldsc.py \
+python2.7 /lab-share/IM-Gutierrez-e2/Public/tools/ldsc/ldsc.py \
     --h2 $GWAS \
     --ref-ld-chr $BASELINE,$TURQ,$BLUE,$BROWN,$YELLOW,$GREEN,$RED,$BLACK \
     --w-ld-chr $WEIGHTS \
@@ -45,7 +45,7 @@ python2.7 /lab-share/IM-Gutierrez-e2/Public/vitor/software/ldsc/ldsc.py \
     --out results/modules_500_str_${GWASID}
 
 # Run LDSC-SEG
-python2.7 /lab-share/IM-Gutierrez-e2/Public/vitor/software/ldsc/ldsc.py \
+python2.7 /lab-share/IM-Gutierrez-e2/Public/tools/ldsc/ldsc.py \
     --h2-cts $GWAS \
     --ref-ld-chr $BASELINE \
     --ref-ld-chr-cts $CTS \
