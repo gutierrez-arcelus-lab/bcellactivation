@@ -174,15 +174,6 @@ fig_c <- plot_grid(fig_c_title, umap_clust, ncol = 1, rel_heights = c(.1, 1))
 
 cluster_markers <- read_tsv("../citeseq/data/cluster_markers.tsv")
 
-cluster_markers |>
-    filter(p_val_adj <= 0.05) |>
-    group_by(cluster) |>
-    top_n(2, pct.1 - pct.2) |>
-    ungroup() |>
-    print(n = Inf)
-
-
-
 top_markers <- 
     cluster_markers |>
     filter(p_val_adj <= 0.05) |>
@@ -311,11 +302,11 @@ subsets_df <-
     summarise(pct = mean(value == "Yes")) |>
     ungroup() |>
     mutate(subtype = recode(subtype, 
-			    "abc" = "CD11c+",
-			    "mem" = "IgD- CD27+",
-			    "naive" = "IgD+ CD27-",
-			    "plasma" = "*XBP1* high",
-			    "prolif" = "*MKI67*+")) |>
+			    "abc" = "CD11c<sup>+</sup>",
+			    "mem" = "IgD<sup>–</sup>  CD27<sup>+</sup>",
+			    "naive" = "IgD<sup>+</sup>  CD27<sup>–</sup>",
+			    "plasma" = "*XBP1*<sup>high</sup>",
+			    "prolif" = "*MKI67*<sup>+</sup>")) |>
     arrange(hto, desc(pct)) |>
     mutate(subtype = fct_inorder(subtype))
 
@@ -324,11 +315,11 @@ proportions_plot <-
     geom_col(aes(fill = hto)) +
     scale_fill_manual(values = stim_colors) +
     facet_wrap(~subtype, nrow = 1, scales = "free_y") +
-    ggh4x::facetted_pos_scales(y = list(subtype == "IgD+ CD27-" ~ scale_y_continuous(breaks = c(0, 0.4, 0.8)),
-					subtype == "IgD- CD27+" ~ scale_y_continuous(breaks = c(0, 0.1, 0.2)),
-					subtype == "CD11c+" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)),
-					subtype == "*XBP1* high" ~ scale_y_continuous(breaks = c(0, 0.25, 0.5)),
-					subtype == "*MKI67*+" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)))) +
+    ggh4x::facetted_pos_scales(y = list(subtype == "IgD<sup>+</sup>  CD27<sup>–</sup>" ~ scale_y_continuous(breaks = c(0, 0.4, 0.8)),
+					subtype == "IgD<sup>–</sup>  CD27<sup>+</sup>" ~ scale_y_continuous(breaks = c(0, 0.1, 0.2)),
+					subtype == "CD11c<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)),
+					subtype == "*XBP1*<sup>high</sup>" ~ scale_y_continuous(breaks = c(0, 0.25, 0.5)),
+					subtype == "*MKI67*<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)))) +
     theme_minimal() +
     theme(axis.text.x = element_blank(),
 	  panel.grid.major.x = element_blank(),
@@ -362,7 +353,7 @@ fig_e <- plot_grid(fig_e_title, proportions_plot, ncol = 1, rel_heights = c(.1, 
 # Figure F ####################################################################
 disease_genes <- 
     features_df |>
-    filter(gene_name %in% c("IRF8", "STAT1", "BANK1", "BLK", "IL4R", "PTPN22", "MYC"), 
+    filter(gene_name %in% c("IRF8", "STAT1", "BANK1", "BLK", "IL4R", "BATF", "MYC"), 
 	   phenotype == "Gene Expression") |>
     select(gene_name, gene_id)
 
@@ -381,7 +372,7 @@ umaps_disease <-
     group_split(gene_name) |>
     map(~ggplot(data = ., aes(x = umap_1, y = umap_2)) +
 	geom_point(aes(color = value), size = .2, stroke = 0) +
-	scale_color_gradient(low = "grey90", high = "black") +
+	scale_color_gradient(low = "Snow", high = "black") +
 	facet_wrap(~gene_name) +
 	theme_minimal() +
 	theme(axis.title = element_blank(),
@@ -419,7 +410,6 @@ fig_f <- plot_grid(fig_f_title, umaps_disease, ncol = 1, rel_heights = c(.1, 1),
 
 
 # Final Figure ################################################################
-
 ggsave("./fig3.png",
        plot_grid(
 		 plot_grid(fig_a, NULL, fig_b, nrow = 1, rel_widths = c(.95, .05, 1), 
@@ -434,5 +424,4 @@ ggsave("./fig3.png",
 		 ncol = 1, rel_heights = c(1, 0.05, 1.1, 0.025, 0.4, 0.05, 0.5)) +
        theme(plot.background = element_rect(color = "white", fill = "white")),
        width = 6.5, height = 8, dpi = 600)
-
 
