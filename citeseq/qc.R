@@ -1,27 +1,24 @@
+# RAM
+unix::rlimit_as(1e12)
+
 # Packages
 ## single-cell data analysis
 library(Seurat)
 library(demuxmix)
 library(harmony)
+library(scGate)
 
 ## Data wrangling
-library(dplyr)
-library(forcats)
-library(purrr)
-library(readr)
-library(tidyr)
-library(tibble)
+library(tidyverse)
 
-## Plotting
-library(ggplot2)
-library(tidytext)
-library(RColorBrewer)
-library(scico)
-library(ggsci)
-library(cowplot)
 
-# RAM
-unix::rlimit_as(1e12)
+# Colors
+stim_colors <- 
+    "../figure_colors.txt" |>
+    read_tsv(col_names = c("stim", "color")) |>
+    mutate(stim = sub("_", " ", stim),
+	   stim = paste0(stim, "h")) |>
+    deframe()
 
 # Processing function
 make_seurat <- function(cellranger_path, project_id, hto_names = NULL, mito_ids, ribo_ids) {
@@ -204,18 +201,18 @@ lib1984_obj <- subset(lib1984_obj, cells = good_cells[["1984"]])
 lib1988_obj <- subset(lib1988_obj, cells = good_cells[["1988"]])
 lib1990_obj <- subset(lib1990_obj, cells = good_cells[["1990"]])
 
-# Export data for Scrublet
-DropletUtils::write10xCounts(x = lib1984_obj@assays$RNA@counts, 
-			     path = "./data/lib1984_matrix", 
-			     overwrite = TRUE)
-
-DropletUtils::write10xCounts(x = lib1988_obj@assays$RNA@counts, 
-			     path = "./data/lib1988_matrix",
-			     overwrite = TRUE)
-
-DropletUtils::write10xCounts(x = lib1990_obj@assays$RNA@counts, 
-			     path = "./data/lib1990_matrix",
-			     overwrite = TRUE)
+## Export data for Scrublet
+#DropletUtils::write10xCounts(x = lib1984_obj@assays$RNA@counts, 
+#			     path = "./data/lib1984_matrix", 
+#			     overwrite = TRUE)
+#
+#DropletUtils::write10xCounts(x = lib1988_obj@assays$RNA@counts, 
+#			     path = "./data/lib1988_matrix",
+#			     overwrite = TRUE)
+#
+#DropletUtils::write10xCounts(x = lib1990_obj@assays$RNA@counts, 
+#			     path = "./data/lib1990_matrix",
+#			     overwrite = TRUE)
 
 
 # Demultiplexing and doublet detection
@@ -227,21 +224,21 @@ demuxlet_df <-
     rename("orig.ident" = "batch", "demuxlet_call" = "status") |>
     mutate(orig.ident = factor(orig.ident, levels = libs))
 
-scrublet_df <- 
-    glue::glue("./demultiplexing/scrublet/scrublet_calls_{libs}.tsv") |>
-    setNames(libs) |>
-    map_dfr(read_tsv, .id = "orig.ident") |>
-    rename("barcode" = "...1", 
-	   "scrublet_doublet_score" = "doublet_score") |>
-    mutate(orig.ident = factor(orig.ident, levels = libs)) |>
-    select(barcode, orig.ident, scrublet_doublet_score)
+#scrublet_df <- 
+#    glue::glue("./demultiplexing/scrublet/scrublet_calls_{libs}.tsv") |>
+#    setNames(libs) |>
+#    map_dfr(read_tsv, .id = "orig.ident") |>
+#    rename("barcode" = "...1", 
+#	   "scrublet_doublet_score" = "doublet_score") |>
+#    mutate(orig.ident = factor(orig.ident, levels = libs)) |>
+#    select(barcode, orig.ident, scrublet_doublet_score)
 
 add_to_metadata <- function(x) {
     x@meta.data <- 
 	x@meta.data |> 
 	as_tibble(rownames = "barcode") |>
 	left_join(demuxlet_df, join_by(barcode, orig.ident)) |>
-	left_join(scrublet_df, join_by(barcode, orig.ident)) |>
+	#left_join(scrublet_df, join_by(barcode, orig.ident)) |>
 	column_to_rownames("barcode")
 	
     x
@@ -256,7 +253,7 @@ singlet_cells <-
     map_dfr(function(x) x@meta.data |> 
 	    as_tibble(rownames = "barcode")) |>
     filter(demuxlet_call == "SNG", 
-	   scrublet_doublet_score < 0.5,
+	   #scrublet_doublet_score < 0.5,
 	   dmm_type == "singlet") |>
     {function(x) split(x, x$orig.ident)}() |>
     map(~pull(., barcode))
@@ -272,7 +269,9 @@ mt_ribo_genes <-
     filter(grepl("^MT-|^MRPS|^MRPL|^RPS|^RPL", gene_name))
 
 bcells <- 
-    merge(lib1984_obj, y = c(lib1988_obj, lib1990_obj), add.cell.ids = c("1984", "1988", "1990"))
+    merge(lib1984_obj, y = c(lib1988_obj, lib1990_obj), 
+	  add.cell.ids = c("1984", "1988", "1990")) |>
+    JoinLayers()
 
 bcells@meta.data$orig.ident <- paste0("BRI-", bcells@meta.data$orig.ident)
 
@@ -284,7 +283,7 @@ bcells <- bcells |>
 set.seed(1L)
 bcells <- bcells |>
     RunHarmony(group.by.vars = c("orig.ident", "donor_id"),
-	       max.iter.harmony = 30,
+	       max_iter = 30,
 	       reduction.save = "harmony")
 
 sdev_plot <- 
@@ -307,9 +306,9 @@ bcells <- bcells |>
 	    seed.use = 1L,
 	    reduction.name = "umap") |>
     FindNeighbors(dims = 1:30, reduction = "harmony", nn.eps = .5) |>
-    FindClusters(resolution = 0.4)
+    FindClusters(resolution = 0.5)
 
-Idents(bcells) <- "RNA_snn_res.0.4"
+Idents(bcells) <- "RNA_snn_res.0.5"
 
 cluster_markers <- 
     FindAllMarkers(bcells, 
@@ -330,11 +329,120 @@ bad_clusters <-
 
 bad_cells <- bcells@meta.data |>
     as_tibble(rownames = "barcode") |>
-    filter(RNA_snn_res.0.4 %in% bad_clusters) |>
+    filter(RNA_snn_res.0.5 %in% bad_clusters) |>
     pull(barcode)
 
 bcells <- subset(bcells, cells = bad_cells, invert = TRUE)
 
 bcells <- DietSeurat(bcells, dimreducs = NULL)
+bcells@commands <- list()
+bcells@meta.data$RNA_snn_res.0.5 <- NULL
+bcells@meta.data$seurat_clusters <- NULL
 
+Idents(bcells) <- "dmm_hto_call"
+
+# Rerun analysis with the final object
+# Scale and run PCAdd
+bcells <- bcells |>
+    FindVariableFeatures() |>
+    ScaleData(vars.to.regress = c("nCount_RNA", "percent_mt")) |>
+    RunPCA()
+
+# Run Harmony correcting for batch
+set.seed(1L)
+bcells <- bcells |>
+    RunHarmony(group.by.vars = c("orig.ident", "donor_id"),
+	       max_iter = 30,
+	       reduction.save = "harmony") |>
+    FindNeighbors(dims = 1:30, reduction = "harmony") |>
+    FindClusters(resolution = 0.5) |>
+    RunUMAP(reduction = "harmony", 
+	    dims = 1:30,
+	    seed.use = 1L,
+	    reduction.name = "umap")
+
+
+umap_df <- 
+    Embeddings(bcells, "umap") |>
+    as_tibble(rownames = "barcode") |>
+    left_join(as_tibble(bcells@meta.data, rownames = "barcode"), join_by(barcode)) |>
+    select(barcode, lib = orig.ident, donor_id, hto = dmm_hto_call, cluster = RNA_snn_res.0.5,
+	   umap_1, umap_2) |>
+    sample_frac(1L) |>
+    mutate(barcode = fct_inorder(barcode),
+	   hto = factor(hto, levels = names(stim_colors)),
+	   cluster = factor(cluster, levels = sort(as.integer(levels(cluster)))))
+
+write_tsv(umap_df, "./data/umap_df.tsv")
+
+
+umap_stim <-
+    ggplot(umap_df, aes(umap_1, umap_2)) +
+    geom_point(aes(color = hto), size = .1) +
+    scale_color_manual(values = stim_colors) +
+    theme_minimal() +
+    theme(axis.title = element_blank(),
+	  axis.text = element_blank(),
+	  strip.text.y = element_blank(),
+	  axis.ticks = element_blank(),
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    guides(color = guide_legend(title = "Stim:", 
+				override.aes = list(size = 4, alpha = 1)))
+
+ggsave("plots/umap_stim.png", umap_stim, width = 5, height = 4)
+
+# Marker genes
+Idents(bcells) <- "RNA_snn_res.0.5"
+
+cluster_markers_2 <- 
+    FindAllMarkers(bcells, 
+                   only.pos = FALSE,
+                   min.pct = 0.33,
+                   logfc.threshold = .5) |>
+    as_tibble() |>
+    left_join(filter(features, phenotype == "Gene Expression") |> select(-phenotype), 
+	      join_by(gene == gene_id))
+
+write_tsv(cluster_markers_2, "./data/cluster_markers.tsv")
+
+
+# Gating
+naive_gate <- gating_model(name = "naive", signature = c("IgD+", "CD27-"))
+	    
+mem_gate <- gating_model(name = "memory", signature = c("IgD-", "CD27+"))
+
+abc_gate <- gating_model(name = "abc", signature = c("IgD-", "CD11c+"))
+
+
+protein_gates <- 
+    list(naive = naive_gate,
+	 mem = mem_gate,
+	 abc = abc_gate)
+    
+bcells <- scGate(bcells, model = protein_gates, assay = "ADT", reduction = "harmony")
+
+bcells@meta.data <- 
+    bcells@meta.data |>
+    select(-starts_with("CellOntology"), -scGate_multi)
+
+plasma_gate <-
+    gating_model(name = "plasma",
+		 signature = c("ENSG00000100219+")) 
+
+prolif_gate <- 
+    gating_model(name = "prolif.",
+		 signature = c("ENSG00000148773+")) 
+
+rna_gates <- 
+    list(plasma = plasma_gate, 
+	 prolif = prolif_gate)
+
+bcells <- scGate(bcells, model = rna_gates, assay = "RNA", reduction = "harmony")
+
+bcells@meta.data <- 
+    bcells@meta.data |>
+    select(-starts_with("CellOntology"), -scGate_multi)
+
+# Save object
 write_rds(bcells, "./data/seurat_qced.rds")
