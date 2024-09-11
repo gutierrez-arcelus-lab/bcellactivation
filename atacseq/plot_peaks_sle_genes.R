@@ -99,6 +99,11 @@ da_regions <-
     select(stim, data) |>
     unnest(cols = data)
 
+# Susie
+pip_df <- "../colocalization/finemap/susie_results.tsv" |>
+    read_tsv() |>
+    mutate(chr = str_remove(chr, "chr"))
+
 # plot
 plot_region <- function(loc) {
     
@@ -107,14 +112,27 @@ plot_region <- function(loc) {
 
     gwas_df <- bentham_stats_regions |>
 	filter(locus == loc)
+    
+    susie_df <- pip_df |>
+	inner_join(select(gwas_df, locus, chr, pos), join_by(locus, chr, pos))
+
+    susie_cs_df <- filter(susie_df, !is.na(cs)) |>
+	select(locus, chr, pos, cs)
+
+    gwas_cs <- inner_join(gwas_df, susie_cs_df) 
 
     gwas_plot <-     
 	ggplot(data = gwas_df, 
 	       aes(x = pos, y = -log10(p_value))) +
+	geom_vline(xintercept = 191079016, linetype = 3, color = "blue") +
 	geom_point(size = 2) +
+	geom_point(data = gwas_cs,
+		   aes(color = cs), shape = 21, size = 4, stroke = 1.5) +
 	scale_x_continuous(labels = function(x) x/1e6L) +
 	theme_bw() +
 	theme(axis.text.x = element_blank(),
+	      axis.text.y = element_text(size = 12),
+	      axis.title.y = element_text(size = 12),
 	      axis.ticks.x = element_blank(),
 	      panel.grid.major.x = element_blank(),
 	      panel.grid.minor.x = element_blank(),
@@ -126,7 +144,33 @@ plot_region <- function(loc) {
 	labs(x = NULL,
 	     y = "-log10 (P-value)",
 	     title = loc) +
-	coord_cartesian(clip = "off")
+	coord_cartesian(clip = "off") +
+	guides(color = "none")
+
+    susie_plot <- 
+	ggplot(data = susie_df,
+	       aes(x = pos, y = pip)) +
+	geom_vline(xintercept = 191079016, linetype = 3, color = "blue") +
+	geom_point(size = 2) +
+	geom_point(data = filter(susie_df, !is.na(cs)),
+		   aes(color = cs), shape = 21, size = 4, stroke = 1.5) +
+	scale_x_continuous(labels = function(x) x/1e6L) +
+	theme_bw() +
+	theme(axis.text.x = element_blank(),
+	      axis.ticks.x = element_blank(),
+	      axis.text.y = element_text(size = 12),
+	      axis.title.y = element_text(size = 12),
+	      panel.grid.major.x = element_blank(),
+	      panel.grid.minor.x = element_blank(),
+	      panel.grid.major.y = element_line(linewidth = .25),
+	      panel.grid.minor.y = element_blank(),
+	      panel.border = element_blank(),
+	      plot.margin = margin(r = 2, l = 2, unit = "in"),
+	      plot.background = element_rect(fill = "white", color = "white")) +
+	labs(x = NULL,
+	     y = "PIP") +
+	coord_cartesian(clip = "off") +
+	guides(color = "none")
 
     tracks_df <- tracks_regions |>
 	filter(locus == loc, end > region_coords$start, start < region_coords$end) |>
@@ -162,7 +206,11 @@ plot_region <- function(loc) {
 	mutate(s = seq_len(n())) |>
 	ungroup() |>
 	mutate(y = g + s) |>
-	select(gene_name, y)
+	select(gene_name, y) |>
+	arrange(y)
+
+    # manually set for STAT4
+    gene_ys$y <- c(1, 2, 3, 4, 5, 1, 6, 7, 8)  
 
     tracks_for_plot <- left_join(tracks_df, gene_ys, join_by(gene_name))
 
@@ -181,6 +229,7 @@ plot_region <- function(loc) {
 
     gene_plot <- 
 	ggplot(tracks_for_plot) +
+	geom_vline(xintercept = 191079016, linetype = 3, color = "blue") +
 	geom_segment(aes(x = start, xend = end, y = y, yend = y, linewidth = feature),
 		     color = "midnightblue") +
 	geom_segment(data = arrows_df,
@@ -189,14 +238,14 @@ plot_region <- function(loc) {
 		     color = "midnightblue", lineend = "round") +
 	geom_text(data = gene_labels, 
 		  aes(x = s, y = y, label = gene_name),
-		  hjust = 1.25,
-		  size = 2, 
+		  hjust = 1.1,
+		  size = 4, 
 		  color = "grey40", 
 		  fontface = "italic") +
 	scale_x_continuous(limits = c(region_coords$start, region_coords$end),
 				    labels = function(x) x/1e6L) +
 	scale_y_continuous(limits = c(0, max(gene_ys$y) + 1)) +
-	scale_linewidth_manual(values = c("exon" = 2, "intron" = 1)) +
+	scale_linewidth_manual(values = c("exon" = 3, "intron" = 1)) +
 	theme_bw() +
 	theme(
 	      axis.text.x = element_blank(),
@@ -242,15 +291,22 @@ plot_region <- function(loc) {
 
     atac <- 
 	ggplot(gr_df) +
+	geom_vline(xintercept = 191079016, linetype = 3, color = "blue") +
+	geom_vline(data = peaks_df |> 
+		   filter(stim == "DN2 24", padj == min(padj)) |>
+		   pivot_longer(Start:End, names_to = "coord", values_to = "pos") |>
+		   select(pos),
+		   aes(xintercept = pos), 
+		   linetype = 2, linewidth = .5) +
 	geom_line(aes(x = bp, y = score, group = 1, color = stim),
 		  linewidth = .7) +
 	scale_x_continuous(limits = c(region_coords$start, region_coords$end), 
 			   labels = function(x) round(x/1e6L, 2)) +
 	scale_y_continuous(limits = c(0, 1.1)) +
 	scale_color_manual(values = stim_colors) +
-	geom_text(data = diff_peaks_stars,
-		  aes(x = bp, y = score + .05),
-		  size = 4, label = "*", fontface = "bold") +
+	#geom_text(data = diff_peaks_stars,
+	#	  aes(x = bp, y = score + .05),
+	#	  size = 4, label = "*", fontface = "bold") +
 	facet_grid(stim~., switch = "y") +
 	theme_bw() +
 	theme(
@@ -268,13 +324,12 @@ plot_region <- function(loc) {
 	 y = NULL)
     
     ggsave(sprintf("./plots/atac_gwas/bentham_%s.png", loc),
-	   plot_spacer() + gwas_plot + gene_plot + atac + plot_spacer() + plot_layout(heights = c(.8, 1, 1, 1, .8), ncol = 1),
+	   gwas_plot + susie_plot + gene_plot + atac + plot_layout(heights = c(.5, .5, .5, 1), ncol = 1),
 	   height = 8.5, width = 11, dpi = 300)
-
 }
 
 
-walk(bentham_regions$locus, plot_region)
+#walk(bentham_regions$locus, plot_region)
 
 
 

@@ -1,40 +1,137 @@
-library(DESeq2)
-library(dplyr)
-library(readr)
-library(purrr)
-library(tidyr)
-library(tibble)
-library(forcats)
-library(ggplot2)
+library(tidyverse)
 library(ggrepel)
-library(RColorBrewer)
-library(cowplot)
 
-stim_order <- 
-    c(sprintf("unst %s", c(0, 24)), 
-      sprintf("IL4 %s", c(24, 72)),
-      sprintf("BCR %s", c(24, 72)),
-      sprintf("TLR7 %s", c(24, 72)),
-      sprintf("DN2 %s", c(24, 72))
-    )
-      
 stim_colors <- 
-    c("grey95", "grey70",
-      "goldenrod1", "goldenrod4",
-      brewer.pal(n = 9, "Blues")[c(3, 8)],
-      brewer.pal(n = 9, "Greens")[c(3, 8)],
-      paste0("tomato", c(2, 4))
-      )
+    read_tsv("../figure_colors.txt", col_names = c("stim", "color")) |>
+    mutate(stim = str_replace(stim, "_", " "),
+	   stim = paste0(stim, "h")) |>
+    deframe()
 
-names(stim_colors) <- stim_order
+meta_data <- read_tsv("./results_deseq2/metadata.tsv")
 
-donor_ids <- read_csv("./samplesheet.csv") |>
-    mutate(donor_id = basename(fastq_1)) |>
-    extract(donor_id, "donor_id", "[^_]+_([^_]+)_.+") |>
-    mutate(replicate = paste0("REP", replicate),
-	   stim = sub("_", " ", sample)) |>
-    select(stim, donor_id, donor = replicate) |>
-    distinct()
+pca_df <- 
+    list.files("./results_deseq2", pattern = "peaks\\.rds$", full.names = TRUE) |>
+    {function(x) setNames(x, str_extract(x, "pcadata_(\\d+)", group = 1))}() |>
+    map_dfr(read_rds, .id = "var_peaks") |>
+    as_tibble() |>
+    mutate(var_peaks = as.integer(var_peaks),
+	   replic = str_extract(name, "REP\\d")) |>
+    left_join(meta_data) |>
+    mutate(stim = str_replace(condition, "unst", "Unstim"),
+	   stim = str_replace(stim, "_", " "),
+	   stim = paste0(stim, "h"),
+	   stim = factor(stim, levels = names(stim_colors))) |>
+    select(var_peaks, donor_id, stim, PC1, PC2) |>
+    arrange(var_peaks)
+
+perc_var <-
+    list.files("./results_deseq2", pattern = "peaks\\.rds$", full.names = TRUE) |>
+    {function(x) setNames(x, str_extract(x, "pcadata_(\\d+)", group = 1))}() |>
+    map(~read_rds(.) |>
+	attr("percentVar") |>
+	{function(x) round(x * 100)}() |>
+	{function(x) glue::glue("PC1: {x[1]}%; PC2: {x[2]}%")}()) |>
+    enframe("var_peaks", "label") |>
+    unnest(cols = label) |>
+    mutate(var_peaks = as.integer(var_peaks)) |>
+    arrange(var_peaks)
+
+pca_plot <- 
+    pca_df |>
+    left_join(perc_var) |>
+    filter(var_peaks != 10000) |>
+    mutate(label = glue::glue("{var_peaks} peaks ({label})"),
+	   label = fct_inorder(label)) |>
+    ggplot(aes(PC1, PC2)) +
+    geom_point(aes(fill = stim), shape = 21, size = 4) +
+    geom_text_repel(aes(label = donor_id), 
+		    size = 2.5, color = "grey30", 
+		    min.segment.length = 0,
+		    max.overlaps = Inf) +
+    scale_fill_manual(values = stim_colors) +
+    facet_wrap(~label, ncol = 2, scales = "free") +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = "white"),
+	  panel.grid.minor.x = element_blank(),
+	  panel.grid.minor.y = element_blank(),
+	  legend.position = "none")
+
+ggsave("./plots/pca_test.png", pca_plot, width = 8, height = 8)
+
+
+
+# Plot distribution of peak quantifications
+library(DESeq2)
+
+load("./results_deseq2/deseq2_data.Rdata")
+
+meta_df <- 
+    colData(rld) |>
+    as_tibble(rownames = "sample_id") |>
+    select(sample_id, condition, donor_id) |>
+    mutate(stim = str_replace(condition, "_", " "),
+	   stim = str_replace(stim, "unst", "Unstim"),
+	   stim = paste0(stim, "h")) |>
+    select(sample_id, stim, donor_id) |>
+    mutate(stim = fct_inorder(stim))
+
+rld_df <- 
+    assay(rld) |>
+    as_tibble(rownames = "peak_id") |>
+    pivot_longer(-peak_id, names_to = "sample_id", values_to = "rld") |>
+    left_join(meta_df, join_by(sample_id)) |>
+    select(peak_id, sample_id, stim, donor_id, rld)
+
+
+testp <- 
+    ggplot(rld_df, aes(x = rld)) +
+    geom_density(aes(color = stim, linetype = donor_id)) +
+    scale_color_manual(values = stim_colors) +
+    scale_linetype_manual(values = c(1, 3, 5)) +
+    facet_wrap(~stim, ncol = 1) +
+    theme_bw() +
+    theme(panel.grid.major.y = element_blank(),
+	  panel.grid.minor = element_blank())
+
+ggsave("./plots/test.png", testp, width = 5)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 pca_df <- 
     "./results/bwa/merged_library/macs2/narrow_peak/consensus/deseq2/consensus_peaks.mLb.clN.pca.vals.txt" |>
@@ -320,4 +417,122 @@ da_unst24_dn24 |>
     filter(Chr == "chr7", Start > 50000000, End < 50500000) |>
     arrange(Start, End)
 
+
+# Total number of peaks per sample
+stim_colors2 <- 
+    c("unst 0" = "#e2e2e2",
+      "unst 24" = "#a4a4a4",
+      "IL4 24" = "#4f4f4f",
+      "IL4 72" = "#000000",
+      "TLR7 24" = "#a6b385",
+      "TLR7 72" = "#506328",
+      "BCR 24" = "#415f8b",
+      "BCR 72" = "#003967",
+      "DN2 24" = "#c35634",
+      "DN2 72" = "#a82203") 
+
+
+total_peaks <- 
+    "./results/bwa/merged_library/macs2/narrow_peak/consensus/consensus_peaks.mLb.clN.boolean.intersect.txt" |>
+    read_tsv(col_names = c("set", "n")) |>
+    separate_rows(set, sep = "&") |>
+    group_by(sample_id = set) |>
+    summarise(n = sum(n)) |>
+    ungroup() |>
+    mutate(sample_id = sub("\\.mLb\\.clN$", "", sample_id))
+
+aligned_reads <- 
+    "./results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/mqc_picard_alignment_summary__name_Aligned_Reads_ylab_Reads_cpswitch_counts_label_Number_of_Reads_.txt" |>
+    read_tsv() |>
+    select(sample_id = Sample, n_reads = `Aligned Reads`)
+
+frip_df <- 
+    "./results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_frip_score-plot.txt" |>
+    read_tsv() |> 
+    pivot_longer(-Sample, names_to = "sample_id") |>
+    drop_na(value) |>
+    select(sample_id, frip = value)
+
+summ_df <- 
+    left_join(total_peaks, aligned_reads) |>
+    left_join(frip_df) |>
+    separate(sample_id, c("stim", "time", "replic"), sep = "_", remove = FALSE) |>
+    unite("cond", c(stim, time), sep = " ") |>
+    select(-replic) |>
+    mutate(cond = factor(cond, levels = names(stim_colors2)))
+
+r <- with(summ_df, cor(x = n_reads, y = n))
+
+atac_plot <- 
+    ggplot(summ_df, aes(x = n_reads, y = n)) +
+    geom_point(aes(fill = cond), 
+	       size = 4, shape = 21, stroke = .5, alpha = .9) +
+    annotate(geom = "text", label = paste("r =", round(r, 2)), 
+	     x = min(summ_df$n_reads), y = max(summ_df$n), 
+	     family = "Arial", hjust = "inward") +
+    scale_x_continuous(labels = function(x) x/1e6L) +
+    scale_y_continuous(labels = scales::comma) +
+    scale_fill_manual(values = stim_colors2) +
+    theme_minimal() +
+    theme(text = element_text(family = "Arial"),
+	  plot.background = element_rect(color = "white", fill = "white")) +
+    labs(x = "Mapped reads (Millions)", y = "Consensus peaks",
+	 fill = "Stim:",
+	 title = "Total consensus peaks vs.\nTotal mapped reads per sample")
+
+total_peaks_stim <- 
+    "./results/bwa/merged_replicate/macs2/narrow_peak/consensus/consensus_peaks.mRp.clN.boolean.intersect.txt" |>
+    read_tsv(col_names = c("set", "n")) |>
+    separate_rows(set, sep = "&") |>
+    group_by(stim = set) |>
+    summarise(n = sum(n)) |>
+    ungroup() |>
+    mutate(stim = sub("\\.mRp\\.clN$", "", stim),
+	   stim = sub("_", " ", stim),
+	   stim = factor(stim, levels = names(stim_colors2)))
+
+totals_plot <- 
+    ggplot(total_peaks_stim, aes(x = stim, y = n, fill = stim)) +
+    geom_col(color = "black", alpha = .9) +
+    scale_fill_manual(values = stim_colors2) +
+    scale_y_continuous(limits = c(0, max(total_peaks_stim$n)),
+		       breaks = seq(0, max(total_peaks_stim$n), by = 20e3),
+		       labels = scales::comma) +
+    theme_minimal() +
+    theme(text = element_text(family = "Arial"),
+	  axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+	  plot.background = element_rect(color = "white", fill = "white")) +
+    labs(x = NULL, y = "Consensus peaks",
+	 title = "Total consensus peaks\nacross samples") +
+    guides(fill = "none") 
+    
+ggsave("./plots/total_peaks_stims.png", 
+       atac_plot + totals_plot, 
+       width = 8, height = 4)
+
+
+# Plot ATAC-seq tracks
+library(rtracklayer)
+library(tidyverse)
+library(ggrepel)
+library(patchwork)
+library(furrr)
+library(AnnotationHub)
+library(locuszoomr)
+
+# Colors
+stim_colors <- 
+    c("unst_0" = "grey80", 
+      "unst_24" = "grey50",
+      "IL4_24" = "black", 
+      "BCR_24" = "#00a0e4",
+      "TLR7_24" = "#488f31",
+      "DN2_24" = "#de425b"
+      )
+
+
+ah <- AnnotationHub()
+#query(ah, "EnsDb.Hsapiens.v105")
+
+ens_data <- ah[["AH98047"]]
 
