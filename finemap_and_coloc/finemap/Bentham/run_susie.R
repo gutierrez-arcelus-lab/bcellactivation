@@ -106,14 +106,6 @@ run_susie <- function(gene_region, window_idx, summ_stats) {
 	    separate(ID, c("rsid", "ref", "alt"), sep = "-", convert = TRUE) |>
 	    left_join(cs_df, join_by(rowid))
 
-	fit$lbf_variable |>
-	    as_tibble() |>
-	    tibble::rowid_to_column("cs") |>
-	    mutate(cs = paste0("L", cs)) |>
-	    pivot_longer(-cs, names_to = "snp_id") |>
-	    pivot_wider(names_from = cs, values_from = value) |>
-	    write_tsv(glue("./data/susie/lbf/window{window_idx}.tsv"))
-
     } else {
 
 	pip_df <-
@@ -124,6 +116,14 @@ run_susie <- function(gene_region, window_idx, summ_stats) {
     }
 
     write_tsv(pip_df, glue("./data/susie/pip/window{window_idx}.tsv"))
+
+    fit$lbf_variable |>
+	as_tibble() |>
+	tibble::rowid_to_column("cs") |>
+	mutate(cs = paste0("L", cs)) |>
+	pivot_longer(-cs, names_to = "snp_id") |>
+	pivot_wider(names_from = cs, values_from = value) |>
+	write_tsv(glue("./data/susie/lbf/window{window_idx}.tsv"))
 }
 
 

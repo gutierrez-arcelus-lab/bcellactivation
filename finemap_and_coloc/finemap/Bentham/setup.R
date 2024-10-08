@@ -34,7 +34,7 @@ bentham_top <-
     filter(p <= 5e-5) |>
     filter(locus != "MHC class IIId")
 
-write_tsv(bentham_top, "./data/bentham_sentinels.tsv")
+write_tsv(bentham_top, "./data/sentinels.tsv")
 
 # Use ±500kb windows around top variants
 bentham_top_windows <- 
