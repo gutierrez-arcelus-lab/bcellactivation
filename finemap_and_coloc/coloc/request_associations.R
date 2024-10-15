@@ -1,5 +1,5 @@
 # Function to request data in a region
-request_associations <- function(dataset_id, chromosome_id, range_start, range_end) {
+request_associations <- function(dataset_id, chromosome_id, gene_id, range_start, range_end) {
     
     page_size <- 1000
     page_start <- 0
@@ -7,7 +7,7 @@ request_associations <- function(dataset_id, chromosome_id, range_start, range_e
     while (TRUE) {
 	
 	URL <- 
-	    "https://www.ebi.ac.uk/eqtl/api/v2/datasets/{dataset_id}/associations?size={page_size}&start={page_start}&pos={chromosome_id}:{range_start}-{range_end}" |>
+	    "https://www.ebi.ac.uk/eqtl/api/v2/datasets/{dataset_id}/associations?size={page_size}&start={page_start}&pos={chromosome_id}:{range_start}-{range_end}&gene_id={gene_id}" |>
 	    glue::glue()
 	    
 	r <- httr::GET(URL, httr::accept_json())
