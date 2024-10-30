@@ -33,6 +33,14 @@ main <- function(qtl_file) {
 	select(-gene_id, -error) |>
 	unnest(cols = result)
 
+    if ( nrow(qtl_data) > 0 ) {	
+    
+	qtl_data <- qtl_data |>
+	    group_by(molecular_trait_id) |>
+	    filter(any(pvalue < 1e-5)) |>
+	    ungroup()
+    }
+
     if ( nrow(qtl_data) == 0 ) {
 	
 	out <- 
@@ -44,7 +52,7 @@ main <- function(qtl_file) {
 
     min_df <- 
 	inner_join(qtl_data, gwas_data, 
-		   join_by(locus, chromosome == chrom, rsid, ref, alt), 
+		   join_by(locus, variant), 
 		   suffix = c("_qtl", "_gwas")) |>
 	distinct(locus, gene_name, molecular_trait_id, 
 		 variant, beta_qtl, beta_gwas, se_qtl, se_gwas, an_qtl = an, maf_qtl = maf)
@@ -67,10 +75,16 @@ main <- function(qtl_file) {
 }
 
 # GWAS data
+gwas_38 <- 
+    "./data/Bentham_hg38_snps.tsv" |>
+    read_tsv()
+
 gwas_data <- 
     "../finemap/Bentham/data/summary_stats.tsv" |>
     read_tsv() |>
-    mutate(chrom = as.character(chrom))
+    left_join(gwas_38, join_by(chrom, rsid)) |>
+    mutate(variant = glue("chr{chrom}_{pos.y}_{ref}_{alt}")) |>
+    select(locus, variant, beta, se, logp)
 
 # QTL data
 datasets <- read_tsv("./data/qtl_datasets.tsv")
@@ -82,18 +96,3 @@ qtl_files <-
 # Run
 out_df <- map_dfr(qtl_files, main, .id = "dataset_id")
 write_tsv(out_df, "./data/Bentham_coloc_results.tsv")
-
-
-# test:
-loci <- 
-    out_df |>
-    distinct(locus) |>
-    pull(locus)
-
-out_df |> 
-    filter(locus == loci[2]) |>
-    select(-(PP.H0.abf:PP.H3.abf)) |>
-    arrange(desc(PP.H4.abf)) |>
-    left_join(select(datasets, dataset_id, study_label, sample_group, quant_method)) |>
-    print(n = 40)
-

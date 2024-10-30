@@ -64,3 +64,18 @@ gencode <-
 inner_join(gencode, bed38, join_by(chrom, between(tss, start, end))) |>
     select(locus, gene_id, gene_name) |>
     write_tsv(glue("./data/{gwas}_genes.tsv"))
+
+# Set for coloc.susie
+# Susie files from eQTL Catalogue only have position in GRCh38 and alleles, not rsid
+# Bentham GWAS summary stats in GRCh38 to get positions
+
+if (gwas == "Bentham") {
+    
+    gwas_38 <-
+	"/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/harmonized/26502338-GCST003156-EFO_0002690.h.tsv.gz" |>
+	read_tsv() |>
+	select(rsid = variant_id, chrom = chromosome, pos = base_pair_location) |> 
+	arrange(chrom, pos)
+}
+
+write_tsv(gwas_38, glue("./data/{gwas}_hg38_snps.tsv"))
