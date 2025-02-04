@@ -31,7 +31,7 @@ run_enrichment <- function(gene_list) {
 	ont = "BP",
 	keyType = "ENSEMBL",
 	pAdjustMethod = "fdr",
-	qvalueCutoff = 0.05,
+	qvalueCutoff = 0.1,
 	readable = TRUE)
 }
 
@@ -55,7 +55,7 @@ stim_i <- commandArgs(TRUE)[1]
 
 sig_genes <- 
     edger_res |>
-    filter(stim == stim_i, FDR <= 0.05) |>
+    filter(stim == stim_i, FDR <= 0.25) |>
     pull(gene_id) |>
     unique()
     
@@ -118,17 +118,17 @@ sft <-
 ### Build WGCNA network 
 ### we need to reassing the 'cor()' function to avoid a bug in WGCNA
 
-if (stim_i == "DN2") {
-
-    merge_cut_height <- 0.225
-
-} else { 
-
-    merge_cut_height <- 0.19
-
-}
-
-detect_cut_height <- 0.95
+#if (stim_i == "DN2") {
+#
+#    merge_cut_height <- 0.225
+#
+#} else { 
+#
+#    merge_cut_height <- 0.19
+#
+#}
+merge_cut_height <- 0.2
+detect_cut_height <- 0.99
 
 beta_power <- ifelse(is.na(sft$powerEstimate), 30L, sft$powerEstimate)
 
@@ -144,7 +144,7 @@ network <-
 		     minModuleSize = 30,
 		     mergeCutHeight = merge_cut_height,
 		     detectCutHeight = detect_cut_height,
-		     minKMEtoStay = 0.85,
+		     minKMEtoStay = 0.8,
 		     reassignThreshold = 1e-3,
 		     numericLabels = FALSE,
 		     randomSeed = 1,
@@ -297,7 +297,8 @@ plan(multisession, workers = availableCores())
 go_res <- 
     top_kme |>
     group_by(module) |>
-    top_n(250, kme) |>
+    #top_n(250, kme) |>
+    top_n(500, kme) |>
     ungroup() |>
     mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
     {function(x) split(x, x$module)}() |>
@@ -315,6 +316,8 @@ go_res <-
 #    {function(x) split(x, x$module)}() |>
 #    map("gene_id") |>
 #    future_map(run_enrichment)
+
+plan(sequential)
 
 go_res_df <- go_res |>
     map_df(as_tibble, .id = "module") 
@@ -352,14 +355,19 @@ go_plot <-
 ggsave(glue("./plots/go_{stim_i}.png"), 
        go_plot, width = 11, height = 5, dpi = 300)
 
+
 # Plot correlation between Lupus-associated genes and modules in a heatmap
 # List of Lupus-associated genes
 sle_genes <- 
-    c("PTPN22", "FCGR2A", "TNFSF4", "NCF2", "SPRED2", "IFIH1", "STAT1", "STAT4",
-      "IKZF1", "IKZF2", "IKZF3", "PXK", "IL12A", "BANK1", "BLK", "MIR146A", 
-      "C4A", "C4B", "PRDM1", "TNFAIP3", "IRF5", "IRF7", "IRF8",
-      "WDFY4", "ARID5B", "CD44", "ETS1", "SH2B3", "SLC15A4", "CSK", "CIITA", "SOCS1", 
-      "CLEC16A", "ITGAM", "ITGAX", "TYK2", "UBE2L3", "TLR7", "IRAK1", "IKBKE", "IL10")
+    c("PTPN22", "FCGR2A", "TNFSF4", "NCF2", "IL10",
+      "SPRED2", "IFIH1", "STAT1", "STAT4", "IKZF1", "IKZF2", "IKZF3", 
+      "PXK", "IL12A", "TNIP1", "UHRF1BP1", "ATG5", "JAZF1",
+      "BANK1", "BLK", "MIR3142HG", "PRDM1", "TNFAIP3", 
+      "IRF5", "IRF7", "IRF8",
+      "WDFY4", "ARID5B", "CD44", "ETS1", "SH2B3", "SLC15A4", 
+      "CSK", "CIITA", "SOCS1", 
+      "CLEC16A", "ITGAM", "ITGAX", "TYK2", "UBE2L3", 
+      "IRAK1", "IKBKE", "IL10")
 
 
 sle_genes_cormatrix <- 
@@ -367,17 +375,21 @@ sle_genes_cormatrix <-
     filter(gene_name %in% sle_genes) |>
     left_join(kme_all_df, join_by(gene_id)) |>
     filter(!is.na(module)) |>
-    mutate(module = factor(module, levels = module_colors)) |>
+    group_by(gene_id) |>
+    filter(any(kme > 0.8)) |>
+    ungroup() |>
     select(-gene_id) |>
     pivot_wider(names_from = module, values_from = kme) |>
     column_to_rownames("gene_name") |>
+    select(all_of(module_colors)) |>
+    {function(x) setNames(x, glue("M{1:ncol(x)}"))}() |>
     data.matrix() |>
     t()
 
 png(glue("./plots/slegenes_{stim_i}.png"), 
-    units = "in", height = 3, width = 8, res = 400)
+    units = "in", height = 3, width = 6.5, res = 400)
 pheatmap(sle_genes_cormatrix,
-	 fontsize = 9, angle_col = 90, cluster_rows = TRUE, 
+	 fontsize = 9, angle_col = 90, cluster_rows = FALSE, 
 	 color = colorRampPalette(rev(brewer.pal(n = 8, name ="RdYlBu")))(100),
 	 legend_breaks = seq(-1, 1, by = .2))
 dev.off()
@@ -394,33 +406,33 @@ write_tsv(module_eigen, glue("./data/{stim_i}_eigen.tsv"))
 write_rds(count_matrix, glue("./data/{stim_i}_counts.rds"))
 write_tsv(kim_df, glue("./data/{stim_i}_kim.tsv"))
 write_tsv(go_res_df, glue("./data/{stim_i}_go.tsv"))
-
-
-## TOM
-#tom <- 
-#    TOMsimilarityFromExpr(count_matrix, 
-#			  corType = "pearson",
-#			  networkType = "signed",
-#			  power = beta_power,
-#			  nThreads = availableCores())
 #
-#colnames(tom) <- rownames(tom) <- colnames(count_matrix)
 #
-#top_10_hub <- 
-#    kim_df |>
-#    group_by(module) |>
-#    top_n(10, kim) |>
-#    ungroup()
-#
-#tom_hub <- 
-#    tom[top_10_hub$gene_id, top_10_hub$gene_id] |>
-#    as_tibble(rownames = "from_id") |>
-#    pivot_longer(-from_id, names_to = "to_id") |>
-#    left_join(select(top_10_hub, -kim), join_by(from_id == "gene_id")) |>
-#    left_join(select(top_10_hub, gene_id, gene_name), join_by(to_id == "gene_id")) |>
-#    select(from_id = gene_name.x, to_id = gene_name.y, module, value) |>
-#    filter(from_id != to_id) |>
-#    arrange(desc(value))
-#
-#write_tsv(tom_hub, glue("./data/{stim_i}_TOM_hub.tsv"))
-#
+### TOM
+##tom <- 
+##    TOMsimilarityFromExpr(count_matrix, 
+##			  corType = "pearson",
+##			  networkType = "signed",
+##			  power = beta_power,
+##			  nThreads = availableCores())
+##
+##colnames(tom) <- rownames(tom) <- colnames(count_matrix)
+##
+##top_10_hub <- 
+##    kim_df |>
+##    group_by(module) |>
+##    top_n(10, kim) |>
+##    ungroup()
+##
+##tom_hub <- 
+##    tom[top_10_hub$gene_id, top_10_hub$gene_id] |>
+##    as_tibble(rownames = "from_id") |>
+##    pivot_longer(-from_id, names_to = "to_id") |>
+##    left_join(select(top_10_hub, -kim), join_by(from_id == "gene_id")) |>
+##    left_join(select(top_10_hub, gene_id, gene_name), join_by(to_id == "gene_id")) |>
+##    select(from_id = gene_name.x, to_id = gene_name.y, module, value) |>
+##    filter(from_id != to_id) |>
+##    arrange(desc(value))
+##
+##write_tsv(tom_hub, glue("./data/{stim_i}_TOM_hub.tsv"))
+##
