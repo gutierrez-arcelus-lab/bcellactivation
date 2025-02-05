@@ -1,8 +1,6 @@
 library(tidyverse)
 library(tidytext)
 library(DESeq2)
-library(extrafont)
-library(furrr)
 library(cowplot)
 library(ggbeeswarm)
 library(glue)
@@ -15,16 +13,16 @@ filter <- dplyr::filter
 
 stim_colors <- 
     "../figure_colors.txt" |>
-    read_tsv(col_names = c("condition", "color")) |>
-    mutate(condition = sub("_", " ", condition),
-	   condition = paste0(condition, "hrs")) |>
+    read_tsv(col_names = c("stim", "time", "color")) |>
+    unite("condition", c(stim, time), sep = "_") |>
+    mutate(condition = paste0(condition, "hrs")) |>
     deframe()
 
 stim_colors_0_names <- 
     keep(names(stim_colors), !grepl("Unstim", names(stim_colors))) |>
-    str_remove(" \\d+hrs$") |>
+    str_remove("_\\d+hrs$") |>
     unique() |>
-    paste("0hrs")
+    paste0("_0hrs")
 
 stim_colors_0 <- rep(stim_colors[[1]], length(stim_colors_0_names))
 names(stim_colors_0) <- stim_colors_0_names
@@ -36,69 +34,51 @@ dat <- read_rds("../bcell_lowinput/wgcna/data/gene_expression.rds")
 
 sample_table <- 
     tibble(sample_id = colnames(dat$counts)) |>
-    extract(sample_id, c("group"), "[^_]+_(.+)", remove = FALSE) |>
+    separate(sample_id, c("donor_id", "stim", "time"), sep = "_", remove = FALSE) |>
+    unite("condition", c(stim, time), sep = "_") |>
     column_to_rownames("sample_id")
 
 dds <- 
     DESeqDataSetFromTximport(dat, sample_table, ~1) |>
     estimateSizeFactors() |>
     {function(x) x[, colSums(counts(x)) > 2e6]}() |>
-    {function(x) x[rowSums(counts(x, normalized = TRUE) >= 5 ) >= 3, ]}() |>
     vst()
 
-top_variable_genes <- 
-    rowVars(assay(dds), useNames = TRUE) |> 
-    enframe("gene_id", "var") |>
-    arrange(desc(var)) |>
-    slice(1:2000)
+pca_res <-
+    plotPCA(dds, ntop = 2000, returnData = TRUE)
 
-## Transpose expression matrix to use with WGCNA
-count_matrix <- t(assay(dds)[top_variable_genes$gene_id, ])
-
-# Run PCA
-pca <- prcomp(count_matrix, center = TRUE, scale. = TRUE)
-
-pc_scores <- as_tibble(pca$x, rownames = "sample_id")
-
-pc_varexp <- 
-    tibble(PC = paste0("PC", 1:length(pca$sdev)),
-	   variance = pca$sdev^2) |>
-    mutate(pct = round(variance/sum(variance) * 100, 1),
-           pct = paste0("(", pct, "%)")) |>
-    select(PC, pct) |>
-    unite("lab", c(PC, pct), sep = " ", remove = FALSE)
-
-
-# Plot
 pca_df <- 
-    pc_scores |>
-    select(sample_id, PC1:PC2) |>
-    separate(sample_id, c("donor_id", "stim", "timep"), sep = "_") |>
-    mutate(timep = factor(timep, levels = paste0(c(0, 4, 24, 48, 72), "hrs")),
-	   condition = paste(stim, timep, sep = " "),
+    as_tibble(pca_res) |>
+    select(sample_id = name, condition, PC1, PC2) |>
+    separate(condition, c("stim", "time"), sep = "_", remove = FALSE) |>
+    mutate(time = factor(time, levels = paste0(c(0, 4, 24, 48, 72), "hrs")),
 	   condition = factor(condition, levels = names(stim_colors)))
+
+pca_var <- 
+    attr(pca_res, "percentVar") |>
+    round(2) |>
+    scales::percent()
 
 legend_df <- 
     stim_colors |>
     enframe("condition", "color") |>
-    separate("condition", c("stim", "time"), sep = " ", remove = FALSE) |>
+    separate("condition", c("stim", "time"), sep = "_", remove = FALSE) |>
     filter(condition %in% pca_df$condition) |>
     mutate(time = str_remove(time, "hrs"),
 	   time = fct_inorder(time),
 	   stim = fct_inorder(stim),
 	   stim = fct_rev(stim)) |>
     select(stim, time, condition) |>
-    mutate(stim = paste0(stim, ":"),
+    mutate(stim = recode(stim, "IL4" = "IL-4c", "CD40L" = "CD40c", "TLR9" = "TLR9c", "TLR7" = "TLR7c",
+			 "BCR" = "BCRc", "BCR-TLR7" = "BCR/TLR7c", "DN2" = "DN2c"),
+	   stim = paste0(stim, ":"),
 	   stim = fct_inorder(stim))
 
 legend_plot <-
     ggplot(legend_df, aes(x = time, y = 1)) +
-    geom_point(aes(fill = condition, shape = time), 
-	       size = 2.5, stroke = .25) +
-    geom_point(data = filter(legend_df, time == 0),
-	       size = 1.5, shape = 4) +
+    geom_point(aes(fill = condition), 
+	       shape = 21, size = 2.5, stroke = .25) +
     scale_fill_manual(values = stim_colors) +
-    scale_shape_manual(values = c(21, 21, 23, 22, 24)) +
     facet_wrap(~stim, ncol = 1) +
     theme_minimal() +
     theme(text = element_text(size = 8),
@@ -110,27 +90,21 @@ legend_plot <-
 	  panel.border = element_rect(color = NA, fill = NA),
 	  panel.spacing = unit(0, "lines"),
 	  strip.clip = "off",
-	  strip.text = element_text(margin = margin(t = 0, b = 0)),
+	  strip.text = element_text(size = 9, margin = margin(t = 0, b = 0)),
 	  strip.background = element_rect(color = NA, fill = "grey90"),
 	  plot.margin = margin(0, 2, 0, -1, unit = "pt")
 	  ) +
     labs(x = "hours") +
-    guides(fill = "none", shape = "none")
+    guides(fill = "none")
 
 pca_plot <- 
     ggplot(pca_df, aes(PC1, PC2)) +
     geom_hline(yintercept = 0, color = "grey94") +
     geom_vline(xintercept = 0, color = "grey94") +
-    geom_point(data = filter(pca_df, timep == "0hrs"), 
-	       aes(fill = condition, shape = timep), 
-	       size = 2, stroke = .15) +
-    geom_point(data = filter(pca_df, timep == "0hrs"),
-	       size = 1.5, shape = 4) +
-    geom_point(data = filter(pca_df, timep != "0hrs"), 
-	       aes(fill = condition, shape = timep), 
-	       size = 2, stroke = .15) +
+    geom_point(data = pca_df, 
+	       aes(fill = condition), 
+	       shape = 21, size = 2, stroke = .15) +
     scale_fill_manual(values = stim_colors) +
-    scale_shape_manual(values = c(21, 21, 23, 22, 24)) +
     theme_minimal() +
     theme(
 	  axis.text = element_blank(),
@@ -138,8 +112,8 @@ pca_plot <-
 	  panel.grid = element_blank(),
 	  plot.margin = margin(0, 0, 0, .5, unit = "lines"),
 	  plot.title = element_text(size = 9)) +
-    guides(fill = "none", shape = "none") +
-    labs(x = pc_varexp$lab[1], y = pc_varexp$lab[2])
+    guides(fill = "none") +
+    labs(x = glue("PC1 ({pca_var[1]})"), y = glue("PC2 ({pca_var[2]})"))
 
 pca_inset <- 
     ggplot(pca_df |> mutate(i = stim %in% c("BCR", "BCR-TLR7", "DN2")),
@@ -180,7 +154,7 @@ fig_a_grid <-
 	      fig_a_title,
 	      plot_grid(
 			pca_plot, 
-			plot_grid(legend_plot, NULL, pca_inset, ncol = 1, rel_heights = c(1, .05, .5)), 
+			plot_grid(legend_plot, NULL, pca_inset, ncol = 1, rel_heights = c(1, .05, .45)), 
 			nrow = 1, 
 			rel_widths = c(1, .3)
 			),
@@ -190,11 +164,10 @@ fig_a_grid <-
     )
 
 
-
 # Fig B #######################################################################
 all_stims <-
     names(stim_colors) |>
-    str_split(" ") |>
+    str_split("_") |>
     map_chr(1) |>
     unique()
 
@@ -247,35 +220,36 @@ diff_plot <-
     geom_tile(aes(fill = n), alpha = .85) +
     geom_vline(xintercept = segments_x$rowid, color = "white", linewidth = .5) +
     geom_hline(yintercept = segments_y$rowid, color = "white", linewidth = .5) +
-    scale_fill_viridis_c(option = "inferno",
-			 na.value = "white",
-			 labels = scales::comma) +
+    scico::scale_fill_scico(palette = "lajolla", 
+			    na.value = "white",
+			    labels = scales::comma) +
     theme_minimal() +
     theme(text = element_text(size = 9),
 	  axis.text = element_blank(),
 	  axis.title = element_blank(),
 	  panel.grid.major = element_blank(),
-	  panel.background = element_rect(fill = "transparent", color = NA),
+	  panel.background = element_rect(color = NA, fill = "transparent"),
 	  plot.margin = margin(0, 0, 0, 0),
-	  legend.position.inside = c(.9, .4)
+	  legend.position.inside = c(.9, .4),
 	  ) +
     labs(fill = "DE\ngenes:") +
     guides(fill = guide_colorbar(barwidth = .5, barheight = 7, position = "inside")) +
     coord_cartesian(xlim = c(1, 28), ylim = c(1, 28))
 
 
+
 b_axis_x_df <- 
     diff_expr_summ |>
     filter(!is.na(stim1)) |>
     distinct(group1, stim1, t1) |>
-    mutate(condition1 = glue("{stim1} {t1}hrs")) |>
+    mutate(condition1 = glue("{stim1}_{t1}hrs")) |>
     select(group1, condition1)
 
 b_axis_y_df <- 
     diff_expr_summ |>
     filter(!is.na(stim2)) |>
     distinct(group2, stim2, t2) |>
-    mutate(condition2 = glue("{stim2} {t2}hrs")) |>
+    mutate(condition2 = glue("{stim2}_{t2}hrs")) |>
     select(group2, condition2)
 
 b_axis_x_plot <-
@@ -331,7 +305,8 @@ fig_b_grid <-
     )
 
 top_grid <- 
-    plot_grid(fig_a_grid, NULL, fig_b_grid, nrow = 1, rel_widths = c(1, .1, 1))
+    plot_grid(fig_a_grid, NULL, fig_b_grid, nrow = 1, rel_widths = c(1.05, .05, 1))
+
 
 
 # Fig C #######################################################################
@@ -348,7 +323,7 @@ cpm_df <-
     separate(sample_id, c("sample_id", "dummy", "time"), sep = "_") |>
     mutate(hours = parse_number(time),
 	   hours = factor(hours, levels = sort(unique(hours))),
-           condition = paste(stim, time, sep = " "),
+           condition = paste(stim, time, sep = "_"),
 	   stim = factor(stim, levels = all_stims)) |>
     unnest(cols = data) |>
     select(sample_id, condition, stim, hours, gene_id, gene_name, obs_cpm, obs_logcpm)
@@ -356,7 +331,7 @@ cpm_df <-
 pathway_colors <-
     keep(stim_colors, grepl("48hrs", names(stim_colors)))
 
-names(pathway_colors) <- str_remove(names(pathway_colors), " 48hrs")
+names(pathway_colors) <- str_remove(names(pathway_colors), "_48hrs")
 
 pathway_colors <- c("IL4" = "goldenrod4", pathway_colors)
 
@@ -369,8 +344,8 @@ plot_timecourse <- function(counts_df) {
     geom_line(aes(group = stim, color = stim), 
 	      stat = "smooth", method = "loess", span = 1, se = FALSE, 
 	      linewidth = .7) +
-    scale_y_continuous(expand = expansion(mult = c(0.25, 0.05)),
-		       breaks = c(0, ceiling(max(counts_df$obs_cpm)))) +
+    scale_y_continuous(expand = expansion(mult = c(0.25, 0.1)),
+		       breaks = c(0, 10*ceiling(max(counts_df$obs_cpm)/10))) +
     scale_color_manual(values = pathway_colors) + 
     scale_fill_manual(values = stim_colors) + 
     facet_grid(gene_name~stim, scale = "free", space = "free_x") +
@@ -382,7 +357,7 @@ plot_timecourse <- function(counts_df) {
 	  strip.clip = "off",
 	  axis.text.x = element_blank(),
 	  axis.text.y = element_text(size = 8),
-	  plot.title = element_text(size = 8, hjust = .5, 
+	  plot.title = element_text(size = 8, hjust = .5, face = "italic",
 				    margin = margin(b = 0)),
 	  legend.position = "none",
 	  plot.margin = margin(2, 2, 0, 2, "pt")) +
@@ -405,12 +380,12 @@ fig_c_grid <-
     plot_grid(NULL,
 	      plot_grid(plot_timecourse(filter(cpm_df, gene_name == "AICDA")),
 			plot_timecourse(filter(cpm_df, gene_name == "FCER2")),
-			plot_timecourse(filter(cpm_df, gene_name == "CD69")),
+			plot_timecourse(filter(cpm_df, gene_name == "BANK1")),
 			ncol = 1),
 	      NULL,
-	      plot_grid(plot_timecourse(filter(cpm_df, gene_name == "CD86")),
+	      plot_grid(plot_timecourse(filter(cpm_df, gene_name == "IRF5")),
 			plot_timecourse(filter(cpm_df, gene_name == "TBX21")),
-			plot_timecourse(filter(cpm_df, gene_name == "SLAMF7")),
+			plot_timecourse(filter(cpm_df, gene_name == "XBP1")),
 			ncol = 1),
 	      NULL,
 	      nrow = 1, rel_widths = c(0.05, 1, 0.05, 1, 0.05)) +
@@ -419,6 +394,8 @@ fig_c_grid <-
 fig_c <- 
     plot_grid(fig_c_title, fig_c_grid, ncol = 1, rel_heights = c(.1, 1),
 	      labels = "c", label_size = 12, label_y = 1.75)
+
+
 
 # Fig D #######################################################################
 module_sizes <-
@@ -457,21 +434,21 @@ modules_df <-
     ungroup() |>
     arrange(module_ix, time)
 
-#kim_df <- 
-#    "../bcell_lowinput/wgcna/data/DN2_kim.tsv" |>
-#    read_tsv() |>
-#    left_join(filter(module_sizes, stim == "DN2"), join_by(module)) |> 
-#    select(gene_id, gene_name, module, module_ix = ix, kim) |>
-#    arrange(module_ix, desc(kim)) |>
-#    group_by(module) |>
-#    top_n(5, kim) |>
-#    ungroup()
+kim_df <- 
+    "../bcell_lowinput/wgcna/data/DN2_kim.tsv" |>
+    read_tsv() |>
+    left_join(module_sizes, join_by(module)) |> 
+    select(gene_id, gene_name, module, module_ix = ix, kim) |>
+    arrange(module_ix, desc(kim)) |>
+    group_by(module) |>
+    top_n(5, kim) |>
+    ungroup()
 
-fig_d <-
+module_plot <-
     ggplot(modules_df) +
-    geom_line(aes(x = time, y = value, group = module, color = module),
+    geom_line(aes(x = time, y = value, group = module),
 	      linewidth = 1.25) +
-    scale_color_manual(values = module_colors) +
+    #scale_color_manual(values = module_colors) +
     facet_wrap(~module_ix, ncol = 1) +
     theme_minimal() +
     theme(axis.text.x = element_text(size = 8),
@@ -481,37 +458,44 @@ fig_d <-
 	  panel.grid.major.x = element_line(linetype = 2, color = "black", linewidth = .1),
 	  panel.grid.major.y = element_blank(),
 	  panel.grid.minor.y = element_blank(),
-	  strip.text = element_text(size = 8.5, margin = margin(b = 0)),
+	  panel.spacing.y = unit(0.1, "lines"),
+	  strip.text = element_text(size = 8.5, margin = margin(t = 0, b = 0)),
 	  strip.clip = "off",
-	  plot.margin = margin(.5, 0, 0, 0, unit = "lines")) +
-    guides(color = "none") +
+	  plot.margin = margin(0, 0, 0, 0, unit = "lines")) +
+    #guides(color = "none") +
     labs(y = "Eigengene expression")
 
 
-#kim_plot <-
-#    ggplot(data = kim_df |> 
-#	   arrange(module_ix, kim) |>
-#	   mutate(gene_name = fct_inorder(gene_name)),
-#	   aes(x = " ", y = gene_name)) +
-#    geom_point(aes(fill = kim), shape = 21, size = 3, show.legend = FALSE) +
-#    scale_x_discrete(drop = FALSE, expand = c(0, 0), limits = c(" ", " ")) +
-#    scale_y_discrete(position = "right") +
-#    scale_fill_continuous(low = "beige", high = "firebrick") +
-#    facet_wrap(~module_ix, scale = "free_y", ncol = 1) +
-#    theme_minimal() +
-#    theme(axis.text.y.right = element_text(size = 7, face = "italic", 
-#					   margin = margin(l = .5, unit = "lines")),
-#	  panel.grid = element_blank(),
-#	  strip.text = element_blank(),
-#	  plot.margin = margin(0, 0, 0, 0),
-#	  strip.clip = "off"
-#	  ) +
-#    labs(x = NULL, y = NULL) +
-#    coord_cartesian(clip = "off")
+kim_plot <-
+    ggplot(data = kim_df |> 
+	   arrange(module_ix, kim) |>
+	   mutate(gene_name = fct_inorder(gene_name)),
+	   aes(x = " ", y = gene_name)) +
+    geom_point(aes(fill = kim), shape = 21, size = 2.5, show.legend = FALSE) +
+    scale_x_discrete(drop = FALSE, expand = c(0, 0), limits = c(" ", " ")) +
+    scale_y_discrete(position = "right", expand = c(0, 0)) +
+    scale_fill_continuous(low = "beige", high = "firebrick") +
+    facet_wrap(~module_ix, scale = "free_y", ncol = 1,
+	       labeller = as_labeller(c("Module 1" = " ", "Module 2" = " ", "Module 3" = " ",
+					"Module 4" = " ", "Module 5" = " ", "Module 6" = " ",
+					"Module 7" = " "))) +
+    theme_minimal() +
+    theme(axis.text.y.right = element_text(size = 7, face = "italic", 
+					   margin = margin(l = .5, unit = "lines")),
+	  panel.grid = element_blank(),
+	  panel.spacing.y = unit(0.1, "lines"),
+	  plot.margin = margin(0, 0, 0, 0, unit = "lines"),
+	  strip.text = element_text(size = 8.5, margin = margin(t = 0, b = 0)),
+	  strip.clip = "off"
+	  ) +
+    labs(x = NULL, y = NULL) +
+    coord_cartesian(clip = "off")
+
+fig_d <- plot_grid(module_plot, NULL, kim_plot, nrow = 1, rel_widths = c(1, .1, .5))
+
 
 
 # Fig E #######################################################################
-
 go_res <-
     "../bcell_lowinput/wgcna/data/DN2_go.tsv" |>
     read_tsv() |>
@@ -523,9 +507,7 @@ go_res <-
     left_join(module_sizes, join_by(module)) |>
     select(module = ix, Description, pvalue, gene_r) |>
     arrange(module, pvalue) |>
-    complete(module, fill = list(Description = NA)) |>
-    mutate(Description = ifelse(is.na(Description), "No enrichment", Description),
-	   Description = fct_inorder(Description))
+    mutate(Description = fct_inorder(Description))
 
 fig_e <- 
     ggplot(data = go_res, 
@@ -535,20 +517,21 @@ fig_e <-
     scale_x_discrete(expand = c(0, 0)) +
     scale_y_discrete(position = "right") +
     scale_fill_gradient(low = "white", high = "black") +
-    scale_size(range = c(.5, 3)) +
-    ggforce::facet_col(vars(module), scales = "free_y", space = "free") + 
+    scale_size(range = c(.5, 2.5)) +
+    ggforce::facet_col(vars(module), scales = "free_y") + 
     theme_minimal() +
     theme(
-	  axis.text.y.right = element_text(size = 8, margin = margin(0, .22, 0, 0, unit = "lines")),
+	  axis.text.y.right = element_text(size = 7, margin = margin(r = .5, l = 0, unit = "lines")),
 	  axis.title = element_blank(),
 	  legend.text = element_text(size = 8),
 	  legend.title = element_text(size = 8),
 	  legend.key.size = unit(.25, "cm"),
 	  legend.margin = margin(r = 0.1, l = 0.1, unit = "lines"),
 	  panel.grid = element_blank(),
-	  plot.margin = margin(.5, 0, 0, 0, unit = "lines"),
+	  plot.margin = margin(0, 0, 0, 0, unit = "lines"),
 	  strip.clip = "off",
-	  strip.text = element_text(size = 8.5, margin = margin(b = 0))
+	  strip.text = element_text(size = 8.5, margin = margin(t = 0, b = 0, unit = "lines")),
+	  panel.spacing.y = unit(0.1, "lines")
 	  ) +
     guides(fill = guide_colorbar("logP:", barheight = 5, barwidth = .25),
 	   size = guide_legend("Gene\nRatio:"))
@@ -560,20 +543,23 @@ kme_df <-
     read_tsv() |>
     select(-grey) |>
     left_join(distinct(edger_res, gene_id, gene_name), join_by(gene_id)) |>
-    pivot_longer(-c(gene_id, gene_name), names_to = "module", values_to = "kme") 
+    pivot_longer(-c(gene_id, gene_name), names_to = "module", values_to = "kme") |>
+    group_by(gene_id) |>
+    slice_max(kme) |>
+    ungroup()
 
 aid_genes <-
     tribble(~module, ~gene_name,
 	    "black", "TNFSF4",
-	    "black", "CDK2",
+	    "black", "IL12RB1",
 	    "blue", "TRAF1",
 	    "blue", "IL2RA",
-	    "brown", "BLK",
+	    "brown", "CSK",
 	    "brown", "IKBKE",
 	    "green", "BCL11A",
-	    "green", "BANK1",
+	    "green", "CD37",
 	    "red", "SH2B3",
-	    "red", "IL6R",
+	    "red", "NFKBIA",
 	    "yellow", "UBE2L3",
 	    "yellow", "STAT1",
 	    "turquoise", "ETS1",
@@ -587,46 +573,65 @@ aid_df <-
     filter(stim == "DN2") |>
     inner_join(aid_genes, join_by(gene_name)) |>
     select(sample_id, stim, condition, hours, gene_name, module = ix, cpm = obs_logcpm)
-    
+
+
 fig_f <-
     aid_df |>
-    {function(x) split(x, x$module)}() |>
-    {function(x) x[sort(names(x))]}() |>
-    map(function(x) {
+    group_split(module) |>
+    map(function(data_x) {
 
-	    ggplot(data = x, 
-		   aes(x = hours, y = cpm, fill = condition)) +
-	    geom_quasirandom(aes(fill = condition),
-			     method = "smiley", width = .2, 
-			     shape = 21, stroke = .2, size = 1.5, alpha = .4) +
-	    geom_line(aes(group = stim, color = stim), 
-		      stat = "smooth", method = "loess", span = 1, se = FALSE, 
-		      linewidth = .7) +
-	    scale_y_continuous(breaks = scales::breaks_pretty(2)) +
-	    scale_color_manual(values = pathway_colors) + 
-	    scale_fill_manual(values = stim_colors) +
-	    facet_wrap(~gene_name, nrow = 1, scales = "free_y") +
-	    theme_minimal() +
-	    theme(axis.text.x = element_blank(),
-		  axis.text.y = element_text(size = 7, color = "grey70"),
-		  panel.grid.major.y = element_blank(),
-		  panel.grid.minor.y = element_blank(),
-		  strip.text.x = element_text(size = 9, margin = margin(0, 0, .1, 0, unit = "lines")),
-		  plot.title = element_text(size = 9, hjust = .5, margin = margin(0, 0, 0, 0)),
-		  plot.margin = margin(.2, 0, 0, 0, unit = "lines"),
-		  ) +
-	    coord_cartesian(clip = "off") +
-	    guides(fill = "none", color = "none") +
-	    labs(x = NULL, y = NULL, title = unique(x$module))
-	}
+	y_scales <- 
+	    data_x |>
+	    group_by(module, gene_name) |>
+	    summarise(mn = min(cpm), mx = max(cpm)) |>
+	    ungroup() |>
+	    group_split(gene_name) |>
+	    map(function(x) scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)),
+					       limits = c(floor(x$mn), ceiling(x$mx)),
+					       breaks = c(max(floor(x$mn), 0), ceiling(x$mx))))
+
+	strips <- strip_nested(
+	    text_x = list(element_text(), element_text(face = "italic")),
+	    by_layer_x = TRUE
+	)
+	    
+	ggplot(data = data_x, 
+	       aes(x = hours, y = cpm)) +
+	geom_quasirandom(aes(fill = condition),
+			 method = "smiley", width = .2, 
+			 shape = 21, stroke = .2, size = 1.5, alpha = .4) +
+	geom_line(aes(group = stim, color = stim), 
+		  stat = "smooth", method = "loess", span = 1, se = FALSE, 
+		  linewidth = .7) +
+	scale_color_manual(values = pathway_colors) + 
+	scale_fill_manual(values = stim_colors) +
+	facet_nested(~ module + gene_name, 
+		     scales = "free_y", independent = "y",
+		     strip = strips) +
+	facetted_pos_scales(y = y_scales) +
+	theme_minimal() +
+	theme(axis.text.x = element_blank(),
+	      axis.text.y = element_text(size = 8, margin = margin(r = -1, unit = "lines")),
+	      panel.grid.major.x = element_line(linetype = 2, color = "black", linewidth = .1),
+	      panel.grid.major.y = element_blank(),
+	      panel.grid.minor.y = element_blank(),
+	      strip.text = element_text(size = 8.5, margin = margin(t = 0, b = 0)),
+	      plot.margin = margin(0, 0, 0, 0, unit = "lines"),
+	      ) +
+	coord_cartesian(clip = "off") +
+	guides(fill = "none", color = "none") +
+	labs(x = NULL, y = NULL)}
     ) |>
-    {function(x) plot_grid(plotlist = x, ncol = 1)}() +
-    theme(plot.margin = margin(t = .5, unit = "lines"))
+    {function(x) plot_grid(plotlist = x, ncol = 1, align = "v")}() +
+    theme(plot.margin = margin(0, 0, 0.5, 0.5, unit = "lines")) +
+    draw_label("Time", x = .5, y = -0.01, size = 8.5) +
+    draw_label("Log2 counts per million", x = -.125, y = 0.5, size = 8.5, angle = 90)
+
 
 bottom_title <- 
     ggdraw() + 
     draw_label(
-	       "Gene programs in the DN2 condition: (d) expression patterns, (e) GO biological processes, and\n(f) example disease genes",
+	       "Gene programs in the DN2 condition: (d) expression patterns and hub genes, (e) GO biological\nprocesses, and (f) example disease genes",
 	       x = 0,
 	       size = 9,
 	       hjust = 0
@@ -636,10 +641,10 @@ bottom_title <-
 
 bottom_fig <- 
     plot_grid(fig_d, NULL, fig_e, NULL, fig_f,
-	      labels = c("d", "", "e", "", "f"),
-	      label_size = 12, label_y = 1.05,
-	      rel_widths = c(.66, .1, 1, .1, .66), nrow = 1) +
-    theme(plot.margin = margin(t = .5, unit = "lines"))
+	      labels = c("d", "e", "", "", "f"),
+	      label_size = 12, label_x = c(0, -.05, 0, 0, 0), label_y = 1.05,
+	      rel_widths = c(.8, .1, 1, .1, .66), nrow = 1) +
+    theme(plot.margin = margin(t = 0.5, unit = "lines"))
 
 bottom_grid <-
     plot_grid(bottom_title, bottom_fig, ncol = 1, rel_heights = c(.1, 1))
@@ -648,38 +653,7 @@ bottom_grid <-
 # Final fig
 ggsave("./fig2.png",
        plot_grid(top_grid, NULL, fig_c, NULL, bottom_grid, 
-		 ncol = 1, rel_heights = c(0.75, 0.05, 0.3, 0.025, 1)) +
+		 ncol = 1, rel_heights = c(0.75, 0.05, 0.3, 0.001, 1)) +
        theme(plot.background = element_rect(fill = "white", color = "white")),
-       width = 6.5, height = 9.2, dpi = 600)
+       width = 6.5, height = 9.25, dpi = 600)
 
-
-
-
-#ldsc_df <- 
-#    read_tsv("../bcell_lowinput/s-ldsc/compiled_results.tsv") |>
-#    left_join(filter(module_sizes, stim == "DN2") |> select(module, ix), join_by(module))
-#
-#fig_f <- 
-#    ggplot(data = ldsc_df,
-#	   aes(x = factor(ix), y = gwas)) +
-#    geom_tile(aes(fill = tau_star)) +
-#    geom_point(data = filter(ldsc_df, pfdr <= 0.1),
-#	       aes(x = ix, y = gwas),
-#	       size = 1, shape = 8, color = "black") +
-#    scale_y_discrete(labels = scales::label_wrap(20)) +
-#    scale_fill_gradient2(low = "Navy Blue", mid = "white", high = "firebrick") +
-#    theme_minimal() +
-#    theme(
-#	  axis.text = element_text(size = 8),
-#	  axis.title = element_text(size = 8),
-#	  axis.title.y = element_blank(),
-#	  panel.grid = element_blank(),
-#	  legend.text = element_text(size = 8),
-#	  legend.title = element_text(size = 8),
-#	  legend.position = "top",
-#	  legend.margin = margin(l = -2.5, unit = "lines"),
-#	  plot.margin = margin(1, 0, 0, 0, unit = "lines")) +
-#    labs(x = "Module") +
-#    guides(fill = guide_colorbar("Tau*:", barheight = .5, barwidth = 7, 
-#				 title.position = "top"))
-#
