@@ -20,20 +20,8 @@ library(RColorBrewer)
 library(tidytext)
 library(patchwork)
 
-# Functions
 count <- dplyr::count
 select <- dplyr::select
-
-run_enrichment <- function(gene_list) {
-
-    enrichGO(gene = gene_list,
-	OrgDb = org.Hs.eg.db,
-	ont = "BP",
-	keyType = "ENSEMBL",
-	pAdjustMethod = "fdr",
-	qvalueCutoff = 0.1,
-	readable = TRUE)
-}
 
 # Set WGCNA cores
 allowWGCNAThreads(parallelly::availableCores())
@@ -47,7 +35,6 @@ sample_table <-
     column_to_rownames("sample_id")
 
 edger_res <- read_tsv("../results/edger/results.tsv")
-
 gene_names <- distinct(edger_res, gene_id, gene_name)  
 
 ## Use genes that are significant in the time course
@@ -55,22 +42,19 @@ stim_i <- commandArgs(TRUE)[1]
 
 sig_genes <- 
     edger_res |>
-    filter(stim == stim_i, FDR <= 0.25) |>
+    filter(stim == stim_i) |>
     pull(gene_id) |>
     unique()
     
 ## Create DESeq2 object for normalization of expression values.
 ## ~1 indicates no design, since we will not perform differential gene expression analysis here.
-## Select samples with library size > 2MM reads.
-## Filter for genes with normalized counts > 10 in at least 3 samples.
 ## Normalize counts using the variance-stabilizing transformation (VST)
 dds <- 
     DESeqDataSetFromTximport(dat, sample_table, ~1) |>
     estimateSizeFactors() |>
-    {function(x) x[, colSums(counts(x)) > 2e6]}() |>
     {function(x) x[rownames(x) %in% sig_genes, ]}() |>
     {function(x) x[, grepl(glue("_Unstim_0hrs|_{stim_i}_"), colnames(x))]}() |>
-    {function(x) x[rowSums(counts(x, normalized = TRUE) >= 2 ) >= 3, ]}() |>
+    {function(x) x[rowSums(counts(x, normalized = FALSE) >= 4 ) >= 3, ]}() |>
     vst()
 
 ## Transpose expression matrix to use with WGCNA
@@ -117,16 +101,6 @@ sft <-
 #
 ### Build WGCNA network 
 ### we need to reassing the 'cor()' function to avoid a bug in WGCNA
-
-#if (stim_i == "DN2") {
-#
-#    merge_cut_height <- 0.225
-#
-#} else { 
-#
-#    merge_cut_height <- 0.19
-#
-#}
 merge_cut_height <- 0.2
 detect_cut_height <- 0.99
 
@@ -141,7 +115,7 @@ network <-
 		     TOMType = "signed",
 		     power = beta_power, 
 		     maxBlockSize = ncol(count_matrix),
-		     minModuleSize = 30,
+		     minModuleSize = 60,
 		     mergeCutHeight = merge_cut_height,
 		     detectCutHeight = detect_cut_height,
 		     minKMEtoStay = 0.8,
@@ -288,6 +262,17 @@ ggsave(glue("./plots/trends_{stim_i}.png"), trends_plot,
 	    height = 3.5, width = 7)
    
 # GO
+run_enrichment <- function(gene_list) {
+
+    enrichGO(gene = gene_list,
+	OrgDb = org.Hs.eg.db,
+	ont = "BP",
+	keyType = "ENSEMBL",
+	pAdjustMethod = "fdr",
+	qvalueCutoff = 0.1,
+	readable = TRUE)
+}
+
 
 ## Run GO
 ## it takes a few minutes
@@ -359,15 +344,50 @@ ggsave(glue("./plots/go_{stim_i}.png"),
 # Plot correlation between Lupus-associated genes and modules in a heatmap
 # List of Lupus-associated genes
 sle_genes <- 
-    c("PTPN22", "FCGR2A", "TNFSF4", "NCF2", "IL10",
-      "SPRED2", "IFIH1", "STAT1", "STAT4", "IKZF1", "IKZF2", "IKZF3", 
-      "PXK", "IL12A", "TNIP1", "UHRF1BP1", "ATG5", "JAZF1",
-      "BANK1", "BLK", "MIR3142HG", "PRDM1", "TNFAIP3", 
-      "IRF5", "IRF7", "IRF8",
-      "WDFY4", "ARID5B", "CD44", "ETS1", "SH2B3", "SLC15A4", 
-      "CSK", "CIITA", "SOCS1", 
-      "CLEC16A", "ITGAM", "ITGAX", "TYK2", "UBE2L3", 
-      "IRAK1", "IKBKE", "IL10")
+    c("PTPN22", 
+      "FCGR2A", 
+      "TNFSF4", 
+      "NCF2", 
+      "IL10",
+      "LYST",
+      "SPRED2", 
+      "IFIH1", 
+      "STAT1", "STAT4", 
+      "IKZF2", 
+      "PXK", 
+      "IL12A", 
+      "BANK1", 
+      "TCF7", "SKP1",
+      "TNIP1", 
+      "MIR3142HG", 
+      "UHRF1BP1", 
+      "ATG5", "PRDM1",
+      "TNFAIP3", 
+      "JAZF1",
+      "IKZF1", 
+      "IRF5", "TNPO3",
+      "BLK", 
+      "WDFY4", 
+      "ARID5B", 
+      "IRF7", 
+      "CD44",
+      "DHCR7", "NADSYN1",
+      "ETS1", "FLI1",
+      "SH2B3", 
+      "SLC15A4",
+      "RAD51B",
+      "CSK", 
+      "CIITA", "SOCS1", 
+      "ITGAM", "ITGAX", 
+      "IRF8",
+      "PLD2",
+      "IKZF3", 
+      "TYK2", 
+      "UBE2L3", 
+      "TASL",
+      "IRAK1", "MECP2",
+      "IKBKE", "IL10" 
+    )
 
 
 sle_genes_cormatrix <- 
@@ -376,7 +396,7 @@ sle_genes_cormatrix <-
     left_join(kme_all_df, join_by(gene_id)) |>
     filter(!is.na(module)) |>
     group_by(gene_id) |>
-    filter(any(kme > 0.8)) |>
+    filter(any(kme >= 0.85)) |>
     ungroup() |>
     select(-gene_id) |>
     pivot_wider(names_from = module, values_from = kme) |>
@@ -393,7 +413,6 @@ pheatmap(sle_genes_cormatrix,
 	 color = colorRampPalette(rev(brewer.pal(n = 8, name ="RdYlBu")))(100),
 	 legend_breaks = seq(-1, 1, by = .2))
 dev.off()
-
 
 # Save data for analysis of module preservation across stims
 signedKME(count_matrix, orderMEs(network$MEs), outputColumnName = "") |>

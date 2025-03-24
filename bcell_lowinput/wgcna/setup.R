@@ -5,9 +5,13 @@ if (!file.exists("data")) dir.create("./data")
 if (!file.exists("plots")) dir.create("./plots")
 
 # Sample meta data
+samples_keep <- 
+    read_tsv("../data/sample_decode.tsv")
+
 meta_data <- 
     "../data/metadata_pooledreps.tsv" |>
-    read_tsv(col_names = c("sample_id", "fq1", "fq2"))
+    read_tsv(col_names = c("sample_id", "fq1", "fq2")) |>
+    filter(sample_id %in% samples_keep$sample_name)
 
 # Transcript to Gene map
 tx_to_gene <- 
@@ -20,8 +24,6 @@ tx_to_gene <-
 	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+")) |>
     select(tx_id, gene_id, gene_name)
 
-
-# Expression data
 salmon_files <- 
     sprintf("../results/salmon_pooledreps/%s/quant.sf", meta_data$sample_id) |>
     setNames(meta_data$sample_id)
@@ -32,12 +34,3 @@ txi <- tximport(salmon_files,
 
 # Save data
 write_rds(txi, "./data/gene_expression.rds")
-
-# Lupus-associated genes
-#sle_genes <- 
-#    "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Khunsriraksakul/Khunsriraksakul_SuppData2.xlsx" |>
-#    readxl::read_excel(skip = 1) |>
-#    distinct(`Mapped Gene`) |>
-#    pull(1)
-#
-#write_lines(sle_genes, "./data/lupus_genes.txt")
