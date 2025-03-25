@@ -17,6 +17,8 @@ tx_to_gene <-
 # Import expression data
 stims <- c("Unstim", "IL4", "CD40L", "TLR9", "TLR7", "BCR", "BCR_TLR7", "DN2")
 
+samples_keep <- read_tsv("./data/sample_decode.tsv")
+
 sample_table <- 
     "./data/metadata_pooledreps.tsv" |>
     read_tsv(col_names = c("sample_id", "f1", "f2")) |>
@@ -29,6 +31,7 @@ sample_table <-
     select(sample_id, group, donor, treat, time) |>
     arrange(treat, time, donor) |>
     mutate(group = fct_inorder(group)) |>
+    filter(sample_id %in% samples_keep$sample_name) |>
     column_to_rownames("sample_id")
 
 salmon_files <- 
@@ -60,9 +63,6 @@ normMat <- log(normMat)
 # Creating a DGEList object for use in edgeR.
 y <- DGEList(cts)
 y <- scaleOffset(y, normMat)
-
-# Remove samples that failed
-y <- y[, y$samples$lib.size > 2e6]
 
 sample_table_filt <- 
     sample_table |>
@@ -126,8 +126,3 @@ qlf_all <-
     select(group1, group2, gene_id, gene_name, everything())
 
 write_tsv(qlf_all, "./results/edger/diff_expr_all_times.tsv")
-
-
-
-
-
