@@ -356,6 +356,7 @@ bcells <- bcells |>
     RunUMAP(reduction = "harmony", 
 	    dims = 1:30,
 	    seed.use = 1L,
+	    reduction.name = "umap")
 
 umap_df <- 
     Embeddings(bcells, "umap") |>
@@ -404,3 +405,4 @@ write_tsv(cluster_markers_2, "./data/v4_cluster_markers.tsv")
 
 # Save object
 write_rds(bcells, "./data/seuratv4_qced.rds")
+
