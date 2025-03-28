@@ -395,23 +395,23 @@ sle_genes_cormatrix <-
     filter(gene_name %in% sle_genes) |>
     left_join(kme_all_df, join_by(gene_id)) |>
     filter(!is.na(module)) |>
-    group_by(gene_id) |>
-    filter(any(kme >= 0.85)) |>
-    ungroup() |>
+    #group_by(gene_id) |>
+    #filter(any(kme >= 0.85)) |>
+    #ungroup() |>
     select(-gene_id) |>
     pivot_wider(names_from = module, values_from = kme) |>
     column_to_rownames("gene_name") |>
     select(all_of(module_colors)) |>
     {function(x) setNames(x, glue("M{1:ncol(x)}"))}() |>
-    data.matrix() |>
-    t()
+    data.matrix()
 
 png(glue("./plots/slegenes_{stim_i}.png"), 
-    units = "in", height = 3, width = 6.5, res = 400)
+    units = "in", height = 6, width = 4, res = 400)
 pheatmap(sle_genes_cormatrix,
-	 fontsize = 9, angle_col = 90, cluster_rows = FALSE, 
-	 color = colorRampPalette(rev(brewer.pal(n = 8, name ="RdYlBu")))(100),
-	 legend_breaks = seq(-1, 1, by = .2))
+	 fontsize = 9, angle_col = 0, cluster_rows = TRUE, cluster_cols = FALSE, 
+	 color = colorRampPalette(rev(brewer.pal(n = 11, name ="RdYlBu")))(100),
+	 display_numbers = round(sle_genes_cormatrix, 2),
+	 legend = FALSE)
 dev.off()
 
 # Save data for analysis of module preservation across stims
