@@ -17,7 +17,7 @@ gencode <-
 
 ase_data <- 
     read_tsv("../3-ase/ase_data.tsv") |>
-    filter(p_bonferroni < 0.05, !is.na(gene_id))
+    filter(!is.na(gene_id))
 
 # Run liftOver to convert GRCh38 coordinates to GRCh37
 bed38_file <- "./data/hg38.bed"
@@ -57,13 +57,14 @@ write_lines(bedlift$gene_id, "./data/control.txt")
 # Make gene sets
 gene_sets <- 
     ase_data |>
+    filter(p_bonferroni < 0.05) |>
     distinct(stim, gene_id) |>
     separate_rows(gene_id, sep = "/") |>
     mutate(stim = str_remove(stim, " "),
 	   stim = factor(stim, levels = c("Day0", "TLR7", "BCR", "DN2")),
 	   gene_id = str_remove(gene_id, "\\.\\d+$")) |>
     filter(gene_id %in% bedlift$gene_id) |>
-    {function(x) split(x, x$stim)}() |>
+    {function(x) split(x, x$stim)}() |> 
     map(~pull(., gene_id))
 
 walk2(gene_sets, names(gene_sets), 
