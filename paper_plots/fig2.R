@@ -41,7 +41,6 @@ sample_table <-
 dds <- 
     DESeqDataSetFromTximport(dat, sample_table, ~1) |>
     estimateSizeFactors() |>
-    {function(x) x[, colSums(counts(x)) > 2e6]}() |>
     vst()
 
 pca_res <-
@@ -75,26 +74,22 @@ legend_df <-
 	   stim = fct_inorder(stim))
 
 legend_plot <-
-    ggplot(legend_df, aes(x = time, y = 1)) +
+    ggplot(legend_df, aes(x = time, y = fct_rev(stim))) +
     geom_point(aes(fill = condition), 
 	       shape = 21, size = 2.5, stroke = .25) +
     scale_fill_manual(values = stim_colors) +
-    facet_wrap(~stim, ncol = 1) +
     theme_minimal() +
     theme(text = element_text(size = 8),
-	  axis.text.y = element_blank(),
+	  axis.text.y = element_text(size = 9, margin = margin(r = -.5, unit = "lines")),
 	  axis.title.y =  element_blank(),
 	  axis.ticks.x = element_line(linewidth = .25),
 	  axis.ticks.y = element_blank(),
 	  panel.grid = element_blank(),
 	  panel.border = element_rect(color = NA, fill = NA),
-	  panel.spacing = unit(0, "lines"),
-	  strip.clip = "off",
-	  strip.text = element_text(size = 9, margin = margin(t = 0, b = 0)),
-	  strip.background = element_rect(color = NA, fill = "grey90"),
-	  plot.margin = margin(0, 2, 0, -1, unit = "pt")
+	  plot.margin = margin(0, 0, 0, 0, unit = "pt"),
+	  plot.title = element_text(size = 9, margin = margin(t = 0, b = 0))
 	  ) +
-    labs(x = "hours") +
+    labs(x = "hours", title = "Colors:") +
     guides(fill = "none")
 
 pca_plot <- 
@@ -110,8 +105,7 @@ pca_plot <-
 	  axis.text = element_blank(),
 	  axis.title = element_text(size = 9),
 	  panel.grid = element_blank(),
-	  plot.margin = margin(0, 0, 0, .5, unit = "lines"),
-	  plot.title = element_text(size = 9)) +
+	  plot.margin = margin(0, 0, 0, .5, unit = "lines")) +
     guides(fill = "none") +
     labs(x = glue("PC1 ({pca_var[1]})"), y = glue("PC2 ({pca_var[2]})"))
 
@@ -130,18 +124,18 @@ pca_inset <-
 	  panel.background = element_rect(fill = "transparent"),
 	  plot.background = element_rect(fill = "transparent", color = NA),
 	  plot.title = element_text(size = 7, margin = margin(b = 0)),
-	  plot.margin = margin(0, 0, 0, 0)) +
+	  plot.margin = margin(0, 1.5, 0, 1.5, unit = "lines")) +
     guides(color = "none") +
-    labs(title = "Includes BCR\nstimulation:")
+    labs(title = "BCR stimulation:")
 
-pca_grid <- 
-    ggdraw(pca_plot) +
-    draw_plot(pca_inset, 0.15, 0.1, .3, .35)
+#pca_grid <- 
+#    ggdraw(pca_plot) +
+#    draw_plot(pca_inset, 0.15, 1, .3, .3)
 
 fig_a_title <- 
     ggdraw() + 
     draw_label(
-	       "PCA shows separation of stimuli and\ntime points",
+	       "PCA shows separation of stimuli and time points\n ",
 	       x = 0,
 	       size = 9,
 	       hjust = 0
@@ -154,9 +148,9 @@ fig_a_grid <-
 	      fig_a_title,
 	      plot_grid(
 			pca_plot, 
-			plot_grid(legend_plot, NULL, pca_inset, ncol = 1, rel_heights = c(1, .05, .45)), 
+			plot_grid(pca_inset, NULL, legend_plot, ncol = 1, rel_heights = c(.4, .05, 1)), 
 			nrow = 1, 
-			rel_widths = c(1, .3)
+			rel_widths = c(1, .6)
 			),
 	      ncol = 1, 
 	      rel_heights = c(.1, 1),
@@ -230,12 +224,11 @@ diff_plot <-
 	  panel.grid.major = element_blank(),
 	  panel.background = element_rect(color = NA, fill = "transparent"),
 	  plot.margin = margin(0, 0, 0, 0),
-	  legend.position.inside = c(.9, .4),
+	  legend.position.inside = c(.8, .3),
 	  ) +
     labs(fill = "DE\ngenes:") +
-    guides(fill = guide_colorbar(barwidth = .5, barheight = 7, position = "inside")) +
+    guides(fill = guide_colorbar(barwidth = .5, barheight = 5, position = "inside")) +
     coord_cartesian(xlim = c(1, 28), ylim = c(1, 28))
-
 
 
 b_axis_x_df <- 
@@ -293,19 +286,19 @@ fig_b_title <-
 		 
 b_tmp <- 
     plot_grid(NULL, b_axis_x_plot, b_axis_y_plot, diff_plot,
-	      ncol = 2, nrow = 2, align = "v", rel_heights = c(.05, 1), rel_widths = c(0.05, 1))
+	      ncol = 2, nrow = 2, align = "v", rel_heights = c(.075, 1), rel_widths = c(0.06, 1))
 
 fig_b_grid <- 
     plot_grid(
 	      fig_b_title,
-	      b_tmp,
+	      b_tmp + theme(plot.margin = margin(t = .5, unit = "lines")),
 	      ncol = 1, 
 	      rel_heights = c(.1, 1),
 	      labels = c("b"), label_size = 12
     )
 
 top_grid <- 
-    plot_grid(fig_a_grid, NULL, fig_b_grid, nrow = 1, rel_widths = c(1.05, .05, 1))
+    plot_grid(fig_a_grid, NULL, fig_b_grid, nrow = 1, rel_widths = c(1, .025, .8))
 
 
 
@@ -335,17 +328,17 @@ names(pathway_colors) <- str_remove(names(pathway_colors), "_48hrs")
 
 pathway_colors <- c("IL4" = "goldenrod4", pathway_colors)
 
-plot_timecourse <- function(counts_df) {
-
-    ggplot(data = counts_df, aes(x = hours, y = obs_cpm)) +
+timecourse_plot_1 <- 
+    ggplot(data = cpm_df |> filter(gene_name %in% c("AICDA", "FCER2", "BANK1")), 
+	   aes(x = hours, y = obs_logcpm)) +
     geom_quasirandom(aes(fill = condition),
 		     method = "smiley", width = .2, 
 		     shape = 21, stroke = .1, size = 1.25, alpha = .4) +
     geom_line(aes(group = stim, color = stim), 
 	      stat = "smooth", method = "loess", span = 1, se = FALSE, 
 	      linewidth = .7) +
-    scale_y_continuous(expand = expansion(mult = c(0.25, 0.1)),
-		       breaks = c(0, 10*ceiling(max(counts_df$obs_cpm)/10))) +
+    scale_y_continuous(limits = ~ c(floor(min(.x)), ceiling(max(.x))),
+		       breaks = ~ c(max(c(0, ceiling(.x[1]))), floor(.x[2]))) +
     scale_color_manual(values = pathway_colors) + 
     scale_fill_manual(values = stim_colors) + 
     facet_grid(gene_name~stim, scale = "free", space = "free_x") +
@@ -353,17 +346,47 @@ plot_timecourse <- function(counts_df) {
     theme(panel.grid.minor = element_blank(),
 	  panel.grid.major.x = element_blank(),
 	  panel.spacing.x = unit(0, "null"),
-	  strip.text = element_blank(),
+	  panel.spacing.y = unit(.5, "lines"),
+	  strip.text.x = element_blank(),
+	  strip.text.y = element_text(size = 9, angle = 0),
 	  strip.clip = "off",
 	  axis.text.x = element_blank(),
-	  axis.text.y = element_text(size = 8),
-	  plot.title = element_text(size = 8, hjust = .5, face = "italic",
-				    margin = margin(b = 0)),
-	  legend.position = "none",
-	  plot.margin = margin(2, 2, 0, 2, "pt")) +
+	  axis.text.y = element_text(size = 8, color = "grey40"),
+	  axis.title.y = element_text(size = 8, color = "grey40"),
+	  legend.position = "none") + 
     coord_cartesian(clip = "off") +
-    labs(x = NULL, y = NULL, title = unique(counts_df$gene_name))
-}
+    labs(x = NULL, y = "Log2 CPM")
+
+timecourse_plot_2 <- 
+    ggplot(data = cpm_df |> filter(gene_name %in% c("IRF5", "TBX21", "XBP1")), 
+	   aes(x = hours, y = obs_logcpm)) +
+    geom_quasirandom(aes(fill = condition),
+		     method = "smiley", width = .2, 
+		     shape = 21, stroke = .1, size = 1.25, alpha = .4) +
+    geom_line(aes(group = stim, color = stim), 
+	      stat = "smooth", method = "loess", span = 1, se = FALSE, 
+	      linewidth = .7) +
+    scale_y_continuous(limits = ~ c(floor(min(.x)), ceiling(max(.x))),
+		       breaks = ~ c(max(c(0, ceiling(.x[1]))), floor(.x[2]))) +
+    scale_color_manual(values = pathway_colors) + 
+    scale_fill_manual(values = stim_colors) + 
+    facet_grid(gene_name~stim, scale = "free", space = "free_x") +
+    theme_minimal() +
+    theme(panel.grid.minor = element_blank(),
+	  panel.grid.major.x = element_blank(),
+	  panel.spacing.x = unit(0, "null"),
+	  panel.spacing.y = unit(.5, "lines"),
+	  strip.text.x = element_blank(),
+	  strip.text.y = element_text(size = 9, angle = 0),
+	  strip.clip = "off",
+	  axis.text.x = element_blank(),
+	  axis.text.y = element_text(size = 8, color = "grey40"),
+	  axis.title.y = element_text(size = 8, color = "grey40"),
+	  legend.position = "none") + 
+    coord_cartesian(clip = "off") +
+    labs(x = NULL, y = "Log2 CPM")
+
+fig_c_grid <- plot_grid(timecourse_plot_1 , timecourse_plot_2, nrow = 1)
 
 fig_c_title <- 
     ggdraw() + 
@@ -374,27 +397,12 @@ fig_c_title <-
 	       hjust = 0
 	       ) +
     theme(text = element_text(size = 9),
-	  plot.margin = margin(b = .5, l = 4, unit = "lines"))
+	  plot.margin = margin(b = .05, l = 4, unit = "lines"))
        
-fig_c_grid <- 
-    plot_grid(NULL,
-	      plot_grid(plot_timecourse(filter(cpm_df, gene_name == "AICDA")),
-			plot_timecourse(filter(cpm_df, gene_name == "FCER2")),
-			plot_timecourse(filter(cpm_df, gene_name == "BANK1")),
-			ncol = 1),
-	      NULL,
-	      plot_grid(plot_timecourse(filter(cpm_df, gene_name == "IRF5")),
-			plot_timecourse(filter(cpm_df, gene_name == "TBX21")),
-			plot_timecourse(filter(cpm_df, gene_name == "XBP1")),
-			ncol = 1),
-	      NULL,
-	      nrow = 1, rel_widths = c(0.05, 1, 0.05, 1, 0.05)) +
-    draw_label("Counts per million", x = -.001, y = 0.5, vjust = 1.5, angle = 90, size = 9)
        
 fig_c <- 
     plot_grid(fig_c_title, fig_c_grid, ncol = 1, rel_heights = c(.1, 1),
 	      labels = "c", label_size = 12, label_y = 1.75)
-
 
 
 # Fig D #######################################################################
@@ -459,7 +467,7 @@ module_plot <-
 	  panel.grid.major.y = element_blank(),
 	  panel.grid.minor.y = element_blank(),
 	  panel.spacing.y = unit(0.1, "lines"),
-	  strip.text = element_text(size = 8.5, margin = margin(t = 0, b = 0)),
+	  strip.text = element_text(size = 8, margin = margin(t = 0, b = 0)),
 	  strip.clip = "off",
 	  plot.margin = margin(0, 0, 0, 0, unit = "lines")) +
     #guides(color = "none") +
@@ -478,7 +486,7 @@ kim_plot <-
     facet_wrap(~module_ix, scale = "free_y", ncol = 1,
 	       labeller = as_labeller(c("Module 1" = " ", "Module 2" = " ", "Module 3" = " ",
 					"Module 4" = " ", "Module 5" = " ", "Module 6" = " ",
-					"Module 7" = " "))) +
+					"Module 7" = " ", "Module 8" = " "))) +
     theme_minimal() +
     theme(axis.text.y.right = element_text(size = 7, face = "italic", 
 					   margin = margin(l = .5, unit = "lines")),
@@ -502,9 +510,9 @@ go_res <-
     group_by(module) |>
     top_n(5, -log10(pvalue)) |>
     ungroup() |>
-    mutate(Description = str_trunc(Description, width = 30),
+    mutate(Description = str_trunc(Description, width = 36),
 	   gene_r = map_dbl(GeneRatio, ~eval(parse(text = .)))) |>
-    left_join(module_sizes, join_by(module)) |>
+    right_join(module_sizes, join_by(module)) |>
     select(module = ix, Description, pvalue, gene_r) |>
     arrange(module, pvalue) |>
     mutate(Description = fct_inorder(Description))
@@ -518,7 +526,7 @@ fig_e <-
     scale_y_discrete(position = "right") +
     scale_fill_gradient(low = "white", high = "black") +
     scale_size(range = c(.5, 2.5)) +
-    ggforce::facet_col(vars(module), scales = "free_y") + 
+    ggforce::facet_col(vars(module), scales = "free_y", drop = FALSE) + 
     theme_minimal() +
     theme(
 	  axis.text.y.right = element_text(size = 7, margin = margin(r = .5, l = 0, unit = "lines")),
@@ -530,7 +538,7 @@ fig_e <-
 	  panel.grid = element_blank(),
 	  plot.margin = margin(0, 0, 0, 0, unit = "lines"),
 	  strip.clip = "off",
-	  strip.text = element_text(size = 8.5, margin = margin(t = 0, b = 0, unit = "lines")),
+	  strip.text = element_text(size = 8, margin = margin(t = 0, b = 0, l = 2, unit = "lines")),
 	  panel.spacing.y = unit(0.1, "lines")
 	  ) +
     guides(fill = guide_colorbar("logP:", barheight = 5, barwidth = .25),
@@ -552,18 +560,21 @@ aid_genes <-
     tribble(~module, ~gene_name,
 	    "black", "TNFSF4",
 	    "black", "IL12RB1",
-	    "blue", "TRAF1",
-	    "blue", "IL2RA",
-	    "brown", "CSK",
-	    "brown", "IKBKE",
-	    "green", "BCL11A",
-	    "green", "CD37",
+	    "turquoise", "TRAF1",
+	    "turquoise", "IL2RA",
+	    "yellow", "CSK",
+	    "yellow", "IKBKE",
+	    "green", "BLK",
+	    "green", "BANK1",
 	    "red", "SH2B3",
 	    "red", "NFKBIA",
-	    "yellow", "UBE2L3",
-	    "yellow", "STAT1",
-	    "turquoise", "ETS1",
-	    "turquoise", "IL4R") |>
+	    "brown", "UBE2L3",
+	    "brown", "IRF5",
+	    "blue", "ETS1",
+	    "blue", "IL4R",
+	    "pink", "ITGA4",
+	    "pink", "CXCR4"
+	    ) |>
     left_join(module_sizes, join_by(module)) |>
     select(module, ix, gene_name) |>
     arrange(ix, gene_name)
@@ -615,7 +626,7 @@ fig_f <-
 	      panel.grid.major.x = element_line(linetype = 2, color = "black", linewidth = .1),
 	      panel.grid.major.y = element_blank(),
 	      panel.grid.minor.y = element_blank(),
-	      strip.text = element_text(size = 8.5, margin = margin(t = 0, b = 0)),
+	      strip.text = element_text(size = 8, margin = margin(t = 0, b = 0)),
 	      plot.margin = margin(0, 0, 0, 0, unit = "lines"),
 	      ) +
 	coord_cartesian(clip = "off") +
@@ -643,7 +654,7 @@ bottom_fig <-
     plot_grid(fig_d, NULL, fig_e, NULL, fig_f,
 	      labels = c("d", "e", "", "", "f"),
 	      label_size = 12, label_x = c(0, -.05, 0, 0, 0), label_y = 1.05,
-	      rel_widths = c(.8, .1, 1, .1, .66), nrow = 1) +
+	      rel_widths = c(.8, .1, 1, .1, .6), nrow = 1) +
     theme(plot.margin = margin(t = 0.5, unit = "lines"))
 
 bottom_grid <-
@@ -653,7 +664,7 @@ bottom_grid <-
 # Final fig
 ggsave("./fig2.png",
        plot_grid(top_grid, NULL, fig_c, NULL, bottom_grid, 
-		 ncol = 1, rel_heights = c(0.75, 0.05, 0.3, 0.001, 1)) +
+		 ncol = 1, rel_heights = c(0.55, 0.03, 0.25, 0.001, 1)) +
        theme(plot.background = element_rect(fill = "white", color = "white")),
-       width = 6.5, height = 9.25, dpi = 600)
+       width = 6.5, height = 8.5, dpi = 600)
 

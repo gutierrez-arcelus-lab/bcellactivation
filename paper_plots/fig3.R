@@ -14,9 +14,14 @@ clip_expression <- function(values) {
 
 # colors
 stim_colors <- 
-    read_tsv("../figure_colors.txt", col_names = c("stim", "color")) |>
-    mutate(stim = str_replace(stim, "_", " "),
-	   stim = paste0(stim, "h")) |>
+    read_tsv("../figure_colors.txt", col_names = c("stim", "time", "color")) |>
+    mutate(stim = recode(stim, 
+			 "IL4" = "IL-4c", 
+			 "TLR7" = "TLR7c",
+			 "BCR" = "BCRc", 
+			 "DN2" = "DN2c")) |>
+    unite("stim", c(stim, time), sep = " ") |>
+    mutate(stim = paste0(stim, "h")) |>
     deframe()
 
 # meta data
@@ -30,37 +35,87 @@ features_df <- file.path(cellranger_dir_1984, "features.tsv.gz") |>
     read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
 
 # data 
-bcells <- read_rds("../citeseq/data/seurat_qced.rds")
+bcells <- read_rds("../citeseq/data/seuratv4_qced.rds")
 
 umap_df <- 
-    read_tsv("../citeseq/data/umap_df.tsv") |>
+    read_tsv("../citeseq/data/v4_umap_df.tsv") |>
+    mutate(hto = str_replace(hto, "IL4", "IL-4c"),
+	   hto = str_replace(hto, "TLR7", "TLR7c"),
+	   hto = str_replace(hto, "BCR", "BCRc"),
+	   hto = str_replace(hto, "DN2", "DN2c")) |>
     mutate(hto = factor(hto, levels = names(stim_colors)))
+
+bcells@meta.data <- bcells@meta.data |>
+    mutate(dmm_hto_call = str_replace(dmm_hto_call, "IL4", "IL-4c"),
+	   dmm_hto_call = str_replace(dmm_hto_call, "TLR7", "TLR7c"),
+	   dmm_hto_call = str_replace(dmm_hto_call, "BCR", "BCRc"),
+	   dmm_hto_call = str_replace(dmm_hto_call, "DN2", "DN2c"))
+
 
 # Figure A ####################################################################
 umap_stims <-
     ggplot(umap_df, aes(umap_1, umap_2)) +
     geom_point(aes(fill = hto), size = .6, 
-	       shape = 21, stroke = .05, color = "grey30") +
+	       shape = 21, stroke = .05, color = "black") +
     scale_fill_manual(values = stim_colors) +
     theme_minimal() +
-    theme(axis.title = element_blank(),
-	  axis.text = element_blank(),
+    theme(axis.title = element_text(size = 8),
+	  axis.text = element_text(size = 8),
 	  axis.ticks = element_blank(),
 	  panel.grid = element_blank(),
 	  legend.text = element_text(size = 8, margin = margin(l = 0)),
 	  legend.title = element_text(size = 9, margin = margin(b = 0)),
-	  legend.margin = margin(l = -1, unit = "lines"),
+	  legend.margin = margin(0, 0, 0, 0),
 	  legend.key.spacing.y = unit(-.2, "lines"),
-	  plot.margin = margin(r = 0)
+	  plot.margin = margin(0, 0, 0, 0)
 	  ) +
+    labs(x = "UMAP 1", y = "UMAP 2") +
     guides(fill = guide_legend(title = "Stim:",
 			       title.position = "top",
 			       override.aes = list(size = 3)))
 
+
+# Figure B ####################################################################
+cluster_labels <-
+    umap_df |>
+    mutate(cluster = factor(cluster)) |>
+    group_by(cluster) |>
+    summarise_at(vars(umap_1, umap_2), mean) |>
+    ungroup()
+
+cluster_colors <- c("#A8CDE2", "#3B83B9", "#E3362C", "#F9B56F", "#FC9230", "#DDA086",
+		    "#9F7BB8", "#987898", "#F1E78D", "#B05D2F", "#83BF98", "#6ABD5D",
+		    "#7E9D59", "#F4817F")
+
+umap_clust <- 
+    ggplot(umap_df, aes(umap_1, umap_2)) +
+    geom_point(aes(fill = factor(cluster)), size = .6, 
+	       shape = 21, stroke = .05, color = "grey30") +
+    geom_label(data = cluster_labels |> filter(! cluster %in% c(12, 13)), 
+	       aes(x = umap_1, y = umap_2, label = cluster),
+	       label.padding = unit(0.1, "lines"),
+	       size = 8, size.unit = "pt", alpha = .5, fontface = "bold") +
+    ggrepel::geom_label_repel(data = cluster_labels |> filter(cluster %in% c(12, 13)), 
+	       aes(x = umap_1, y = umap_2, label = cluster),
+	       label.padding = unit(0.1, "lines"),
+	       min.segment.length = 0, force_pull = 0, nudge_y = -1,
+	       size = 3, alpha = .5, fontface = "bold") +
+    scale_fill_manual(values = cluster_colors) +
+    theme_minimal() +
+    theme(
+          axis.text = element_text(size = 8),
+          axis.title = element_text(size = 8),
+	  panel.grid = element_blank(),
+	  plot.margin = margin(0, 0, 0, 0)
+	  ) +
+    labs(x = "UMAP 1", y = "UMAP 2") +
+    guides(fill = "none") 
+
+# Make top panel 
 fig_a_title <- 
     ggdraw() + 
     draw_label(
-	       "UMAP shows separation of stimuli and\ntime points",
+	       "UMAP shows separation of stimuli and time points",
 	       x = 0,
 	       size = 9,
 	       hjust = 0
@@ -68,17 +123,44 @@ fig_a_title <-
     theme(text = element_text(size = 9),
 	  plot.margin = margin(l = 1.25, unit = "lines"))
 
-fig_a <- plot_grid(fig_a_title, umap_stims, ncol = 1, rel_heights = c(.1, 1))
+fig_b_title <- 
+    ggdraw() + 
+    draw_label(
+	       "Louvain clustering reveals B cell states",
+	       x = 0,
+	       size = 9,
+	       hjust = 0
+	       ) +
+    theme(text = element_text(size = 9),
+	  plot.margin = margin(l = 1.25, unit = "lines"))
+
+top_umaps <- 
+    plot_grid(umap_stims + guides(fill = "none"), 
+	      NULL, 
+	      get_plot_component(umap_stims, 'guide-box-right', return_all = TRUE),
+	      NULL,
+	      umap_clust,
+	      nrow = 1, rel_widths = c(1, .025, .2, .2, 1))
+
+top_titles <- 
+    plot_grid(fig_a_title, fig_b_title, nrow = 1, rel_widths = c(1, .8),
+	      labels = c('a', 'b'), label_size = 12)
 
 
-# Figure B ####################################################################
+grid_ab <- plot_grid(top_titles, top_umaps, ncol = 1, rel_heights = c(.1, 1))
+
+
+
+
+# Figure C ####################################################################
 marker_prots <- 
-    c("IgM", "IgD", "CD62L", "CD38",
-      "CD1c", "CD27", "CD11c", "CD86",
-      "CD21", "CD23", "CD69", "CD83")
+    c('IgM', 'IgD', 'CD1c', 
+      'CD11c', 'CD21', 'CD23',
+      'CD27', 'CD38', 'CD62L',
+      'CD69', 'CD83', 'CD86')
 
-marker_prots_df <- 
-    LayerData(bcells, assay = "ADT", layer = "data")[marker_prots, ] |>
+marker_prots_df <-
+    bcells@assays$ADT@data[marker_prots, ] |>
     as_tibble(rownames = "feature_id") |>
     pivot_longer(-feature_id, names_to = "barcode") |>
     left_join(select(umap_df, barcode, umap_1, umap_2), join_by(barcode)) |>
@@ -91,8 +173,8 @@ umaps_prot_markers <-
     marker_prots_df |>
     group_split(feature_id) |>
     map(~ggplot(data = ., aes(x = umap_1, y = umap_2)) +
-	geom_point(aes(color = value), size = .1, stroke = 0) +
-	scale_color_gradient(low = "grey90", high = "darkred") +
+	geom_point(aes(color = value), size = .2, stroke = 0) +
+	scale_color_viridis_c(option = "magma") +
 	facet_wrap(~feature_id, ncol = 1) +
 	theme_minimal() +
 	theme(axis.title = element_blank(),
@@ -108,53 +190,13 @@ umaps_prot_markers <-
 	labs(color = NULL) +
 	guides(color = guide_colorbar(barwidth = .2, barheight = 2))
 	) |>
-    {function(x) plot_grid(plotlist = x, ncol = 4)}() +
-    theme(plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"))
-
-fig_b_title <- 
-    ggdraw() + 
-    draw_label(
-	       "Surface proteins markers",
-	       x = 0,
-	       size = 9,
-	       hjust = 0
-	       ) +
-    theme(text = element_text(size = 9),
-	  plot.margin = margin(l = 1.25, unit = "lines"))
-
-fig_b <- plot_grid(fig_b_title, umaps_prot_markers, ncol = 1, rel_heights = c(.1, 1))
-
-
-# Figure C ####################################################################
-cluster_labels <-
-    umap_df |>
-    mutate(cluster = factor(cluster)) |>
-    group_by(cluster) |>
-    summarise_at(vars(umap_1, umap_2), mean) |>
-    ungroup()
-
-umap_clust <- 
-    ggplot(umap_df, aes(umap_1, umap_2)) +
-    geom_point(aes(fill = factor(cluster)), size = .6, 
-	       shape = 21, stroke = .05, color = "grey30") +
-    geom_label(data = cluster_labels, 
-	       aes(x = umap_1, y = umap_2, label = cluster),
-	       label.padding = unit(0.1, "lines"),
-	       size = 8, size.unit = "pt", alpha = .5, fontface = "bold") +
-    scale_fill_manual(values = pals::kelly(n = length(unique(umap_df$cluster)) + 1 )[-1] ) +
-    theme_minimal() +
-    theme(
-          axis.text = element_blank(),
-          axis.title = element_blank(),
-	  panel.grid = element_blank(),
-	  plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = 0, unit = "pt")
-	  ) +
-    guides(fill = "none") 
+    {function(x) plot_grid(plotlist = x, ncol = 3)}() +
+    theme(plot.margin = margin(0, 0, 0, 0))
 
 fig_c_title <- 
     ggdraw() + 
     draw_label(
-	       "Louvain clustering",
+	       "Selected proteins markers",
 	       x = 0,
 	       size = 9,
 	       hjust = 0
@@ -162,21 +204,12 @@ fig_c_title <-
     theme(text = element_text(size = 9),
 	  plot.margin = margin(l = 1.25, unit = "lines"))
 
-fig_c <- plot_grid(fig_c_title, umap_clust, ncol = 1, rel_heights = c(.1, 1))
-
-
-
-
-
-
-
 # Figure D ###################################################################
-
-cluster_markers <- read_tsv("../citeseq/data/cluster_markers.tsv")
+cluster_markers <- read_tsv("../citeseq/data/v4_cluster_markers.tsv")
 
 top_markers <- 
     cluster_markers |>
-    filter(p_val_adj <= 0.05) |>
+    filter(p_val_adj <= 0.05, avg_log2FC > 0) |>
     group_by(cluster) |>
     top_n(10, abs(avg_log2FC)) |>
     ungroup()
@@ -190,73 +223,79 @@ top_markers_uniq <-
     select(gene, gene_name, gene_cluster = cluster)
 
 curated_markers <-
-    c("XBP1", "JCHAIN", "IGHE", "FCER2", "NR4A3",
-      "IRF1", "TBX21", "GBP4", "STAT1", "SLAMF7",
-      "CCL4",
-      "IGHA1", "ITGAX", "CD27", "TCL1A", "CD24", "TNFRSF13B", "CD1C", 
-      "MKI67", "CDC20", "UHRF1", 
-      "FOS", "DUSP1")
+    tribble(~cluster, ~gene_name,
+	    0, "XBP1", 
+	    0, "NR4A3", 
+	    0, "IGHE", 
+	    1, "IRF1",
+	    1, "TBX21",
+	    1, "GBP4",
+	    2, "CCL3", 
+	    2, "CCL4", 
+	    3, "HILPDA",
+	    4, "CD27",
+	    4, "ITGAX",
+	    5, "LMO2", 
+	    5, "CD24", 
+	    5, "FCER2", 
+	    6, "SELL",
+	    7, "TNFRSF13B",
+	    8, "CCL17", 
+	    9, "STMN1", 
+	    10, "HMGB2",
+	    10, "MKI67",
+	    10, "CDC20",
+	    11, "STAT1", 
+	    11, "LGALS3", 
+	    11, "IRF5",
+	    12, "FOS", 
+	    12, "DUSP1", 
+	    12, "TCL1A", 
+	    12, "TSC22D3",
+	    13, "PRDM1", 
+	    13, "IGHA1",
+	    13, "JCHAIN",
+	    13, "MZB1")
 
 marker_genes <- 
-    cluster_markers |>
-    filter(gene_name %in% curated_markers) |>
-    group_by(gene_name) |>
-    slice_min(cluster) |>
-    ungroup() |>
-    arrange(cluster, p_val_adj, desc(abs(avg_log2FC)))
+    inner_join(curated_markers, cluster_markers) |>
+    arrange(cluster, desc(avg_log2FC))
 
-markers_expression <- 
-    LayerData(bcells, assay = "RNA", layer = "data")[marker_genes$gene, ] |>
-    as_tibble(rownames = "gene") |>
-    left_join(select(marker_genes, gene, gene_name, cluster), join_by(gene)) |>
-    mutate(gene_name = factor(gene_name, levels = curated_markers)) |>
-    pivot_longer(-c(gene, gene_name, cluster), names_to = "barcode") |>
-    rename("gene_cluster" = cluster) |>
-    left_join(as_tibble(bcells@meta.data, rownames = "barcode") |> select(barcode, seurat_clusters),
-	      join_by(barcode)) |>
-    select(gene_name, gene_cluster, barcode, seurat_clusters, value)
 
-markers_summary <- 
-    markers_expression |>
-    group_by(gene_name, gene_cluster, seurat_clusters) |>
-    summarise(pct = mean(value > 0),
-	      mean_value = mean(value[value > 0])) |>
-    ungroup() |>
-    mutate(mean_value = replace_na(mean_value, 0)) |>
-    group_by(gene_name) |>
-    mutate(mean_value = mean_value/max(mean_value)) |>
-    ungroup() |>
-    mutate(seurat_clusters = paste0("C-", seurat_clusters),
-	   seurat_clusters = factor(seurat_clusters, levels = paste0("C-", 0:13)))
-
+markers_plot_data <- 
+    DotPlot(object = bcells, features = marker_genes$gene) |>
+    {function(x) as_tibble(x$data)}() |>
+    left_join(select(marker_genes, gene, gene_name), join_by(features.plot == gene)) |>
+    select(cluster = id, gene = features.plot, gene_name, avg.exp, avg.exp.scaled, pct.exp) |>
+    mutate(gene_name = factor(gene_name, levels = marker_genes$gene_name))
 
 dotplot_markers <- 
-    ggplot(markers_summary, aes(x = gene_name, y = seurat_clusters)) +
-    geom_point(aes(size = pct, fill = mean_value), stroke = 0.2, shape = 21) +
-    scale_fill_gradient(low = "white", high = "navyblue",
-			breaks = c(0, 1), labels = c("Low", "High")) +
+    ggplot(markers_plot_data, aes(x = cluster, y = gene_name)) +
+    geom_point(aes(size = pct.exp, fill = avg.exp.scaled), stroke = 0.2, shape = 21) +
+    scale_fill_gradient2(low = "Light Sky Blue", mid = "lightyellow", high = "Dark Red",
+			 midpoint = 0) +
     scale_size(range = c(0.1, 3), 
-	       limits = c(0, 1),
-	       breaks = c(0, .33, .66, 1)) +
+	       limits = c(0, 100),
+	       breaks = c(0, 33, 66, 100)) +
     theme_minimal() +
-    theme(axis.text.x = element_text(size = 8, angle = 90, hjust = 1.1, vjust = 0.5),
-	  axis.text.y = element_text(size = 8),
+    theme(
+	  axis.text.x = element_text(size = 8),
+	  axis.text.y = element_text(size = 8, face = 'italic'),
 	  panel.grid = element_line(linewidth = .25, color = "grey90"),
-	  legend.margin = margin(0, 0, -1, -.25, unit = "lines"),
-	  legend.title = element_text(size = 9),
-	  legend.text = element_text(size = 8, margin = margin(l = 0, r= 0, unit = "lines")),
-	  plot.margin = margin(0, 0, 0, 0)
+	  legend.margin = margin(t = 0, r = 0.2, b = 0, l = -.5, unit = "lines"),
+	  legend.title = element_text(size = 8),
+	  legend.key.spacing.y = unit(-.5, "lines"),
+	  plot.margin = margin(0, 0.1, 0, 0, unit = "lines")
 	  ) +
     guides(fill = guide_colorbar(order = 1, position = "right",
-				 barwidth = .25, barheight = 5),
-	   size = guide_legend(position = "top")) +
-    labs(x = NULL, y = NULL, fill = "Express:", size = "Proportion:")
+				 barwidth = .25, barheight = 4)) +
+    labs(x = NULL, y = NULL, fill = "Scaled\nExpression", size = "%\nExpressed")
 
 
 fig_d_title <- 
     ggdraw() + 
     draw_label(
-	       "Marker genes' RNA expression",
+	       "RNA expression of marker genes for clusters in (b)",
 	       x = 0,
 	       size = 9,
 	       hjust = 0
@@ -264,61 +303,140 @@ fig_d_title <-
     theme(text = element_text(size = 9),
 	  plot.margin = margin(l = 1.25, unit = "lines"))
 
-fig_d <- plot_grid(fig_d_title, dotplot_markers, ncol = 1, rel_heights = c(.1, 1))
+# Middle panel
 
+titles_cd <- 
+    plot_grid(fig_c_title, NULL, fig_d_title, nrow = 1, rel_widths = c(.66, .05, 1),
+	      labels = c('c', '', 'd'), label_size = 12)
+
+fig_cd <- plot_grid(umaps_prot_markers, NULL, dotplot_markers, nrow = 1, rel_widths = c(.7, .1, 1))
+
+grid_cd <- plot_grid(titles_cd, fig_cd, ncol = 1, rel_heights = c(.1, 1))
 
 
 # Figure E ####################################################################
-gating_subtypes <-
-    bcells@meta.data |>
-    as_tibble(rownames = "barcode") |>
-    select(barcode, starts_with("is.pure_")) |>
-    pivot_longer(-barcode, names_to = "subtype") |>
-    mutate(subtype = str_remove(subtype, "is.pure_"),
-	   value = recode(value, "Impure" = "No", "Pure" = "Yes"))
+adt_df <- 
+    bcells@assays$ADT@data[c('IgD', 'CD27', 'CD11c'), ] |>
+    t() |>
+    as_tibble(rownames = 'barcode') |>
+    left_join(bcells@meta.data |> as_tibble(rownames = 'barcode') |> select(barcode, dmm_hto_call, seurat_clusters)) |>
+    select(barcode, hto = dmm_hto_call, cluster = seurat_clusters, everything())
 
-gating_scores <- 
-    bcells@meta.data |>
-    as_tibble(rownames = "barcode") |>
-    select(barcode, ends_with("UCell")) |>
-    pivot_longer(-barcode, names_to = "subtype", values_to = "score") |>
-    mutate(subtype = str_remove(subtype, "_UCell"),
-	   subtype = recode(subtype, "memory" = "mem", "prolif." = "prolif"))
+gates_genes <- 
+    marker_genes |> 
+    filter(gene_name %in% c('MKI67', 'XBP1')) |>
+    select(gene, gene_name)
 
-gating_df <-
-    left_join(gating_subtypes, gating_scores, join_by(barcode, subtype)) |>
-    group_by(subtype) |>
-    mutate(value = case_when(subtype %in% c("naive", "plasma") & value == "Yes" & score >= quantile(score, .8) ~ "Yes",
-			     subtype %in% c("naive", "plasma") & value == "Yes" & score < quantile(score, .8) ~ "No",
-			     .default = value)) |>
-    ungroup() |>
-    left_join(select(umap_df, barcode, umap_1, umap_2), join_by(barcode))
+rna_df <-
+    bcells@assays$RNA@data[gates_genes$gene, ] |>
+    as.matrix() |>
+    t() |>
+    as_tibble(rownames = 'barcode') |>
+    pivot_longer(-barcode, names_to = 'gene') |>
+    left_join(gates_genes) |>
+    select(-gene) |>
+    pivot_wider(names_from = gene_name, values_from = value) |>
+    left_join(bcells@meta.data |> as_tibble(rownames = 'barcode') |> select(barcode, dmm_hto_call, seurat_clusters)) |>
+    select(barcode, hto = dmm_hto_call, cluster = seurat_clusters, everything())
 
-subsets_df <-
-    gating_df |>
-    left_join(select(umap_df, barcode, hto), join_by(barcode)) |>
-    select(barcode, subtype, hto, value) |>
+#testp <-
+#    ggplot(rna_df, aes(x = cluster, y = MKI67)) +
+#    geom_violin() +
+#    geom_hline(yintercept = .0)
+#
+#
+#testp <-
+#    ggplot(adt_df, aes(x = cluster, y = IgD)) +
+#    geom_violin() +
+#    geom_hline(yintercept = .75)
+#
+#testp <-
+#    ggplot(adt_df, aes(x = cluster, y = CD27)) +
+#    geom_violin() +
+#    geom_hline(yintercept = .25)
+#
+#testp <-
+#    ggplot(adt_df, aes(x = cluster, y = CD11c)) +
+#    geom_violin() +
+#    geom_hline(yintercept = .25)
+#
+#ggsave("./testp.png", testp, height = 4)
+#
+subsets_df <- 
+    left_join(adt_df, rna_df) |>
+    mutate(
+	   "IgD<sup>+</sup>  CD27<sup>+</sup>"  = ifelse(IgD >= .75 & CD27 >= .75, 1, 0),
+	   "IgD<sup>–</sup>  CD27<sup>–</sup>" = ifelse(IgD < .75 & CD27 < .75, 1, 0),
+	   "IgD<sup>–</sup>  CD27<sup>+</sup>" = ifelse(IgD < .75 & CD27 >= .75, 1, 0),
+	   "IgD<sup>+</sup>  CD27<sup>–</sup>" = ifelse(IgD >= .75 & CD27 < .75, 1, 0),
+	   "CD11c<sup>+</sup>" = ifelse(CD11c >= .75, 1, 0),
+	   "*XBP1*<sup>high</sup>" = ifelse(XBP1 >= 2.5, 1, 0),
+	   "*MKI67*<sup>+</sup>" = ifelse(MKI67 >= 1, 1, 0)) |>
+    select(-(cluster:MKI67)) |>
+    pivot_longer(-(barcode:hto), names_to = 'subtype') |>
+    mutate(hto = factor(hto, names(stim_colors)),
+	   subtype = fct_inorder(subtype)) |>
     group_by(hto, subtype) |>
-    summarise(pct = mean(value == "Yes")) |>
-    ungroup() |>
-    mutate(subtype = recode(subtype, 
-			    "abc" = "CD11c<sup>+</sup>",
-			    "mem" = "IgD<sup>–</sup>  CD27<sup>+</sup>",
-			    "naive" = "IgD<sup>+</sup>  CD27<sup>–</sup>",
-			    "plasma" = "*XBP1*<sup>high</sup>",
-			    "prolif" = "*MKI67*<sup>+</sup>")) |>
-    arrange(hto, desc(pct)) |>
-    mutate(subtype = fct_inorder(subtype))
+    summarise(pct = mean(value)) |>
+    ungroup()
 
+#bcells_v5 <- read_rds("../citeseq/data/seurat_qced.rds")
+#
+#gating_subtypes <-
+#    bcells_v5@meta.data |>
+#    as_tibble(rownames = "barcode") |>
+#    select(barcode, hto = dmm_hto_call, starts_with("is.pure_")) |>
+#    pivot_longer(-(barcode:hto), names_to = "subtype") |>
+#    mutate(subtype = str_remove(subtype, "is.pure_"),
+#	   value = recode(value, "Impure" = "No", "Pure" = "Yes"))
+#
+#gating_scores <- 
+#    bcells_v5@meta.data |>
+#    as_tibble(rownames = "barcode") |>
+#    select(barcode, hto = dmm_hto_call, ends_with("UCell")) |>
+#    pivot_longer(-(barcode:hto), names_to = "subtype", values_to = "score") |>
+#    mutate(subtype = str_remove(subtype, "_UCell"),
+#	   subtype = recode(subtype, "memory" = "mem", "prolif." = "prolif"))
+#
+#gating_df <-
+#    left_join(gating_subtypes, gating_scores, join_by(barcode, hto, subtype)) 
+#
+#gating_df <-
+#    left_join(gating_subtypes, gating_scores, join_by(barcode, hto, subtype)) |>
+#    group_by(subtype) |>
+#    mutate(value = case_when(subtype %in% c("naive", "plasma") & value == "Yes" & score >= quantile(score, .8) ~ "Yes",
+#			     subtype %in% c("naive", "plasma") & value == "Yes" & score < quantile(score, .8) ~ "No",
+#			     .default = value)) |>
+#    ungroup()
+#
+#subsets_df <-
+#    gating_df |>
+#    select(barcode, subtype, hto, value) |>
+#    mutate(hto = factor(hto, levels = names(stim_colors))) |>
+#    group_by(hto, subtype) |>
+#    summarise(pct = mean(value == "Yes")) |>
+#    ungroup() |>
+#    mutate(subtype = recode(subtype, 
+#			    "abc" = "CD11c<sup>+</sup>",
+#			    "mem" = "IgD<sup>–</sup>  CD27<sup>+</sup>",
+#			    "naive" = "IgD<sup>+</sup>  CD27<sup>–</sup>",
+#			    "plasma" = "*XBP1*<sup>high</sup>",
+#			    "prolif" = "*MKI67*<sup>+</sup>")) |>
+#    arrange(hto, desc(pct)) |>
+#    mutate(subtype = fct_inorder(subtype))
+#
 proportions_plot <- 
     ggplot(subsets_df, aes(x = hto, y = pct)) +
     geom_col(aes(fill = hto)) +
     scale_fill_manual(values = stim_colors) +
     facet_wrap(~subtype, nrow = 1, scales = "free_y") +
-    ggh4x::facetted_pos_scales(y = list(subtype == "IgD<sup>+</sup>  CD27<sup>–</sup>" ~ scale_y_continuous(breaks = c(0, 0.4, 0.8)),
-					subtype == "IgD<sup>–</sup>  CD27<sup>+</sup>" ~ scale_y_continuous(breaks = c(0, 0.1, 0.2)),
+    ggh4x::facetted_pos_scales(y = list(
+					subtype == "IgD<sup>+</sup>  CD27<sup>–</sup>" ~ scale_y_continuous(limits = c(0, 0.8), breaks = c(0, 0.4, 0.8)),
+					subtype == "IgD<sup>–</sup>  CD27<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)),
+					subtype == "IgD<sup>+</sup>  CD27<sup>+</sup>" ~ scale_y_continuous(limits = c(0, 0.005), breaks = c(0, 0.005)),
+					subtype == "IgD<sup>–</sup>  CD27<sup>–</sup>" ~ scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)),
 					subtype == "CD11c<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)),
-					subtype == "*XBP1*<sup>high</sup>" ~ scale_y_continuous(breaks = c(0, 0.25, 0.5)),
+					subtype == "*XBP1*<sup>high</sup>" ~ scale_y_continuous(limits = c(0, .5), breaks = c(0, 0.25, 0.5)),
 					subtype == "*MKI67*<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)))) +
     theme_minimal() +
     theme(axis.text.x = element_blank(),
@@ -334,10 +452,37 @@ proportions_plot <-
     labs(x = NULL, y = NULL)
 
 
+#proportions_plot <- 
+#    ggplot(subsets_df, aes(x = hto, y = pct)) +
+#    geom_col(aes(fill = hto)) +
+#    scale_fill_manual(values = stim_colors) +
+#    facet_wrap(~subtype, nrow = 1, scales = "free_y") +
+#    ggh4x::facetted_pos_scales(y = list(subtype == "IgD<sup>+</sup>  CD27<sup>–</sup>" ~ scale_y_continuous(breaks = c(0, 0.4, 0.8)),
+#					subtype == "IgD<sup>–</sup>  CD27<sup>+</sup>" ~ scale_y_continuous(breaks = c(0, 0.1, 0.2)),
+#					subtype == "CD11c<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)),
+#					subtype == "*XBP1*<sup>high</sup>" ~ scale_y_continuous(breaks = c(0, 0.25, 0.5)),
+#					subtype == "*MKI67*<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)))) +
+#    theme_minimal() +
+#    theme(axis.text.x = element_blank(),
+#	  panel.grid.major.x = element_blank(),
+#	  panel.grid.minor.y = element_blank(),
+#	  panel.spacing.x = unit(1, "lines"),
+#	  axis.ticks.x = element_blank(),
+#	  strip.text = ggtext::element_markdown(size = 8),
+#	  strip.clip = "off",
+#	  plot.margin = margin(t = 5.5, r = 5.5/2, b = 5.5, l = 5.5/2, "pt")
+#	  ) +
+#    guides(fill = "none") +
+#    labs(x = NULL, y = NULL)
+
+
+
+
+
 fig_e_title <- 
     ggdraw() + 
     draw_label(
-	       "Proportion of cell subsets in each condition",
+	       "Proportion of cell subsets in each condition in (a)",
 	       x = 0,
 	       size = 9,
 	       hjust = 0
@@ -345,34 +490,39 @@ fig_e_title <-
     theme(text = element_text(size = 9),
 	  plot.margin = margin(l = 1.25, unit = "lines"))
 
-fig_e <- plot_grid(fig_e_title, proportions_plot, ncol = 1, rel_heights = c(.1, 1),
-		   labels = "e", label_size = 12)
-
-
+fig_e <- plot_grid(fig_e_title,
+		   proportions_plot, 
+		   ncol = 1, 
+		   rel_heights = c(.1, 1),
+		   labels = 'e', label_size = 12, vjust = .75)
 
 # Figure F ####################################################################
+
 disease_genes <- 
     features_df |>
-    filter(gene_name %in% c("IRF8", "STAT1", "BANK1", "BLK", "IL4R", "BATF", "MYC"), 
+    filter(gene_name %in% c("IRF5", "IRF8", "MYC", "CXCR5", "CTSH", "RGS1", "ZBTB38"), 
 	   phenotype == "Gene Expression") |>
     select(gene_name, gene_id)
 
 dis_genes_expression <-
-    LayerData(bcells, assay = "RNA", layer = "data")[disease_genes$gene_id, ] |>
+    bcells@assays$RNA@data[disease_genes$gene_id, ] |>
     as_tibble(rownames = "gene_id") |>
     left_join(disease_genes, join_by(gene_id)) |>
     pivot_longer(-c(gene_id, gene_name), names_to = "barcode") |>
-    left_join(select(umap_df, barcode, umap_1, umap_2), join_by(barcode)) |>
-    group_by(gene_id, gene_name) |>
-    mutate(value = clip_expression(value)) |>
-    ungroup()
+    left_join(select(umap_df, barcode, umap_1, umap_2), join_by(barcode)) #|>
+    #group_by(gene_id, gene_name) |>
+    #mutate(value = clip_expression(value)) |>
+    #ungroup()
 
 umaps_disease <-
     dis_genes_expression |>
     group_split(gene_name) |>
-    map(~ggplot(data = ., aes(x = umap_1, y = umap_2)) +
-	geom_point(aes(color = value), size = .2, stroke = 0) +
-	scale_color_gradient(low = "Snow", high = "black") +
+    map(function(x) 
+	ggplot(data = x |> arrange(value) |> mutate(barcode = fct_inorder(barcode)), 
+		aes(x = umap_1, y = umap_2)) +
+	geom_point(aes(color = value), size = .3, stroke = 0) +
+	scale_color_gradient2(low = "grey70", mid = "lightyellow", high = "Dark Red",
+			      midpoint = mean(x$value[x$value > 0])) +
 	facet_wrap(~gene_name) +
 	theme_minimal() +
 	theme(axis.title = element_blank(),
@@ -380,7 +530,7 @@ umaps_disease <-
 	      legend.text = element_blank(),
 	      legend.margin = margin(0, 0, 0, -0.5, "lines"),
 	      panel.grid = element_blank(),
-	      strip.text = element_text(size = 8, margin = margin(0, 0, 0, 0)),
+	      strip.text = element_text(size = 8, face = 'italic', margin = margin(0, 0, 0, 0)),
 	      strip.clip = "off",
 	      panel.spacing = unit(0, "lines"),
 	      plot.margin = margin(0, 0, 0, 0)
@@ -394,7 +544,7 @@ umaps_disease <-
 fig_f_title <- 
     ggdraw() + 
     draw_label(
-	       "RNA expression of selected disease risk genes",
+	       "RNA expression of selected disease risk genes in different B cell states",
 	       x = 0,
 	       size = 9,
 	       hjust = 0
@@ -403,25 +553,42 @@ fig_f_title <-
 	  plot.margin = margin(l = 1.25, unit = "lines"))
 
 fig_f <- plot_grid(fig_f_title, umaps_disease, ncol = 1, rel_heights = c(.1, 1),
-		   labels = "f", label_size = 12)
+		   labels = 'f', label_size = 12, vjust = 1)
 
 
+ggsave("./fig3.png", 
+       plot_grid(grid_ab, NULL, grid_cd, NULL, fig_e, NULL, fig_f, 
+		 ncol = 1, rel_heights = c(.75, .025, 1.05, 0.05, .3, 0.05, .36)), 
+       width = 6.5, height = 8.5, dpi = 600)
 
-
-
-# Final Figure ################################################################
-ggsave("./fig3.png",
-       plot_grid(
-		 plot_grid(fig_a, NULL, fig_b, nrow = 1, rel_widths = c(.95, .05, 1), 
-			   labels = c("a", "", "b"), label_size = 12),
-		 NULL, 
-		 plot_grid(fig_c, fig_d, nrow = 1, rel_widths = c(.5, 1), 
-			   labels = c("c", "d"), label_size = 12, align = "none"),
-		 NULL,
-		 fig_e,
-		 NULL,
-		 fig_f,
-		 ncol = 1, rel_heights = c(1, 0.05, 1.1, 0.025, 0.4, 0.05, 0.5)) +
-       theme(plot.background = element_rect(color = "white", fill = "white")),
-       width = 6.5, height = 8, dpi = 600)
-
+#rgs1 <- 
+#    bcells@assays$RNA@data[disease_genes$gene_id[1], , drop = FALSE] |>
+#    as.matrix() |>
+#    t() |>
+#    as.data.frame() |>
+#    filter(ENSG00000090104 > 2.25) |>
+#    rownames()
+#
+#bcells@meta.data$seurat_clusters[rownames(bcells@meta.data) %in% rgs1] <- 20
+#
+#
+#bcells@meta.data <- 
+#    bcells@meta.data |> 
+#    mutate(rgs1 = rownames(bcells@meta.data) %in% rgs1,
+#	   rgs1 = as.integer(rgs1),
+#	   rgs1 = as.character(rgs1))
+#
+#Idents(bcells) <- bcells@meta.data$rgs
+#
+#marks <- FindMarkers(bcells, 
+#	    ident.1 = "1",
+#	    ident.2 = "0",
+#	    only.pos = FALSE,
+#	    min.pct = 0.33,
+#	    logfc.threshold = .5)
+#
+#marks |>
+#    as_tibble(rownames = "gene_id") |>
+#    left_join(filter(features_df, phenotype == "Gene Expression")) |>
+#    arrange(desc(avg_log2FC))
+#
