@@ -5,11 +5,11 @@
 #SBATCH --mem=16gb
 #SBATCH --time=24:00:00
 #SBATCH -p bch-compute
-#SBATCH --array=1-139
+#SBATCH --array=1-115
 #SBATCH --job-name=FASTQC
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /temp_work/ch229163/log/FASTQC.%A-%a
+#SBATCH -o /temp_work/ch229163/log/FASTQC.%A-%a.log
 
 source /programs/biogrids.shrc
 export FASTQC_X=0.11.9
