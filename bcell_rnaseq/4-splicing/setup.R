@@ -36,9 +36,6 @@ write_tsv(meta_qced, "./metadata_qced.tsv")
 # Leafcutter
 if (!file.exists("data")) dir.create("data")
 if (!file.exists("results")) dir.create("results")
-if (!file.exists("results/TLR7")) dir.create("results/TLR7")
-if (!file.exists("results/BCR")) dir.create("results/BCR")
-if (!file.exists("results/DN2")) dir.create("results/DN2")
 
 meta_qced |>
     select(sample_id) |>

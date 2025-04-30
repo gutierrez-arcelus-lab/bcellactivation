@@ -11,4 +11,4 @@ python $HOME/leafcutter/clustering/leafcutter_cluster_regtools.py \
     -j $JUNC \
     -o ./data/clusters
 
-#rm *.leafcutter.sorted.gz
+rm *.clusters.sorted.gz
