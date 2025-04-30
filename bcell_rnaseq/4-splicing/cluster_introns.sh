@@ -9,6 +9,7 @@ JUNC=./data/junction_files.txt
 # Intron clustering
 python $HOME/leafcutter/clustering/leafcutter_cluster_regtools.py \
     -j $JUNC \
+    -p 0.01 \
     -o ./data/clusters
 
 rm *.clusters.sorted.gz

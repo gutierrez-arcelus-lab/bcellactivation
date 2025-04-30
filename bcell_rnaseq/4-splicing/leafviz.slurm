@@ -4,7 +4,7 @@
 #SBATCH -c 1
 #SBATCH --mem=4gb
 #SBATCH --time=24:00:00
-#SBATCH -p bch-compute
+#SBATCH -p bch-compute,bch-compute-pe
 #SBATCH --array=0-2
 #SBATCH --job-name=leafviz
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu

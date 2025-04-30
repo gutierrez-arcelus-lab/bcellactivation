@@ -47,6 +47,7 @@ groups_file_tlr7 <-
     meta_qced |>
     select(sample_id) |>
     separate(sample_id, c("stim", "donor", "replic"), sep = "_", remove = FALSE) |>
+    filter(replic == 1) |>
     filter(stim %in% c("unstday0", "TLR7")) |>
     mutate(stim = factor(stim, levels = c("unstday0", "TLR7"))) |>
     arrange(stim, donor, replic) |>
@@ -56,6 +57,7 @@ groups_file_bcr <-
     meta_qced |>
     select(sample_id) |>
     separate(sample_id, c("stim", "donor", "replic"), sep = "_", remove = FALSE) |>
+    filter(replic == 1) |>
     filter(stim %in% c("unstday0", "BCR")) |>
     mutate(stim = factor(stim, levels = c("unstday0", "BCR"))) |>
     arrange(stim, donor, replic) |>
@@ -65,6 +67,7 @@ groups_file_dn2 <-
     meta_qced |>
     select(sample_id) |>
     separate(sample_id, c("stim", "donor", "replic"), sep = "_", remove = FALSE) |>
+    filter(replic == 1) |>
     filter(stim %in% c("unstday0", "DN2")) |>
     mutate(stim = factor(stim, levels = c("unstday0", "DN2"))) |>
     arrange(stim, donor, replic) |>
