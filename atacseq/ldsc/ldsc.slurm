@@ -5,7 +5,7 @@
 #SBATCH --mem=16gb
 #SBATCH -t 24:00:00
 #SBATCH -p bch-compute
-#SBATCH -a 1-40
+#SBATCH -a 1-37
 #SBATCH -J ldsc
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL

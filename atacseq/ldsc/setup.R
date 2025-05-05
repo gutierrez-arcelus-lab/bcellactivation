@@ -5,6 +5,7 @@ library(readxl)
 # Data directories
 if (!file.exists("data")) dir.create("data")
 if (!file.exists("data/ldscores")) dir.create("data/ldscores")
+if (!file.exists("results")) dir.create("results")
 
 # slurm array specification
 stim_order <- c("IL4", "TLR7", "BCR", "DN2")
@@ -138,11 +139,16 @@ sumstats_all <-
 				  trait_name == "Child Onset Asthma" ~ "Asthma (Child Onset)",
 				  TRUE ~ trait_name)) |>
     arrange(trait_name, directory) |>
-    filter(!(directory == "sumstats_107" & trait_name == "Crohn's Disease"),
+    mutate(trait_name = case_when(grepl("Covid19_Infection", trait_identifier) ~ "Covid19 Infection",
+				  grepl("Covid19_Vaccination", trait_identifier) ~ "Covid19 Vaccination",
+				  TRUE ~ trait_name)) |>
+    filter(trait_name != "Covid19 Vaccination",
+	   !(directory == "sumstats_107" & trait_name == "Crohn's Disease"),
+	   !(directory == "sumstats_107" & trait_name == "Celiac Disease"),
 	   !(directory == "sumstats_107" & trait_name == "HDL"),
 	   !(directory == "sumstats_107" & trait_name == "LDL"),
 	   !(directory == "sumstats_107" & trait_name == "IBD"),
-	   !(directory == "sumstats_107" & trait_name == "Primary Bioliary Cirrhosis"),
+	   !(directory == "sumstats_107" & trait_name == "Primary Biliary Cirrhosis"),
 	   !(directory == "sumstats_107" & trait_name == "Systemic Lupus Erythematosus"))
 
 write_tsv(sumstats_all, "data/traits.txt", col_names = FALSE)
