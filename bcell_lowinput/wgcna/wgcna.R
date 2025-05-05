@@ -262,45 +262,64 @@ ggsave(glue("./plots/trends_{stim_i}.png"), trends_plot,
 	    height = 3.5, width = 7)
    
 # GO
-run_enrichment <- function(gene_list) {
+#library(fgsea)
+#
+#pathwaysgo <- gmtPathways("/lab-share/IM-Gutierrez-e2/Public/References/msigdb/c5.all.v2022.1.Hs.symbols.gmt.txt")
+#gobp <- keep(pathwaysgo, grepl("^GOBP", names(pathwaysgo)))
+#
+#filtered_genes <- 
+#    gene_names |>
+#    add_count(gene_name) |>
+#    filter(n == 1) |>
+#    select(gene_id, gene_name)
+#
+#gene_list <-
+#    kme_all_df |>
+#    inner_join(filtered_genes) |>
+#    select(module, gene_name, kme) |>
+#    {function(x) split(x, x$module)}() |>
+#    map(~select(., -module)) |>
+#    map(~arrange(., desc(kme))) |>
+#    map(deframe)
+#
+#gsea_res <- 
+#    map(gene_list, 
+#	~fgsea(pathways = gobp, stats = ., nproc = future::availableCores()))
+#
+#gsea_df <- 
+#    bind_rows(gsea_res, .id = "module") |>
+#    as_tibble()
+#
+
+run_enrichment <- function(gene_list, background_list) {
 
     enrichGO(gene = gene_list,
-	OrgDb = org.Hs.eg.db,
-	ont = "BP",
-	keyType = "ENSEMBL",
-	pAdjustMethod = "fdr",
-	qvalueCutoff = 0.1,
-	readable = TRUE)
+	     universe = background_list,
+	     OrgDb = org.Hs.eg.db,
+	     ont = "BP",
+	     keyType = "ENSEMBL",
+	     pAdjustMethod = "fdr",
+	     qvalueCutoff = 0.1,
+	     readable = TRUE)
 }
 
 
 ## Run GO
 ## it takes a few minutes
+bkg_genes <- 
+    kme_all_df |>
+    distinct(gene_id) |>
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
+    pull(gene_id)
+
 plan(multisession, workers = availableCores())
 
-# kME-based
 go_res <- 
     top_kme |>
-    group_by(module) |>
-    #top_n(250, kme) |>
-    top_n(500, kme) |>
-    ungroup() |>
     mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
     {function(x) split(x, x$module)}() |>
     map("gene_id") |>
-    future_map(run_enrichment)
-
-# kIM-based
-#go_res <-     
-#    kim_df |>
-#    filter(kim >= .5) |>
-#    group_by(module) |>
-#    top_n(200, kim) |>
-#    ungroup() |>
-#    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
-#    {function(x) split(x, x$module)}() |>
-#    map("gene_id") |>
-#    future_map(run_enrichment)
+    future_map(run_enrichment, background_list = bkg_genes)
 
 plan(sequential)
 
