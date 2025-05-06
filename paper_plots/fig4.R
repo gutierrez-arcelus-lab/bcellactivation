@@ -306,14 +306,14 @@ traits <-
 
 results <- 
     read_tsv("../atacseq/ldsc/compiled_results.tsv") |>
+    rename(gwas = trait) |>
     mutate(set = paste0(set, "c"),
 	   set = factor(set, levels = c("IL4c", "TLR7c", "BCRc", "DN2c")),
 	   group = case_when(grepl("T2D|Height|HEIGHTz|Type_2_Diabetes|Schizophrenia|MDD|LDL|HDL|Covid19_Infection|cancer", gwas) ~ "control",
 			     TRUE ~ "test")) |>
     left_join(traits, join_by(gwas)) |>
-    arrange(trait, gwas, set) |>
+    filter(!grepl("cancer_ALL", gwas)) |>
     mutate(trait = fct_inorder(trait), gwas = fct_inorder(gwas))
-
 
 results <- 
     results |> 
@@ -321,7 +321,6 @@ results <-
 			    gwas == "UKB_460K.disease_ASTHMA_DIAGNOSED" ~ "Asthma (UKB)",
 			    gwas == "PASS_AdultOnsetAsthma_Ferreira2019" ~ "Asthma-adult (Ferreira2019)",
 			    gwas == "PASS_ChildOnsetAsthma_Ferreira2019" ~ "Asthma-child (Ferreira2019)",
-			    gwas == "UKB_460K.cancer_ALL" ~ "Cancer-ALL (UKB)",
 			    gwas == "PASS_Celiac" ~ "Celiac (Dubois2010)",
 			    gwas == "PASS.Covid19_Infection.hg_v7" ~ "Covid19 infection (hg_v7)",
 			    gwas == "PASS_CD_deLange2017" ~ "CD (deLange2017)",

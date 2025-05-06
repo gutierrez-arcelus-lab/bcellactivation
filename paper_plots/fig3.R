@@ -99,7 +99,7 @@ umap_clust <-
 	       aes(x = umap_1, y = umap_2, label = cluster),
 	       label.padding = unit(0.1, "lines"),
 	       min.segment.length = 0, force_pull = 0, nudge_y = -1,
-	       size = 3, alpha = .5, fontface = "bold") +
+	       size = 3, alpha = 1, fontface = "bold") +
     scale_fill_manual(values = cluster_colors) +
     theme_minimal() +
     theme(
@@ -148,8 +148,6 @@ top_titles <-
 
 
 grid_ab <- plot_grid(top_titles, top_umaps, ncol = 1, rel_heights = c(.1, 1))
-
-
 
 
 # Figure C ####################################################################
@@ -476,9 +474,6 @@ proportions_plot <-
 #    labs(x = NULL, y = NULL)
 
 
-
-
-
 fig_e_title <- 
     ggdraw() + 
     draw_label(
@@ -497,7 +492,6 @@ fig_e <- plot_grid(fig_e_title,
 		   labels = 'e', label_size = 12, vjust = .75)
 
 # Figure F ####################################################################
-
 disease_genes <- 
     features_df |>
     filter(gene_name %in% c("IRF5", "IRF8", "MYC", "CXCR5", "CTSH", "RGS1", "ZBTB38"), 
@@ -521,8 +515,8 @@ umaps_disease <-
 	ggplot(data = x |> arrange(value) |> mutate(barcode = fct_inorder(barcode)), 
 		aes(x = umap_1, y = umap_2)) +
 	geom_point(aes(color = value), size = .3, stroke = 0) +
-	scale_color_gradient2(low = "grey70", mid = "lightyellow", high = "Dark Red",
-			      midpoint = mean(x$value[x$value > 0])) +
+	scale_color_gradientn(colors = c("grey85","#FFF7EC","#FEE8C8","#FDD49E","#FDBB84",
+					 "#FC8D59","#EF6548","#D7301F","#B30000","#7F0000")) +
 	facet_wrap(~gene_name) +
 	theme_minimal() +
 	theme(axis.title = element_blank(),
@@ -561,34 +555,3 @@ ggsave("./fig3.png",
 		 ncol = 1, rel_heights = c(.75, .025, 1.05, 0.05, .3, 0.05, .36)), 
        width = 6.5, height = 8.5, dpi = 600)
 
-#rgs1 <- 
-#    bcells@assays$RNA@data[disease_genes$gene_id[1], , drop = FALSE] |>
-#    as.matrix() |>
-#    t() |>
-#    as.data.frame() |>
-#    filter(ENSG00000090104 > 2.25) |>
-#    rownames()
-#
-#bcells@meta.data$seurat_clusters[rownames(bcells@meta.data) %in% rgs1] <- 20
-#
-#
-#bcells@meta.data <- 
-#    bcells@meta.data |> 
-#    mutate(rgs1 = rownames(bcells@meta.data) %in% rgs1,
-#	   rgs1 = as.integer(rgs1),
-#	   rgs1 = as.character(rgs1))
-#
-#Idents(bcells) <- bcells@meta.data$rgs
-#
-#marks <- FindMarkers(bcells, 
-#	    ident.1 = "1",
-#	    ident.2 = "0",
-#	    only.pos = FALSE,
-#	    min.pct = 0.33,
-#	    logfc.threshold = .5)
-#
-#marks |>
-#    as_tibble(rownames = "gene_id") |>
-#    left_join(filter(features_df, phenotype == "Gene Expression")) |>
-#    arrange(desc(avg_log2FC))
-#

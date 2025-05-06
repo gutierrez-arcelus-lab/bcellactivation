@@ -226,6 +226,36 @@ fig_c_grid <-
     plot_grid(labels = "c", label_size = 12)
 
 
+#### Test
+#bcr_vs_dn2 <- leaf_df |>
+#    filter(contrast == "BCRc 24h vs. DN2c 24h") |>
+#    mutate(absd = abs(deltapsi)) |>
+#    group_by(contrast, genes) |>
+#    slice_min(p) |>
+#    slice_max(absd) |>
+#    ungroup() |>
+#    distinct(contrast, genes, p, absd)
+#
+#bcr_vs_dn2_list <- 
+#    bcr_vs_dn2 |>
+#    mutate(p = -log10(p)) |>
+#    separate_rows(genes, sep = ",") |>
+#    filter(genes %in% unique(unlist(gobp))) |>
+#    select(SYMBOL = genes, stat = p) |>
+#    arrange(desc(stat)) |>
+#    deframe()
+#
+#bcr_vs_dn2_res <- 
+#    fgsea(pathways = gobp, 
+#	  stats = bcr_vs_dn2_list, 
+#	  scoreType = "pos", 
+#	  nproc = future::availableCores())
+#
+#bcr_vs_dn2_res |>
+#    as_tibble() |>
+#    arrange(padj)
+####
+
 # Fig D
 pathwaysgo <- gmtPathways("/lab-share/IM-Gutierrez-e2/Public/References/msigdb/c5.all.v2022.1.Hs.symbols.gmt.txt")
 gobp <- keep(pathwaysgo, grepl("^GOBP", names(pathwaysgo)))
@@ -302,22 +332,31 @@ fig_d_grid <-
 
 
 # Fig E
-get_junctions_usage <- function(contrast) {
+make_leaf_plot <- function(contrast, cluster_lab, title_plot) {
 
+    source("./plot_cluster.R")
+    
     glue("../bcell_rnaseq/4-splicing/results/{contrast}.Rdata") |>
-	load()
+        load()
 
-    counts[grepl("clu_17669_+", rownames(counts)), ] |>
-	apply(2, function(x) x/sum(x)) |>
-	as_tibble(rownames = "junction") |>
-	pivot_longer(-junction) |>
-	separate(name, c("stim", "donor", "replic"), sep = "_", remove = FALSE) |>
-	group_by(stim, junction) |>
-	summarise(value = mean(value)) |>
-	ungroup() |>
-	separate(junction, c("chr", "start", "end", "cluster"), sep = ":", convert = TRUE) |>
-	select(stim, start, end, value)
+    plot_cluster(cluster_to_plot = cluster_lab, 
+		 main_title = title_plot,
+		 exons_table = exons_table,
+		 meta = meta,
+		 cluster_ids = cluster_ids,
+		 counts = counts,
+		 introns = introns,
+		 snp_pos = NA
+		 ) +
+    theme(legend.position = "none",
+	  plot.margin = margin(0, 0, 0, 0),
+	  plot.title = element_text(size = 9, hjust = .5)) +
+    ylab(NULL)
 }
+
+cd86_grid <- make_leaf_plot("unstday0vs.DN2", "clu_9774_+", c("DN2c 24h", "Unstim 0h"))
+zbtb38_grid <- make_leaf_plot("BCRvs.DN2", "clu_9831_+", c("DN2c 24h", "BCRc 24h"))
+
 
 ah <- AnnotationHub::AnnotationHub()
 ens_data <- ah[["AH98047"]]
@@ -325,16 +364,22 @@ ens_data <- ah[["AH98047"]]
 filter <- dplyr::filter
 select <- dplyr::select
 
-loc <- 
-    locus(gene = "BATF",
+track_cd86 <- 
+    locus(gene = "CD86",
 	  flank = c(1e3, 1e3),
 	  ens_db = ens_data)
 
-batf_tracks <- 
-    gg_genetracks(loc, cex.text = .7) + 
-    geom_rect(xmin = 75522000/1e6, 
-	      xmax = 75525100/1e6, 
-	      ymin = -.5, ymax = .75,
+track_zbtb38 <- 
+    locus(gene = "ZBTB38",
+	  flank = c(1e3, 1e3),
+	  ens_db = ens_data)
+
+
+track_plot_cd86 <- 
+    gg_genetracks(track_cd86, cex.text = .7) + 
+    geom_rect(xmin = 122054000/1e6, 
+	      xmax = 122093000/1e6, 
+	      ymin = -.1, ymax = .5,
 	      fill = NA, color = "red") +
     theme_minimal() +
     theme(
@@ -345,76 +390,25 @@ batf_tracks <-
 	  panel.grid = element_blank()) +
     coord_cartesian(clip = "off")
 
-
-load("../bcell_rnaseq/4-splicing/results/unstday0vs.TLR7.Rdata")
-
-intron_annotation <- 
-    introns |>
-    as_tibble() |>
-    filter(clusterID == "clu_17669_+") |>
-    select(start, end, verdict) |>
-    mutate(verdict = ifelse(verdict == "annotated", "annotated", "cryptic"))
-
-batf_df <- 
-    c("TLR7c 24h vs. Unstim 0h" = "unstday0vs.TLR7",
-      "BCRc 24h vs. Unstim 0h" = "unstday0vs.BCR",
-      "DN2c 24h vs. Unstim 0h" = "unstday0vs.DN2") |>
-    map_dfr(get_junctions_usage, .id = "contrast") |>
-    left_join(intron_annotation)
-
-batf_plot_data <- 
-    batf_df |> 
-    mutate(stim = recode(stim, "unstday0" = "Unstim 0h", "TLR7" = "TLR7c 24h", "BCR" = "BCRc 24h", "DN2" = "DN2c 24h"),
-	   stim = factor(stim, levels = names(rna_colors))) |>
-    mutate(middle = map2_int(start, end, ~median(c(.x, .y)) |> round()),
-	   len = map2_int(start, end, ~length(.x:.y)),
-	   curv = ifelse(len < 1000, -1, .5),
-	   curv = ifelse(verdict == "annotated", curv * -1, curv)) |>
-    filter(stim %in% c("TLR7c 24h", "BCRc 24h", "DN2c 24h") | 
-	   (stim == "Unstim 0h" & contrast == "TLR7c 24h vs. Unstim 0h"))
-
-batf_exons <-
-    filter(exons_table, gene_name == "BATF") |>
-    arrange(start) |>
-    filter(end %in% batf_df$start | start %in% batf_df$end) |>
-    distinct()
-
-batf_plot <- 
-    ggplot() +
-    map(group_split(batf_plot_data, stim, start, end),
-	function(dat) {
-	    geom_curve(data = dat, 
-		       aes(x = start, xend = end, y = 0, yend = 0,
-			   linewidth = value, color = stim, alpha = verdict),
-		       curvature = dat$curv)
-	}) +
-    geom_label(data = batf_plot_data |> filter(value > .5), 
-	       aes(x = middle, y = 0.1, label = round(value, 2)),
-	       size = 7, size.unit = "pt") +
-    geom_hline(yintercept = 0, linewidth = 1.6, color = "white") +
-    geom_hline(yintercept = 0, linewidth = .5) +
-    geom_segment(data = batf_exons, 
-		 aes(x = start, xend = end, y = 0, yend = 0),
-		 linewidth = 4) +
-    scale_x_continuous(expand = expansion(mult = 0.05)) +
-    scale_y_continuous(limits = c(-0.25, 0.2)) +
-    scale_linewidth(range = c(.75, 2.5)) +
-    scale_color_manual(values = rna_colors) +
-    scale_alpha_manual(values = c("annotated" = 1, "cryptic" = .5)) +
-    facet_wrap(~stim, nrow = 1) +
+track_plot_zbtb38 <- 
+    gg_genetracks(track_zbtb38, cex.text = .7, filter_gene_name = "ZBTB38") + 
+    geom_rect(xmin = 141386000/1e6, 
+	      xmax = 141404000/1e6, 
+	      ymin = -.1, ymax = .5,
+	      fill = NA, color = "red") +
     theme_minimal() +
     theme(
 	  axis.text = element_blank(),
 	  axis.title = element_blank(),
-	  panel.grid = element_blank(),
-	  strip.text.x = element_text(size = 9, margin = margin(t = 0, b = 0)),
-	  legend.position = "none") +
-    guides(linewidth = "none")
+	  axis.line.x = element_blank(),
+	  axis.ticks.x = element_blank(),
+	  panel.grid = element_blank()) +
+    coord_cartesian(clip = "off")
 
 fig_e_title <- 
     ggdraw() + 
     draw_label(
-	       "Multiple sclerosis risk gene 'BATF' is among the top differentially spliced genes,\nwith distinct effects across stimuli",
+	       "Differential splicing in the CD86 gene",
 	       x = 0,
 	       size = 9,
 	       hjust = 0
@@ -423,10 +417,28 @@ fig_e_title <-
 	  plot.margin = margin(l = 1.25, unit = "lines"))
 
 fig_e_grid <- 
-    plot_grid(fig_e_title, NULL, batf_tracks, NULL, batf_plot, 
-	      ncol = 1, rel_heights = c(.15, .05, .3, .01, 1)) |>
+    plot_grid(fig_e_title, track_plot_cd86, cd86_grid, 
+	      ncol = 1, rel_heights = c(.1, .2, 1)) |>
     plot_grid(labels = "e", label_size = 12)
 
+fig_f_title <- 
+    ggdraw() + 
+    draw_label(
+	       "Differential splicing in the ZBTB38 gene",
+	       x = 0,
+	       size = 9,
+	       hjust = 0
+	       ) +
+    theme(text = element_text(size = 9),
+	  plot.margin = margin(l = 1.25, unit = "lines"))
+
+fig_f_grid <- 
+    plot_grid(fig_f_title, track_plot_zbtb38, zbtb38_grid, 
+	      ncol = 1, rel_heights = c(.1, .2, 1)) |>
+    plot_grid(labels = "f", label_size = 12)
+
+
+bottom_grid <- plot_grid(fig_e_grid, fig_f_grid, nrow = 1)
 
 
 # Final figure
@@ -437,9 +449,9 @@ top_grid <-
 	      labels = c("a", "", "b"), label_size = 12)
 
 ggsave("./fig6.png", 
-       plot_grid(top_grid, NULL, fig_c_grid, NULL, fig_d_grid, NULL, fig_e_grid,
+       plot_grid(top_grid, NULL, fig_c_grid, NULL, fig_d_grid, NULL, bottom_grid,
 		 ncol = 1,
-		 rel_heights = c(1, .05, 1, .05, 1, .1, 1)) +
+		 rel_heights = c(1, .05, 1, .05, 1, .1, 1.5)) +
        theme(plot.background = element_rect(color = "white", fill = "white")),
-       width = 6.5, height = 8, dpi = 600)
+       width = 6.5, height = 8.5, dpi = 600)
 

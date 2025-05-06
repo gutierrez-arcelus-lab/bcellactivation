@@ -40,11 +40,10 @@ sample_table <-
 
 dds <- 
     DESeqDataSetFromTximport(dat, sample_table, ~1) |>
-    estimateSizeFactors() |>
-    vst()
+    estimateSizeFactors()
 
 pca_res <-
-    plotPCA(dds, ntop = 2000, returnData = TRUE)
+    plotPCA(vst(dds), ntop = 2000, returnData = TRUE)
 
 pca_df <- 
     as_tibble(pca_res) |>
@@ -89,7 +88,7 @@ legend_plot <-
 	  plot.margin = margin(0, 0, 0, 0, unit = "pt"),
 	  plot.title = element_text(size = 9, margin = margin(t = 0, b = 0))
 	  ) +
-    labs(x = "hours", title = "Colors:") +
+    labs(x = "hours", title = "Conditions:") +
     guides(fill = "none")
 
 pca_plot <- 
@@ -123,14 +122,10 @@ pca_inset <-
 	  panel.border = element_rect(color = "grey"),
 	  panel.background = element_rect(fill = "transparent"),
 	  plot.background = element_rect(fill = "transparent", color = NA),
-	  plot.title = element_text(size = 7, margin = margin(b = 0)),
-	  plot.margin = margin(0, 1.5, 0, 1.5, unit = "lines")) +
+	  plot.title = element_text(size = 9, margin = margin(b = 0)),
+	  plot.margin = margin(t = 0, r = 2.5, b = 0, l = 1, unit = "lines")) +
     guides(color = "none") +
-    labs(title = "BCR stimulation:")
-
-#pca_grid <- 
-#    ggdraw(pca_plot) +
-#    draw_plot(pca_inset, 0.15, 1, .3, .3)
+    labs(title = "BCR stim:")
 
 fig_a_title <- 
     ggdraw() + 
@@ -297,29 +292,37 @@ fig_b_grid <-
 	      labels = c("b"), label_size = 12
     )
 
-top_grid <- 
-    plot_grid(fig_a_grid, NULL, fig_b_grid, nrow = 1, rel_widths = c(1, .025, .8))
 
 
 
 # Fig C #######################################################################
-edger_res <- 
+gene_metadata <- 
     "../bcell_lowinput/results/edger/results.tsv" |>
-    read_tsv()
-
-cpm_df <- 
-    "../bcell_lowinput/results/edger/cpm.tsv" |>
     read_tsv() |>
-    group_by(sample_id, stim) |>
-    nest() |>
-    ungroup() |>
-    separate(sample_id, c("sample_id", "dummy", "time"), sep = "_") |>
-    mutate(hours = parse_number(time),
-	   hours = factor(hours, levels = sort(unique(hours))),
-           condition = paste(stim, time, sep = "_"),
-	   stim = factor(stim, levels = all_stims)) |>
-    unnest(cols = data) |>
-    select(sample_id, condition, stim, hours, gene_id, gene_name, obs_cpm, obs_logcpm)
+    distinct(gene_id, gene_name)
+
+sample_metadata <- 
+    colData(dds) |> 
+    as_tibble(rownames = "sample_name") |>
+    separate(condition, c("stim", "hours"), sep = "_", remove = FALSE) |>
+    mutate(hours = str_remove(hours, "hrs$"),
+	   hours = factor(hours, levels = sort(unique(as.numeric(hours)))))
+
+deseq_counts <- 
+    DESeq2::counts(dds, normalized = TRUE) |>
+    as_tibble(rownames = "gene_id") |>
+    pivot_longer(-gene_id, names_to = "sample_name", values_to = "norm_counts") |>
+    left_join(sample_metadata, join_by(sample_name)) |>
+    inner_join(gene_metadata, join_by(gene_id)) |>
+    select(donor_id, condition, stim, hours, gene_id, gene_name, norm_counts)
+
+counts_data <- 
+    deseq_counts |>
+    filter(stim != "Unstim") |>
+    {function(x) split(x, x$stim)}() |>
+    map(~bind_rows(filter(deseq_counts, condition == "Unstim_0hrs"), .)) |>
+    map_dfr(~select(., -stim), .id = "stim") |>
+    mutate(stim = factor(stim, levels = all_stims))
 
 pathway_colors <-
     keep(stim_colors, grepl("48hrs", names(stim_colors)))
@@ -329,8 +332,8 @@ names(pathway_colors) <- str_remove(names(pathway_colors), "_48hrs")
 pathway_colors <- c("IL4" = "goldenrod4", pathway_colors)
 
 timecourse_plot_1 <- 
-    ggplot(data = cpm_df |> filter(gene_name %in% c("AICDA", "FCER2", "BANK1")), 
-	   aes(x = hours, y = obs_logcpm)) +
+    ggplot(data = counts_data |> filter(gene_name %in% c("AICDA", "FCER2", "BANK1")), 
+	   aes(x = hours, y = norm_counts)) +
     geom_quasirandom(aes(fill = condition),
 		     method = "smiley", width = .2, 
 		     shape = 21, stroke = .1, size = 1.25, alpha = .4) +
@@ -355,11 +358,11 @@ timecourse_plot_1 <-
 	  axis.title.y = element_text(size = 8, color = "grey40"),
 	  legend.position = "none") + 
     coord_cartesian(clip = "off") +
-    labs(x = NULL, y = "Log2 CPM")
+    labs(x = NULL, y = "Norm. counts")
 
 timecourse_plot_2 <- 
-    ggplot(data = cpm_df |> filter(gene_name %in% c("IRF5", "TBX21", "XBP1")), 
-	   aes(x = hours, y = obs_logcpm)) +
+    ggplot(data = counts_data |> filter(gene_name %in% c("IRF5", "TBX21", "XBP1")), 
+	   aes(x = hours, y = norm_counts)) +
     geom_quasirandom(aes(fill = condition),
 		     method = "smiley", width = .2, 
 		     shape = 21, stroke = .1, size = 1.25, alpha = .4) +
@@ -384,7 +387,7 @@ timecourse_plot_2 <-
 	  axis.title.y = element_text(size = 8, color = "grey40"),
 	  legend.position = "none") + 
     coord_cartesian(clip = "off") +
-    labs(x = NULL, y = "Log2 CPM")
+    labs(x = NULL, y = "Norm. counts")
 
 fig_c_grid <- plot_grid(timecourse_plot_1 , timecourse_plot_2, nrow = 1)
 
@@ -398,7 +401,6 @@ fig_c_title <-
 	       ) +
     theme(text = element_text(size = 9),
 	  plot.margin = margin(b = .05, l = 4, unit = "lines"))
-       
        
 fig_c <- 
     plot_grid(fig_c_title, fig_c_grid, ncol = 1, rel_heights = c(.1, 1),
@@ -579,12 +581,22 @@ aid_genes <-
     select(module, ix, gene_name) |>
     arrange(ix, gene_name)
 
-aid_df <- 
-    cpm_df |>
-    filter(stim == "DN2") |>
-    inner_join(aid_genes, join_by(gene_name)) |>
-    select(sample_id, stim, condition, hours, gene_name, module = ix, cpm = obs_logcpm)
+vst_df <- 
+    vst(dds) |>
+    assay() |> 
+    as.data.frame() |>
+    as_tibble(rownames = "gene_id") |>
+    pivot_longer(-gene_id, names_to = "sample_name", values_to = "vst_counts") |>
+    left_join(sample_metadata, join_by(sample_name)) |>
+    select(donor_id, condition, gene_id, vst_counts)
 
+aid_df <- 
+    counts_data |>
+    select(-norm_counts) |>
+    inner_join(vst_df, join_by(donor_id, condition, gene_id)) |>
+    inner_join(aid_genes, join_by(gene_name)) |>
+    filter(stim == "DN2") |>
+    select(donor_id, condition, stim, hours, gene_id, gene_name, module = ix, vst_counts)
 
 fig_f <-
     aid_df |>
@@ -594,7 +606,7 @@ fig_f <-
 	y_scales <- 
 	    data_x |>
 	    group_by(module, gene_name) |>
-	    summarise(mn = min(cpm), mx = max(cpm)) |>
+	    summarise(mn = min(vst_counts), mx = max(vst_counts)) |>
 	    ungroup() |>
 	    group_split(gene_name) |>
 	    map(function(x) scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)),
@@ -607,7 +619,7 @@ fig_f <-
 	)
 	    
 	ggplot(data = data_x, 
-	       aes(x = hours, y = cpm)) +
+	       aes(x = hours, y = vst_counts)) +
 	geom_quasirandom(aes(fill = condition),
 			 method = "smiley", width = .2, 
 			 shape = 21, stroke = .2, size = 1.5, alpha = .4) +
@@ -636,8 +648,10 @@ fig_f <-
     {function(x) plot_grid(plotlist = x, ncol = 1, align = "v")}() +
     theme(plot.margin = margin(0, 0, 0.5, 0.5, unit = "lines")) +
     draw_label("Time", x = .5, y = -0.01, size = 8.5) +
-    draw_label("Log2 counts per million", x = -.125, y = 0.5, size = 8.5, angle = 90)
+    draw_label("VST-normalized counts", x = -.125, y = 0.5, size = 8.5, angle = 90)
 
+top_grid <- 
+    plot_grid(fig_a_grid, NULL, fig_b_grid, nrow = 1, rel_widths = c(1, .025, .8))
 
 bottom_title <- 
     ggdraw() + 
