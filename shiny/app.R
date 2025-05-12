@@ -29,13 +29,21 @@ plot_colors <-
 atac_colors <- plot_colors[c("Unstim_0", "Unstim_24", "IL-4c_24", "TLR7c_24", "BCRc_24", "DN2c_24")]
 atac_colors[c("TLR7c_24", "BCRc_24", "DN2c_24")] <- plot_colors[c("TLR7c_24", "BCRc_48", "DN2c_48")] 
 
+cluster_colors <- 
+    c("C0" = "#A8CDE2", "C1" = "#3B83B9", "C2" = "#E3362C", "C3" = "#F9B56F", 
+      "C4" = "#FC9230", "C5" = "#DDA086", "C6" = "#9F7BB8", "C7" = "#987898", 
+      "C8" = "#F1E78D", "C9" = "#B05D2F", "C10" = "#83BF98", "C11" = "#6ABD5D", 
+      "C12" = "#6F8544", "C13" = "#F4817F")
+    
+
 ## Timecourse data
-gene_list <- readr::read_lines("./data/genes.txt")
+gene_list_bulk <- readr::read_lines("./data/bulk_genes.txt")
 
 gene_exp <- readr::read_rds("./data/deseq_normalized_counts.rds")
 
 ## Gene tracks for ATAC-seq plot
-ah <- AnnotationHub::AnnotationHub()
+AnnotationHub::setAnnotationHubOption("CACHE", "./data/AnnotationHub")
+ah <- AnnotationHub::AnnotationHub(localHub=TRUE)
 ens_data <- ah[["AH98047"]]
 
 ## Atac-seq tracks
@@ -46,14 +54,17 @@ bigwigs <-
 names(bigwigs) <- sub("^([^_]+_\\d+).+$", "\\1", basename(bigwigs))
 
 ## Cite-seq data
-sc_data <- SeuratDisk::LoadH5Seurat("./data/bcells.h5Seurat")
+sc_data <- SeuratDisk::LoadH5Seurat("./data/bcells_expressed.h5Seurat")
+
+gene_list_sc <- sc_data@assays$RNA@data@Dimnames[[1]]
 
 sc_meta <- 
     sc_data@meta.data |>
     as.data.frame() |>
     tibble::rownames_to_column("barcode") |>
     tibble::as_tibble() |>
-    dplyr::select(barcode, hto = dmm_hto_call)
+    dplyr::select(barcode, hto = dmm_hto_call, cluster = seurat_clusters) |>
+    dplyr::mutate(cluster = factor(cluster, levels = paste0("C", 0:13)))
 
 umap_df <-
     Seurat::Embeddings(sc_data, reduction = "umap") |>
@@ -72,11 +83,14 @@ umap_df <-
                                       "DN2 24h" = "DN2c_24",
                                       "DN2 72h" = "DN2c_72"))
 
-umap_stims <-
+sc_clusters_plot <- 
     ggplot(umap_df, aes(UMAP_1, UMAP_2)) +
-    geom_point(aes(fill = hto), size = 2, 
-               shape = 21, stroke = .05, color = "black") +
-    scale_fill_manual(values = plot_colors) +
+    geom_point(aes(fill = cluster), 
+               size = 1.5, 
+               shape = 21, 
+               stroke = .05, 
+               color = "black") +
+    scale_fill_manual(values = cluster_colors) +
     theme_minimal() +
     theme(axis.text = element_text(size = 12),
           axis.title = element_text(size = 12),
@@ -87,6 +101,27 @@ umap_stims <-
     guides(fill = guide_legend(title = "Stim:",
                                title.position = "top",
                                override.aes = list(size = 3)))
+                
+sc_hto_plot <- 
+    ggplot(umap_df, aes(UMAP_1, UMAP_2)) +
+    geom_point(aes(fill = hto), 
+               size = 1.5, 
+               shape = 21, 
+               stroke = .05, 
+               color = "black") +
+    scale_fill_manual(values = plot_colors) +
+    theme_minimal() +
+    theme(axis.text = element_text(size = 12),
+          axis.title = element_text(size = 12),
+          legend.text = element_text(size = 12),
+          legend.title = element_text(size = 12),
+          panel.grid = element_blank()) +
+    labs(x = "UMAP 1", y = "UMAP 2") +
+    guides(fill = guide_legend(title = "Stim:",
+                               title.position = "top",
+                               override.aes = list(size = 3))) 
+
+sc_var_plots <- list("HTO" = sc_hto_plot, "Clusters" = sc_clusters_plot)
 
 ## App
 ui <- navbarPage(
@@ -101,8 +136,14 @@ ui <- navbarPage(
              plotOutput("plotatac", width = "100%", height = "600px")
              ),
     tabPanel("Single-cell RNA-seq",
-             selectizeInput("genesc", "Select gene:", choices = NULL),
-             plotOutput("plotsc", width = "100%", height = "600px")
+             fluidRow(
+                    column(6, selectizeInput("varsc", "Select variable:", choices = c("HTO", "Clusters"))),
+                    column(6, selectizeInput("genesc", "Select gene:", choices = NULL))
+                    ),
+             fluidRow(
+                    column(6, plotOutput("plotscvars", width = "100%", height = "600px")),
+                    column(6, plotOutput("plotsc", width = "100%", height = "600px"))
+                    )
     )
 )
 
@@ -111,7 +152,8 @@ server <- function(input, output, session) {
     ## Bulk RNA
     updateSelectizeInput(session, 
                          "generna", 
-                         choices = gene_list, 
+                         selected = "CD19",
+                         choices = gene_list_bulk, 
                          server = TRUE)
     
     datarna <- reactive(gene_exp |> format_timecourse(input$generna))
@@ -131,7 +173,8 @@ server <- function(input, output, session) {
     ## Bulk ATAC
     updateSelectizeInput(session, 
                          "geneatac", 
-                         choices = gene_list, 
+                         selected = "CD19",
+                         choices = gene_list_bulk, 
                          server = TRUE)
     loc <-
         reactive(
@@ -173,7 +216,6 @@ server <- function(input, output, session) {
     
     plot_atac <-
         reactive({
-
             ggplot(atac_peaks()) +
             geom_ribbon(aes(x = pos, ymin = 0, ymax = score, color = stim, fill = stim),
                         linewidth = .5, outline.type = "full", alpha = .5) +
@@ -212,9 +254,12 @@ server <- function(input, output, session) {
     output$plotatac <- renderPlot(plot_atac() / gene_tracks() + plot_layout(heights = c(1, .3)))
     
     #Single-cell RNA-seq
+    output$plotscvars <- renderPlot(sc_var_plots[[input$varsc]])
+    
     updateSelectizeInput(session, 
                          "genesc", 
-                         choices = gene_list, 
+                         selected = "CD19",
+                         choices = gene_list_sc, 
                          server = TRUE)
     
     sc_data_gene <- 
@@ -228,31 +273,23 @@ server <- function(input, output, session) {
                 dplyr::right_join(umap_df, dplyr::join_by(barcode)) |>
                 dplyr::arrange(value) |> 
                 dplyr::mutate(barcode = forcats::fct_inorder(barcode))
-            })
+        })
     
-    umaps_plot_expr <-
-        reactive(
+    output$plotsc <- 
+        renderPlot(
             ggplot(data = sc_data_gene(), 
                    aes(x = UMAP_1, y = UMAP_2)) +
-                geom_point(aes(color = value), size = 2, stroke = 0) +
-                scale_color_gradient2(low = "grey70", 
-                                      mid = "lightyellow", 
-                                      high = "#ff0000",
-                                      midpoint = mean(sc_data_gene()$value[sc_data_gene()$value > 0])) +
+                geom_point(aes(color = value), size = 1.5, stroke = 0) +
+                scale_color_gradientn(colors = c("grey85","#FFF7EC","#FEE8C8","#FDD49E","#FDBB84",
+                                                 "#FC8D59","#EF6548","#D7301F","#B30000","#7F0000")) +
                 theme_minimal() +
                 theme(axis.text = element_text(size = 12),
                       axis.title = element_text(size = 12),
                       legend.text = element_text(size = 12),
                       legend.title = element_text(size = 12),
                       panel.grid = element_blank()) +
-                guides(color = guide_colorbar(barwidth = .2, barheight = 8))
-        )
-    
-    output$plotsc <- 
-        renderPlot(umap_stims + 
-                       plot_spacer() + 
-                       umaps_plot_expr() + 
-                       plot_layout(widths = c(1, .1, 1)))
+                guides(color = guide_colorbar(barwidth = .5, barheight = 8))
+            )
 }
 
 shinyApp(ui, server)
