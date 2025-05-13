@@ -1,7 +1,6 @@
 library(shiny)
 library(ggplot2)
 library(ggbeeswarm)
-library(patchwork)
 
 ## Function
 format_timecourse <- function(expression_data, chosen_gene) {
@@ -123,27 +122,63 @@ sc_hto_plot <-
 
 sc_var_plots <- list("HTO" = sc_hto_plot, "Clusters" = sc_clusters_plot)
 
+## Splicing
+contrasts <- 
+    c("Unstim 0h vs. TLR7c 24h" = "unstday0vs.TLR7",
+      "Unstim 0h vs. BCRc 24h" = "unstday0vs.BCR",
+      "Unstim 0h vs. DN2c 24h" = "unstday0vs.DN2",
+      "TLR7c 24h vs. BCRc 24h" = "TLR7vs.BCR",
+      "TLR7c 24h vs. DN2c 24h" = "TLR7vs.DN2",
+      "BCRc 24h vs. DN2c 24h" = "BCRvs.DN2")
+
+
 ## App
 ui <- navbarPage(
     "B cell activation",
     tabPanel("Bulk RNA-seq",
              selectizeInput("generna", "Select gene:", choices = NULL),
              plotOutput("plotrna", width = "100%", height = "200px")
-             ),
+    ),
     tabPanel("Bulk ATAC-seq",
              selectizeInput("geneatac", "Select gene:", choices = NULL),
              numericInput("atacwindow", "Window Size", value = 10e3, min = 1e3, max = 500e3),
              plotOutput("plotatac", width = "100%", height = "600px")
-             ),
-    tabPanel("Single-cell RNA-seq",
+    ),
+    navbarMenu("Single-cell RNA-seq", 
+               tabPanel("UMAPs",
+                        fluidRow(
+                            column(6, selectizeInput("varsc", "Select variable:", choices = c("HTO", "Clusters"))),
+                            column(6, selectizeInput("genesc", "Select gene:", choices = NULL))
+                        ),
+                        fluidRow(
+                            column(6, plotOutput("plotscvars", width = "100%", height = "600px")),
+                            column(6, plotOutput("plotsc", width = "100%", height = "600px"))
+                        )
+               ),
+               tabPanel("Bubbleplot",
+                        selectizeInput("markergenes", "Select genes:", multiple = TRUE, choices = NULL),
+                        plotOutput("bubbleplot", inline = TRUE)
+               )
+    ),
+    tabPanel("Splicing",
+             selectizeInput("contrast", "Select contrast:", choices = names(contrasts)),
              fluidRow(
-                    column(6, selectizeInput("varsc", "Select variable:", choices = c("HTO", "Clusters"))),
-                    column(6, selectizeInput("genesc", "Select gene:", choices = NULL))
-                    ),
-             fluidRow(
-                    column(6, plotOutput("plotscvars", width = "100%", height = "600px")),
-                    column(6, plotOutput("plotsc", width = "100%", height = "600px"))
-                    )
+                 column(6,
+                        div(id = "clusterTable",
+                            h4(id = "title","Differential splicing events (clusters)"),
+                            hr(),
+                            div(DT::DTOutput("all_clusters"))
+                        )
+                 ),
+                 column(6,
+                        div(id="clusterView",
+                            h4(id="title","Splicing event visualization"),
+                            hr(),
+                            div(plotOutput("select_cluster_plot", width = "100%")),
+                            DT::DTOutput("cluster_view") 
+                        )
+                 )
+             )
     )
 )
 
@@ -156,10 +191,15 @@ server <- function(input, output, session) {
                          choices = gene_list_bulk, 
                          server = TRUE)
     
-    datarna <- reactive(gene_exp |> format_timecourse(input$generna))
+    datarna <- reactive({
+        req(input$generna)
+        gene_exp |> format_timecourse(input$generna)
+        })
     
     output$plotrna <- 
-        renderPlot(ggplot(data = datarna()) +
+        renderPlot(res = 96, {
+            req(input$generna)
+            ggplot(data = datarna()) +
                        geom_quasirandom(aes(x = timep, y = norm_counts, fill = condition),
                                         size = 2.5, stroke = .25, shape = 21,
                                         method = "smiley", width = .2) +
@@ -167,8 +207,8 @@ server <- function(input, output, session) {
                        facet_grid(cols = vars(stim), space = "free", scale = "free_x") +
                        theme_bw() +
                        guides(fill = "none") +
-                       labs(x = "hours", y = "Norm. counts"), 
-                   res = 96)
+                       labs(x = "hours", y = "Norm. counts")
+            })
     
     ## Bulk ATAC
     updateSelectizeInput(session, 
@@ -261,14 +301,15 @@ server <- function(input, output, session) {
                          selected = "CD19",
                          choices = gene_list_sc, 
                          server = TRUE)
-    
+     
     sc_data_gene <- 
         reactive({
-            Seurat::GetAssayData(sc_data, slot = "data")[input$genesc, , drop=FALSE] |> 
+            subset(sc_data, features = input$genesc) |>
+                Seurat::GetAssayData(slot = "data") |>
                 t() |>
-                as.data.frame() |> 
+                as.data.frame() |>
                 tibble::rownames_to_column("barcode") |>
-                tibble::as_tibble() |> 
+                tibble::as_tibble() |>
                 dplyr::select(barcode, value = 2) |>
                 dplyr::right_join(umap_df, dplyr::join_by(barcode)) |>
                 dplyr::arrange(value) |> 
@@ -290,6 +331,137 @@ server <- function(input, output, session) {
                       panel.grid = element_blank()) +
                 guides(color = guide_colorbar(barwidth = .5, barheight = 8))
             )
+    
+    ### Bubble plot
+    updateSelectizeInput(session, 
+                         "markergenes", 
+                         choices = gene_list_sc, 
+                         server = TRUE)
+    
+    markers_plot_data <- 
+        reactive({
+            Seurat::DotPlot(object = sc_data, features = input$markergenes) |>
+            {function(x) tibble::as_tibble(x$data)}() |>
+            dplyr::arrange(id) |>
+            dplyr::mutate(features.plot = forcats::fct_inorder(features.plot),
+                          id = paste0("C-", id),
+                          id = forcats::fct_inorder(id))
+        })
+    
+    plot_height = reactive({
+        req(input$markergenes)
+        min_len <- 300
+        custom_len <- 50 * length(input$markergenes)
+        
+        return(max(min_len, custom_len))
+        })
+    
+    output$bubbleplot <- 
+        renderPlot(res = 96, width = 800, height = function() plot_height(),
+                   {
+                       req(input$markergenes)
+                       ggplot(markers_plot_data(), aes(x = id, y = features.plot)) +
+                           geom_point(aes(size = pct.exp, fill = avg.exp.scaled),
+                                      stroke = 0.2, shape = 21) +
+                           scale_fill_gradient2(low = "Light Sky Blue", 
+                                                mid = "lightyellow", 
+                                                high = "Dark Red",
+                                                midpoint = 0) +
+                           scale_size(range = c(0.25, 5), 
+                                      limits = c(0, 100),
+                                      breaks = c(0, 33, 66, 100)) +
+                           theme_minimal() +
+                           theme(
+                               axis.text.x = element_text(size = 12),
+                               axis.text.y = element_text(size = 12, face = 'italic'),
+                               panel.grid = element_line(linewidth = .25, color = "grey90"),
+                               legend.margin = margin(t = 0, r = 0.2, b = 0, l = -.5, unit = "lines"),
+                               legend.title = element_text(size = 12),
+                               legend.key.spacing.y = unit(-.5, "lines")) +
+                           guides(fill = guide_colorbar(order = 1, position = "right",
+                                                        barwidth = .5, barheight = 6)) +
+                           labs(x = NULL, y = NULL, fill = "Scaled\nExpression", size = "%\nExpressed")
+                       }
+                   )
+    
+    ## Splicing
+    get_splicing_data <- 
+        reactive({
+            req(input$contrast)
+            splicing_contrast <- contrasts[[input$contrast]]
+            load(paste0("./data/splicing/", splicing_contrast, ".Rdata"))
+            
+            return(list("clusters" = clusters, 
+                        "exons_table" = exons_table, 
+                        "meta" = meta,
+                        "cluster_ids" = cluster_ids,
+                        "counts" = counts,
+                        "introns" = introns))
+        })
+    
+    splicing_data <- reactive({function() get_splicing_data()}())
+    
+    output$all_clusters <- 
+        DT::renderDT({
+            DT::datatable(splicing_data()$clusters[, c("gene", "coord", "N", "FDR", "annotation")],
+                          escape = FALSE,
+                          rownames = FALSE,
+                          colnames = c("Genomic location" = "coord", "Gene" = "gene", "N" = "N", "Annotation" = "annotation", "q" = "FDR"),
+                          selection = "single",
+                          caption = "Click on a row to plot the corresponding visualization. N: number of introns within a cluster. q: Benjamini–Hochberg q-value.",
+                          fillContainer = FALSE,
+                          options = list(pageLength = 15,
+                                         columnDefs = list(list(className = 'dt-center', targets = 0:4)))
+            )
+        })
+    
+    values <- reactiveValues(default = 1) 
+    
+    observeEvent(input$contrast, {values$default <- 1})
+    
+    observeEvent(input$all_clusters_rows_selected, {
+        values$default <- input$all_clusters_rows_selected
+    })
+    
+    plot_cluster_data <- 
+        eventReactive(values$default, {
+            sel <- values$default 
+            gene  <- splicing_data()$clusters[ sel, ]$gene
+            gene <- gsub("<.*?>", "", gene) # strip out html italic tags
+            width <- leafviz::getGeneLength(splicing_data()$exons_table, gene)
+            clusterID <- splicing_data()$clusters[ sel, ]$clusterID
+            coord <- splicing_data()$clusters[ sel, ]$coord
+            return(list(gene = gene, width = width, cluster = clusterID, coord = coord) )
+    })
+    
+    output$select_cluster_plot <- 
+        renderPlot(width = "auto", height = "auto", res = 90, {
+            plotTitle <- c(plot_cluster_data()$gene, as.character(plot_cluster_data()$cluster) )
+            leafviz::make_cluster_plot(plot_cluster_data()$cluster,
+                                       main_title = plotTitle,
+                                       meta = splicing_data()$meta,
+                                       cluster_ids = splicing_data()$cluster_ids,
+                                       exons_table = splicing_data()$exons_table,
+                                       counts = splicing_data()$counts,
+                                       introns = splicing_data()$introns)
+        })
+    
+    output$cluster_view = DT::renderDT({
+        clu <- plot_cluster_data()$cluster
+        if(!is.null(clu)){
+            if(length(splicing_data()$introns)){
+                DT::datatable(leafviz::filter_intron_table(splicing_data()$introns, clu, toSave=FALSE),
+                              rownames = TRUE,
+                              options <- list(searching = FALSE, paging = FALSE, info = FALSE)
+                )
+            }
+        } else {
+            print("no cluster selected!")
+        }
+        
+    }) 
+    
+    
 }
 
 shinyApp(ui, server)
