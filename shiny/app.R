@@ -1,6 +1,8 @@
 library(shiny)
 library(ggplot2)
 library(ggbeeswarm)
+library(hdf5r)
+library(patchwork)
 
 ## Function
 format_timecourse <- function(expression_data, chosen_gene) {
@@ -17,6 +19,17 @@ format_timecourse <- function(expression_data, chosen_gene) {
         tidyr::expand_grid(dplyr::distinct(d_tmp, stim)) |>
         dplyr::bind_rows(d_tmp)
 }  
+
+get_sc_data <- function(gene_i) {
+    
+    idx <- which(sc_genes == gene_i)
+    h5file <- H5File$new("./data/singlecell/bcells_expressed.h5")
+    h5data <- h5file[["expr_data"]]
+    gene_data <- h5data$read(args = list(idx, quote(expr=)))
+    gene_df <- tibble::tibble( "{gene_i}" := gene_data)
+    h5file$close_all()
+    return(gene_df)
+}
 
 ## Metadata
 plot_colors <- 
@@ -53,23 +66,23 @@ bigwigs <-
 names(bigwigs) <- sub("^([^_]+_\\d+).+$", "\\1", basename(bigwigs))
 
 ## Cite-seq data
-sc_data <- SeuratDisk::LoadH5Seurat("./data/bcells_expressed.h5Seurat")
+sc_cells <- 
+    "./data/singlecell/cells.txt" |>
+    readr::read_lines()
 
-gene_list_sc <- sc_data@assays$RNA@data@Dimnames[[1]]
+sc_genes <-
+    "./data/singlecell/genes.txt" |>
+    readr::read_lines()
 
 sc_meta <- 
-    sc_data@meta.data |>
-    as.data.frame() |>
-    tibble::rownames_to_column("barcode") |>
-    tibble::as_tibble() |>
+    "./data/singlecell/metadata.tsv" |>
+    readr::read_tsv() |>
     dplyr::select(barcode, hto = dmm_hto_call, cluster = seurat_clusters) |>
     dplyr::mutate(cluster = factor(cluster, levels = paste0("C", 0:13)))
 
 umap_df <-
-    Seurat::Embeddings(sc_data, reduction = "umap") |>
-    as.data.frame() |>
-    tibble::rownames_to_column("barcode") |>
-    tibble::as_tibble() |>
+    "./data/singlecell/umap_data.tsv" |>
+    readr::read_tsv() |>
     dplyr::left_join(sc_meta, dplyr::join_by(barcode)) |>
     dplyr::mutate(hto = dplyr::recode(hto, 
                                       "Unstim 0h" = "Unstim_0",
@@ -82,6 +95,12 @@ umap_df <-
                                       "DN2 24h" = "DN2c_24",
                                       "DN2 72h" = "DN2c_72"))
 
+cluster_labels <-
+    umap_df |>
+    dplyr::group_by(cluster) |>
+    dplyr::summarise_at(vars(UMAP_1, UMAP_2), mean) |>
+    dplyr::ungroup()
+
 sc_clusters_plot <- 
     ggplot(umap_df, aes(UMAP_1, UMAP_2)) +
     geom_point(aes(fill = cluster), 
@@ -89,6 +108,10 @@ sc_clusters_plot <-
                shape = 21, 
                stroke = .05, 
                color = "black") +
+    geom_label(data = cluster_labels, 
+               aes(x = UMAP_1, y = UMAP_2, label = cluster),
+               label.padding = unit(0.1, "lines"),
+               size = 12, size.unit = "pt", alpha = .5, fontface = "bold") +
     scale_fill_manual(values = cluster_colors) +
     theme_minimal() +
     theme(axis.text = element_text(size = 12),
@@ -299,17 +322,14 @@ server <- function(input, output, session) {
     updateSelectizeInput(session, 
                          "genesc", 
                          selected = "CD19",
-                         choices = gene_list_sc, 
+                         choices = sc_genes, 
                          server = TRUE)
-     
+    
     sc_data_gene <- 
         reactive({
-            subset(sc_data, features = input$genesc) |>
-                Seurat::GetAssayData(slot = "data") |>
-                t() |>
-                as.data.frame() |>
-                tibble::rownames_to_column("barcode") |>
-                tibble::as_tibble() |>
+            req(input$genesc)
+            get_sc_data(input$genesc) |>
+                tibble::add_column(barcode = sc_cells, .before = 1) |>
                 dplyr::select(barcode, value = 2) |>
                 dplyr::right_join(umap_df, dplyr::join_by(barcode)) |>
                 dplyr::arrange(value) |> 
@@ -335,17 +355,57 @@ server <- function(input, output, session) {
     ### Bubble plot
     updateSelectizeInput(session, 
                          "markergenes", 
-                         choices = gene_list_sc, 
+                         choices = sc_genes, 
                          server = TRUE)
     
-    markers_plot_data <- 
+    markers_plot_data <-
         reactive({
-            Seurat::DotPlot(object = sc_data, features = input$markergenes) |>
-            {function(x) tibble::as_tibble(x$data)}() |>
-            dplyr::arrange(id) |>
-            dplyr::mutate(features.plot = forcats::fct_inorder(features.plot),
-                          id = paste0("C-", id),
-                          id = forcats::fct_inorder(id))
+            req(input$markergenes)
+            
+            if (length(input$markergenes) == 1) {
+                dat <- 
+                    get_sc_data(input$markergenes) |>
+                        tibble::add_column(barcode = sc_cells, .before = 1) |>
+                        dplyr::left_join(sc_meta, dplyr::join_by(barcode)) |>
+                        dplyr::select(-barcode, -hto) |>
+                        tidyr::pivot_longer(-cluster, names_to = "gene") |>
+                        dplyr::group_by(cluster, gene) |>
+                        dplyr::summarise(avg.exp = mean(expm1(value)),
+                                         pct.exp = mean(value > 0) * 100) |>
+                        dplyr::ungroup()
+            } else {
+                dat <- 
+                    purrr::map_dfc(input$markergenes, get_sc_data) |>
+                        tibble::add_column(barcode = sc_cells, .before = 1) |>
+                        dplyr::left_join(sc_meta, dplyr::join_by(barcode)) |>
+                        dplyr::select(-barcode, -hto) |>
+                        dplyr::select(cluster, dplyr::everything()) |>
+                        dplyr::group_by(cluster) |>
+                        dplyr::summarise_all(list(avg.exp = ~mean(expm1(.)),
+                                                  pct.exp = ~mean(. > 0) * 100)) |>
+                        dplyr::ungroup() |>
+                        tidyr::pivot_longer(-cluster, 
+                                            names_to = c("gene", ".value"),
+                                            names_pattern = c("(.+)_(avg.exp|pct.exp)"))
+                
+                clust <- dat |>
+                    dplyr::select(cluster, gene, avg.exp) |>
+                    tidyr::pivot_wider(names_from = cluster, values_from = avg.exp) |>
+                    tibble::column_to_rownames("gene") |>
+                    dist() |>
+                    hclust()
+                
+                dat <- dat |>
+                    dplyr::mutate(gene = factor(gene, levels = clust$labels[clust$order]))
+            }
+            
+            dat |>
+                dplyr::group_by(gene) |>
+                dplyr::mutate(avg.exp.scaled = as.numeric(scale(log1p(avg.exp))),
+                              avg.exp.scaled = dplyr::case_when(avg.exp.scaled > 2.5 ~ 2.5,
+                                                                avg.exp.scaled < -2.5 ~ -2.5,
+                                                                .default = avg.exp.scaled)) |>
+                dplyr::ungroup()
         })
     
     plot_height = reactive({
@@ -360,26 +420,25 @@ server <- function(input, output, session) {
         renderPlot(res = 96, width = 800, height = function() plot_height(),
                    {
                        req(input$markergenes)
-                       ggplot(markers_plot_data(), aes(x = id, y = features.plot)) +
+                       ggplot(markers_plot_data(), aes(x = cluster, y = gene)) +
                            geom_point(aes(size = pct.exp, fill = avg.exp.scaled),
                                       stroke = 0.2, shape = 21) +
+                           scale_radius(range = c(0, 6),
+                                        breaks = c(0, .25, .5, .75, 1) * 100,
+                                        limits = c(0, 100)) +
                            scale_fill_gradient2(low = "Light Sky Blue", 
                                                 mid = "lightyellow", 
                                                 high = "Dark Red",
                                                 midpoint = 0) +
-                           scale_size(range = c(0.25, 5), 
-                                      limits = c(0, 100),
-                                      breaks = c(0, 33, 66, 100)) +
                            theme_minimal() +
                            theme(
                                axis.text.x = element_text(size = 12),
                                axis.text.y = element_text(size = 12, face = 'italic'),
                                panel.grid = element_line(linewidth = .25, color = "grey90"),
-                               legend.margin = margin(t = 0, r = 0.2, b = 0, l = -.5, unit = "lines"),
                                legend.title = element_text(size = 12),
                                legend.key.spacing.y = unit(-.5, "lines")) +
                            guides(fill = guide_colorbar(order = 1, position = "right",
-                                                        barwidth = .5, barheight = 6)) +
+                                                        barwidth = .5, barheight = 5)) +
                            labs(x = NULL, y = NULL, fill = "Scaled\nExpression", size = "%\nExpressed")
                        }
                    )
