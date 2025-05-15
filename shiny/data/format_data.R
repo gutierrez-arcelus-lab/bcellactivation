@@ -3,12 +3,15 @@ library(vroom)
 library(Seurat)
 library(hdf5r)
 
-
 # Bulk RNA-seq
 dat <- read_rds("./deseq_normalized_counts.rds")
 
 write_lines(unique(dat$gene_label), "./bulk_genes.txt")
 
+dat_w <- dat |>
+    pivot_wider(names_from = gene_label, values_from = norm_counts)
+
+write_csv(dat_w, "./deseq_normalized_counts.csv")
 
 # Single-cell data
 sc_data <- SeuratDisk::LoadH5Seurat("../../citeseq/data/bcells.h5Seurat")

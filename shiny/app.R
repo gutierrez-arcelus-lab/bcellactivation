@@ -9,8 +9,7 @@ format_timecourse <- function(expression_data, chosen_gene) {
 
     d <- 
         expression_data |> 
-        dplyr::filter(gene_label == chosen_gene) |>
-        tidyr::unite("condition", c(stim, timep), sep = "_", remove = FALSE)
+        dplyr::select(1:4, norm_counts = {{ chosen_gene }})
 
     d_tmp <- dplyr::filter(d, condition != "Unstim_0")
 
@@ -51,7 +50,10 @@ cluster_colors <-
 ## Timecourse data
 gene_list_bulk <- readr::read_lines("./data/bulk_genes.txt")
 
-gene_exp <- readr::read_rds("./data/deseq_normalized_counts.rds")
+gene_exp <- 
+    vroom::vroom("./data/deseq_normalized_counts.csv", show_col_types = FALSE) |>
+    tidyr::unite("condition", c(stim, timep), sep = "_", remove = FALSE) |>
+    dplyr::mutate_at(dplyr::vars(stim, timep), ~forcats::fct_inorder(as.character(.)))
 
 ## Gene tracks for ATAC-seq plot
 AnnotationHub::setAnnotationHubOption("CACHE", "./data/AnnotationHub")
@@ -64,6 +66,9 @@ bigwigs <-
     list.files(full.name = TRUE, pattern = "*.bigWig")
 
 names(bigwigs) <- sub("^([^_]+_\\d+).+$", "\\1", basename(bigwigs))
+
+atac_genes <- keys(ens_data, keytype = "SYMBOL")
+atac_genes <- atac_genes[! atac_genes == ""]
 
 ## Cite-seq data
 sc_cells <- 
@@ -158,13 +163,14 @@ contrasts <-
 ## App
 ui <- navbarPage(
     "B cell activation",
-    tabPanel("Bulk RNA-seq",
+    tabPanel("Time course RNA-seq",
              selectizeInput("generna", "Select gene:", choices = NULL),
              plotOutput("plotrna", width = "100%", height = "200px")
     ),
     tabPanel("Bulk ATAC-seq",
              selectizeInput("geneatac", "Select gene:", choices = NULL),
              numericInput("atacwindow", "Window Size", value = 10e3, min = 1e3, max = 500e3),
+             actionButton("makeatacplot", "Click to plot!"),
              plotOutput("plotatac", width = "100%", height = "600px")
     ),
     navbarMenu("Single-cell RNA-seq", 
@@ -237,21 +243,21 @@ server <- function(input, output, session) {
     updateSelectizeInput(session, 
                          "geneatac", 
                          selected = "CD19",
-                         choices = gene_list_bulk, 
+                         choices = atac_genes, 
                          server = TRUE)
-    loc <-
-        reactive(
-            locuszoomr::locus(gene = input$geneatac, 
-                              flank = input$atacwindow,
-                              ens_db = ens_data)
-        )
     
-    atac_peaks <-
-        reactive({
-
-            interv <- 
-                GenomicRanges::GRanges(paste0("chr", loc()$seqname), 
-                                       IRanges(loc()$xrange[1], loc()$xrange[2]))
+    plot_atac <-
+        eventReactive(input$makeatacplot, {
+            
+            loc <- 
+                locuszoomr::locus(gene = input$geneatac, 
+                                  flank = input$atacwindow,
+                                  ens_db = ens_data)
+            
+            atac_peaks <-
+                interv <- 
+                GenomicRanges::GRanges(paste0("chr", loc$seqname), 
+                                       IRanges(loc$xrange[1], loc$xrange[2]))
             
             atac_ranges <- purrr::map(bigwigs, ~rtracklayer::import(., which = interv))
             
@@ -265,8 +271,9 @@ server <- function(input, output, session) {
                 purrr::map_dfr(~ranges(.) |> gaps() |> as.data.frame(), .id = "stim") |>
                 dplyr::mutate(score = 0) |>
                 dplyr::select(stim, start, end, score)
-                
-            dplyr::bind_rows(atac_covered, atac_gaps) |>
+            
+            atac_peaks <- 
+                dplyr::bind_rows(atac_covered, atac_gaps) |>
                 dplyr::mutate(stim = stringr::str_replace(stim, "unst", "Unstim"),
                               stim = stringr::str_replace(stim, "IL4", "IL-4c"),
                               stim = stringr::str_replace(stim, "TLR7", "TLR7c"),
@@ -275,46 +282,48 @@ server <- function(input, output, session) {
                               stim = factor(stim, levels = names(atac_colors))) |>
                 dplyr::arrange(stim, start) |>
                 tidyr::pivot_longer(start:end, names_to = "dummy", values_to = "pos")
+            
+            plot_atac <-
+                ggplot(atac_peaks) +
+                geom_ribbon(aes(x = pos, ymin = 0, ymax = score, color = stim, fill = stim),
+                            linewidth = .5, outline.type = "full", alpha = .5) +
+                scale_x_continuous(limits = loc$xrange, 
+                                   labels = function(x) round(x/1e6L, 2),
+                                   expand = c(0, 0)) +
+                scale_color_manual(values = atac_colors) +
+                scale_fill_manual(values = atac_colors) +
+                facet_wrap(~stim, ncol = 1, strip.position = "right") +
+                theme_minimal() +
+                theme(
+                    axis.text = element_text(size = 12),
+                    legend.position = "none",
+                    strip.text.y.right = element_text(angle = 0, size = 12),
+                    panel.grid.major.x = element_blank(),
+                    panel.grid.minor.x = element_blank(),
+                    panel.grid.major.y = element_blank(),
+                    panel.grid.minor.y = element_blank(),
+                    plot.background = element_rect(color = "white", fill = "white")) +
+                labs(x = NULL)
+            
+            gene_tracks <- 
+                locuszoomr::gg_genetracks(loc, cex.text = 1) + 
+                scale_x_continuous(limits = loc$xrange/1e6,
+                                   labels = function(x) round(x, 2),
+                                   expand = c(0, 0)) +
+                theme_minimal() +
+                theme(
+                    axis.text = element_text(size = 12),
+                    axis.title = element_text(size = 12),
+                    plot.background = element_rect(color = "white", fill = "white"))
+            
+            plot_atac / gene_tracks + plot_layout(heights = c(1, .3)) 
         })
     
-    plot_atac <-
-        reactive({
-            ggplot(atac_peaks()) +
-            geom_ribbon(aes(x = pos, ymin = 0, ymax = score, color = stim, fill = stim),
-                        linewidth = .5, outline.type = "full", alpha = .5) +
-            scale_x_continuous(limits = loc()$xrange, 
-                               labels = function(x) round(x/1e6L, 2),
-                               expand = c(0, 0)) +
-            scale_color_manual(values = atac_colors) +
-            scale_fill_manual(values = atac_colors) +
-            facet_wrap(~stim, ncol = 1, strip.position = "right") +
-            theme_minimal() +
-            theme(
-                axis.text = element_text(size = 12),
-                legend.position = "none",
-                strip.text.y.right = element_text(angle = 0, size = 12),
-                panel.grid.major.x = element_blank(),
-                panel.grid.minor.x = element_blank(),
-                panel.grid.major.y = element_blank(),
-                panel.grid.minor.y = element_blank(),
-                plot.background = element_rect(color = "white", fill = "white")) +
-            labs(x = NULL)
+    output$plotatac <- 
+        renderPlot({
+            input$makeatacplot
+            plot_atac()
         })
-        
-    gene_tracks <- 
-        reactive({
-            locuszoomr::gg_genetracks(loc(), cex.text = 1) + 
-            scale_x_continuous(limits = loc()$xrange/1e6,
-                               labels = function(x) round(x, 2),
-                               expand = c(0, 0)) +
-            theme_minimal() +
-            theme(
-                axis.text = element_text(size = 12),
-                axis.title = element_text(size = 12),
-                plot.background = element_rect(color = "white", fill = "white"))
-        })
-    
-    output$plotatac <- renderPlot(plot_atac() / gene_tracks() + plot_layout(heights = c(1, .3)))
     
     #Single-cell RNA-seq
     output$plotscvars <- renderPlot(sc_var_plots[[input$varsc]])
