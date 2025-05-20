@@ -167,13 +167,17 @@ umaps_prot_markers <-
     group_split(feature_id) |>
     map(~ggplot(data = ., aes(x = umap_1, y = umap_2)) +
 	geom_point(aes(color = value), size = .2, stroke = 0) +
-	scale_color_viridis_c(option = "magma") +
+	#scale_color_viridis_c(option = "magma",
+	#		      label = function(x) sprintf("%.1f", x)) +
+	scico::scale_color_scico(palette = "lajolla",
+				 label = function(x) sprintf("%.1f", x)) +
 	facet_wrap(~feature_id, ncol = 1) +
 	theme_minimal() +
 	theme(axis.title = element_blank(),
 	      axis.text = element_blank(),
-	      legend.text = element_blank(),
+	      legend.text = element_text(size = 7, margin = margin(l = 0)),
 	      legend.margin = margin(0, 0, 0, -0.5, "lines"),
+	      legend.box.spacing = unit(8, "pt"),
 	      panel.grid = element_blank(),
 	      strip.text = element_text(size = 7, margin = margin(t = 0, b = 0)),
 	      strip.clip = "off",
@@ -196,6 +200,7 @@ fig_c_title <-
 	       ) +
     theme(text = element_text(size = 9),
 	  plot.margin = margin(l = 1.25, unit = "lines"))
+
 
 # Figure D ###################################################################
 cluster_markers <- read_tsv("../citeseq/data/v4_cluster_markers.tsv")
@@ -302,7 +307,7 @@ titles_cd <-
     plot_grid(fig_c_title, NULL, fig_d_title, nrow = 1, rel_widths = c(.66, .05, 1),
 	      labels = c('c', '', 'd'), label_size = 12)
 
-fig_cd <- plot_grid(umaps_prot_markers, NULL, dotplot_markers, nrow = 1, rel_widths = c(.7, .1, 1))
+fig_cd <- plot_grid(umaps_prot_markers, NULL, dotplot_markers, nrow = 1, rel_widths = c(.75, .025, 1))
 
 grid_cd <- plot_grid(titles_cd, fig_cd, ncol = 1, rel_heights = c(.1, 1))
 
@@ -511,13 +516,15 @@ umaps_disease <-
 		aes(x = umap_1, y = umap_2)) +
 	geom_point(aes(color = value), size = .3, stroke = 0) +
 	scale_color_gradientn(colors = c("grey85","#FFF7EC","#FEE8C8","#FDD49E","#FDBB84",
-					 "#FC8D59","#EF6548","#D7301F","#B30000","#7F0000")) +
+					 "#FC8D59","#EF6548","#D7301F","#B30000","#7F0000"),
+			      label = function(x) sprintf("%.1f", x)) +
 	facet_wrap(~gene_name) +
 	theme_minimal() +
 	theme(axis.title = element_blank(),
 	      axis.text = element_blank(),
-	      legend.text = element_blank(),
+	      legend.text = element_text(size = 7, margin = margin(l = 0)),
 	      legend.margin = margin(0, 0, 0, -0.5, "lines"),
+	      legend.box.spacing = unit(8, "pt"),
 	      panel.grid = element_blank(),
 	      strip.text = element_text(size = 8, face = 'italic', margin = margin(0, 0, 0, 0)),
 	      strip.clip = "off",
@@ -528,7 +535,7 @@ umaps_disease <-
 	guides(color = guide_colorbar(barwidth = .2, barheight = 2))
 	) |>
     {function(x) plot_grid(plotlist = x, nrow = 1)}() +
-    theme(plot.margin = margin(5.5, 0, 5.5, 0, "pt"))
+    theme(plot.margin = margin(5.5, 1, 5.5, 0, "pt"))
 
 fig_f_title <- 
     ggdraw() + 
@@ -547,6 +554,6 @@ fig_f <- plot_grid(fig_f_title, umaps_disease, ncol = 1, rel_heights = c(.1, 1),
 
 ggsave("./fig3.png", 
        plot_grid(grid_ab, NULL, grid_cd, NULL, fig_e, NULL, fig_f, 
-		 ncol = 1, rel_heights = c(.75, .025, 1.05, 0.05, .3, 0.05, .36)), 
+		 ncol = 1, rel_heights = c(.75, .025, 1.05, 0.05, .3, 0.05, .33)), 
        width = 6.5, height = 8.5, dpi = 300)
 

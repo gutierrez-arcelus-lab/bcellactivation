@@ -226,7 +226,7 @@ diff_plot <-
     geom_tile(aes(fill = n), alpha = .85) +
     geom_vline(xintercept = segments_x$rowid, color = "white", linewidth = .5) +
     geom_hline(yintercept = segments_y$rowid, color = "white", linewidth = .5) +
-    scico::scale_fill_scico(palette = "lajolla", 
+    scico::scale_fill_scico(palette = "nuuk", 
 			    na.value = "white",
 			    labels = scales::comma) +
     theme_minimal() +
@@ -241,7 +241,6 @@ diff_plot <-
     labs(fill = "DE\ngenes:") +
     guides(fill = guide_colorbar(barwidth = .5, barheight = 5, position = "inside")) +
     coord_cartesian(xlim = c(1, 28), ylim = c(1, 28))
-
 
 b_axis_x_df <- 
     diff_expr_summ |>
@@ -375,7 +374,7 @@ timecourse_plot_1 <-
 	  panel.spacing.x = unit(0, "null"),
 	  panel.spacing.y = unit(.5, "lines"),
 	  strip.text.x = element_blank(),
-	  strip.text.y = element_text(size = 9, angle = 0),
+	  strip.text.y = element_text(size = 9, angle = 0, face = "italic"),
 	  strip.clip = "off",
 	  axis.text.x = element_blank(),
 	  axis.text.y = element_text(size = 8, color = "grey40"),
@@ -404,7 +403,7 @@ timecourse_plot_2 <-
 	  panel.spacing.x = unit(0, "null"),
 	  panel.spacing.y = unit(.5, "lines"),
 	  strip.text.x = element_blank(),
-	  strip.text.y = element_text(size = 9, angle = 0),
+	  strip.text.y = element_text(size = 9, angle = 0, face = "italic"),
 	  strip.clip = "off",
 	  axis.text.x = element_blank(),
 	  axis.text.y = element_text(size = 8, color = "grey40"),
