@@ -15,17 +15,11 @@ filter <- dplyr::filter
 slice <- dplyr::slice
 
 stim_colors <- 
-    read_tsv('../figure_colors.txt', col_names = c('stim', 'time', 'color')) |>
-    filter(stim %in% c('Unstim', 'IL4', 'TLR7', 'BCR', 'DN2')) |>
-    mutate(stim = recode(stim, 
-			 'IL4' = 'IL-4c', 
-			 'TLR7' = 'TLR7c',
-			 'BCR' = 'BCRc', 
-			 'DN2' = 'DN2c')) |>
+    read_tsv('./figure_colors.txt', col_names = c('stim', 'time', 'color')) |>
+    filter(stim %in% c('Unstim', 'IL-4c', 'TLR7c', 'BCRc', 'DN2c')) |>
     unite('stim', c(stim, time), sep = ' ') |>
     mutate(stim = paste0(stim, 'h')) |>
     deframe()
-
 
 # Low-input RNA-seq
 dat <- read_rds('../bcell_lowinput/wgcna/data/gene_expression.rds')
@@ -405,5 +399,5 @@ bottom_panel <-
 ggsave("fig5.png", 
        plot_grid(fig_ab_grid, NULL, bottom_panel, ncol = 1, rel_heights = c(1, .025, .4)) +
 	   theme(plot.background = element_rect(fill = "white", color = "white")),
-       width = 6.5, height = 6, dpi = 600)
+       width = 6.5, height = 6, dpi = 300)
 

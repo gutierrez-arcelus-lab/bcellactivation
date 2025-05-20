@@ -12,7 +12,7 @@ select <- dplyr::select
 filter <- dplyr::filter
 
 stim_colors <- 
-    "../figure_colors.txt" |>
+    "./figure_colors.txt" |>
     read_tsv(col_names = c("stim", "time", "color")) |>
     unite("condition", c(stim, time), sep = "_") |>
     mutate(condition = paste0(condition, "hrs")) |>
@@ -49,6 +49,15 @@ pca_df <-
     as_tibble(pca_res) |>
     select(sample_id = name, condition, PC1, PC2) |>
     separate(condition, c("stim", "time"), sep = "_", remove = FALSE) |>
+    mutate(stim = recode(stim, 
+			 "IL4" = "IL-4c", 
+			 "CD40L" = "CD40c", 
+			 "TLR9" = "TLR9c", 
+			 "TLR7" = "TLR7c",
+			 "BCR" = "BCRc", 
+			 "BCR-TLR7" = "BCR/TLR7c", 
+			 "DN2" = "DN2c")) |>
+    unite("condition", c(stim, time), sep = "_", remove = FALSE) |>
     mutate(time = factor(time, levels = paste0(c(0, 4, 24, 48, 72), "hrs")),
 	   condition = factor(condition, levels = names(stim_colors)))
 
@@ -172,6 +181,14 @@ diff_expr_summ <-
     separate(group1, c("stim1", "t1"), sep = "\\.", remove = FALSE, convert = TRUE) |>
     separate(group2, c("stim2", "t2"), sep = "\\.", remove = FALSE, convert = TRUE) |>
     mutate_at(vars(stim1, stim2), ~recode(., "BCR_TLR7" = "BCR-TLR7")) |>
+    mutate_at(vars(stim1, stim2), ~recode(., 
+					 "IL4" = "IL-4c", 
+					 "CD40L" = "CD40c", 
+					 "TLR9" = "TLR9c", 
+					 "TLR7" = "TLR7c",
+					 "BCR" = "BCRc", 
+					 "BCR-TLR7" = "BCR/TLR7c", 
+					 "DN2" = "DN2c")) |>
     mutate_at(vars(stim1, stim2), ~factor(., levels = all_stims)) |>
     complete(group1, group2, fill = list(n = NA)) |>
     arrange(stim1, stim2, t1, t2) |>
@@ -293,8 +310,6 @@ fig_b_grid <-
     )
 
 
-
-
 # Fig C #######################################################################
 gene_metadata <- 
     "../bcell_lowinput/results/edger/results.tsv" |>
@@ -305,6 +320,15 @@ sample_metadata <-
     colData(dds) |> 
     as_tibble(rownames = "sample_name") |>
     separate(condition, c("stim", "hours"), sep = "_", remove = FALSE) |>
+    mutate(stim = recode(stim, 
+			 "IL4" = "IL-4c", 
+			 "CD40L" = "CD40c", 
+			 "TLR9" = "TLR9c", 
+			 "TLR7" = "TLR7c",
+			 "BCR" = "BCRc", 
+			 "BCR-TLR7" = "BCR/TLR7c", 
+			 "DN2" = "DN2c")) |>
+    unite(condition, c(stim, hours), sep = "_", remove = FALSE) |>
     mutate(hours = str_remove(hours, "hrs$"),
 	   hours = factor(hours, levels = sort(unique(as.numeric(hours)))))
 
@@ -329,7 +353,7 @@ pathway_colors <-
 
 names(pathway_colors) <- str_remove(names(pathway_colors), "_48hrs")
 
-pathway_colors <- c("IL4" = "goldenrod4", pathway_colors)
+pathway_colors <- c("IL-4c" = "goldenrod4", pathway_colors)
 
 timecourse_plot_1 <- 
     ggplot(data = counts_data |> filter(gene_name %in% c("AICDA", "FCER2", "BANK1")), 
@@ -458,7 +482,6 @@ module_plot <-
     ggplot(modules_df) +
     geom_line(aes(x = time, y = value, group = module),
 	      linewidth = 1.25) +
-    #scale_color_manual(values = module_colors) +
     facet_wrap(~module_ix, ncol = 1) +
     theme_minimal() +
     theme(axis.text.x = element_text(size = 8),
@@ -472,9 +495,7 @@ module_plot <-
 	  strip.text = element_text(size = 8, margin = margin(t = 0, b = 0)),
 	  strip.clip = "off",
 	  plot.margin = margin(0, 0, 0, 0, unit = "lines")) +
-    #guides(color = "none") +
     labs(y = "Eigengene expression")
-
 
 kim_plot <-
     ggplot(data = kim_df |> 
@@ -552,7 +573,7 @@ kme_df <-
     "../bcell_lowinput/wgcna/data/DN2_kme.tsv" |>
     read_tsv() |>
     select(-grey) |>
-    left_join(distinct(edger_res, gene_id, gene_name), join_by(gene_id)) |>
+    left_join(gene_metadata, join_by(gene_id)) |>
     pivot_longer(-c(gene_id, gene_name), names_to = "module", values_to = "kme") |>
     group_by(gene_id) |>
     slice_max(kme) |>
@@ -595,7 +616,7 @@ aid_df <-
     select(-norm_counts) |>
     inner_join(vst_df, join_by(donor_id, condition, gene_id)) |>
     inner_join(aid_genes, join_by(gene_name)) |>
-    filter(stim == "DN2") |>
+    filter(stim == "DN2c") |>
     select(donor_id, condition, stim, hours, gene_id, gene_name, module = ix, vst_counts)
 
 fig_f <-
@@ -680,5 +701,5 @@ ggsave("./fig2.png",
        plot_grid(top_grid, NULL, fig_c, NULL, bottom_grid, 
 		 ncol = 1, rel_heights = c(0.55, 0.03, 0.25, 0.001, 1)) +
        theme(plot.background = element_rect(fill = "white", color = "white")),
-       width = 6.5, height = 8.5, dpi = 600)
+       width = 6.5, height = 8.5, dpi = 300)
 

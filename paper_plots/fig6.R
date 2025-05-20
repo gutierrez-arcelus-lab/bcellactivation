@@ -8,7 +8,7 @@ library(fgsea)
 library(locuszoomr)
 
 fig_colors <- 
-    read_tsv("../figure_colors_v2.txt", col_names = c("stim", "timep", "color")) |>
+    read_tsv("./figure_colors.txt", col_names = c("stim", "timep", "color")) |>
     unite("condition", c(stim, timep), sep = " ") |>
     mutate(condition = paste0(condition, "h")) |>
     deframe()
@@ -298,8 +298,8 @@ gsea_plot <-
 		       breaks = c(1, 2)) +
     scale_y_reordered() +
     scale_fill_stepsn(name = "P_adj:",
-		       breaks = c(.01, .05, .1, .2),
-		       colors = c("#f03b20", "#feb24c", "#ffeda0", "grey")) +
+		      breaks = c(.01, .05, .1, .2),
+		      colors = c("#f03b20", "#feb24c", "#ffeda0", "grey")) +
     facet_wrap(~contrast, nrow = 1, scales = "free_y") +
     theme_minimal() +
     theme(axis.text.x = element_text(size = 8),
@@ -453,5 +453,5 @@ ggsave("./fig6.png",
 		 ncol = 1,
 		 rel_heights = c(1, .05, 1, .05, 1, .1, 1.5)) +
        theme(plot.background = element_rect(color = "white", fill = "white")),
-       width = 6.5, height = 8.5, dpi = 600)
+       width = 6.5, height = 8.5, dpi = 300)
 

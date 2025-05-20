@@ -14,12 +14,7 @@ clip_expression <- function(values) {
 
 # colors
 stim_colors <- 
-    read_tsv("../figure_colors.txt", col_names = c("stim", "time", "color")) |>
-    mutate(stim = recode(stim, 
-			 "IL4" = "IL-4c", 
-			 "TLR7" = "TLR7c",
-			 "BCR" = "BCRc", 
-			 "DN2" = "DN2c")) |>
+    read_tsv("./figure_colors.txt", col_names = c("stim", "time", "color")) |>
     unite("stim", c(stim, time), sep = " ") |>
     mutate(stim = paste0(stim, "h")) |>
     deframe()
@@ -553,5 +548,5 @@ fig_f <- plot_grid(fig_f_title, umaps_disease, ncol = 1, rel_heights = c(.1, 1),
 ggsave("./fig3.png", 
        plot_grid(grid_ab, NULL, grid_cd, NULL, fig_e, NULL, fig_f, 
 		 ncol = 1, rel_heights = c(.75, .025, 1.05, 0.05, .3, 0.05, .36)), 
-       width = 6.5, height = 8.5, dpi = 600)
+       width = 6.5, height = 8.5, dpi = 300)
 

@@ -7,15 +7,11 @@ library(tidytext)
 
 # colors
 stim_colors <- 
-    read_tsv("../figure_colors.txt", col_names = c("stim", "time", "color")) |>
+    read_tsv("./figure_colors.txt", col_names = c("stim", "time", "color")) |>
     unite("stim", c(stim, time), sep = " ") |>
     filter(grepl("0$|24$", stim), 
-	   grepl("^Unstim\\s|^IL4\\s|^TLR7\\s|^BCR\\s|^DN2\\s", stim)) |>
-    mutate(stim = str_replace(stim, "IL4", "IL-4c"),
-	   stim = str_replace(stim, "BCR", "BCRc"),
-	   stim = str_replace(stim, "TLR7", "TLR7c"),
-	   stim = str_replace(stim, "DN2", "DN2c"),
-	   stim = paste0(stim, "h")) |>
+	   grepl("^Unstim\\s|^IL-4c\\s|^TLR7c\\s|^BCRc\\s|^DN2c\\s", stim)) |>
+    mutate(stim = paste0(stim, "h")) |>
     deframe()
 
 # meta data
@@ -398,4 +394,4 @@ final_grid <-
     plot_grid(top_grid, NULL, bottom_grid, ncol = 1, rel_heights = c(.25, .01, 1)) +
     theme(panel.background = element_rect(color = "white", fill = "white"))
 
-ggsave("fig4.png", final_grid, width = 6.5, height = 7.5, dpi = 600)
+ggsave("fig4.png", final_grid, width = 6.5, height = 7.5, dpi = 300)
