@@ -118,7 +118,7 @@ pca_plot <-
     labs(x = glue("PC1 ({pca_var[1]})"), y = glue("PC2 ({pca_var[2]})"))
 
 pca_inset <- 
-    ggplot(pca_df |> mutate(i = stim %in% c("BCR", "BCR-TLR7", "DN2")),
+    ggplot(pca_df |> mutate(i = stim %in% c("BCRc", "BCR/TLR7c", "DN2c")),
 	   aes(PC1, PC2)) +
     geom_point(aes(color = i), 
 	       size = .5) +
