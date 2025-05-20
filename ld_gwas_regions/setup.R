@@ -117,7 +117,6 @@ dbsnp_data <-
 gwas_stats_regions_2 <- 
     gwas_stats_regions |>
     left_join(dbsnp_data, join_by(gene_region, pos, alleleA == ref, alleleB == alt)) |>
-    filter(!is.na(rsid.x), !is.na(rsid.y), rsid.x != rsid.y)
     mutate(rsid = ifelse(!is.na(rsid.y), rsid.y, rsid.x)) |>
     select(chr, gene_region, rsid, pos, alleleA, alleleB, beta, se, p) |>
     filter(!is.na(rsid))
@@ -142,40 +141,16 @@ dat |>
     pull(SAMPLE_NAME) |>
     write_lines("./data/eur_kgp.txt")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Save coords in hg19 for LD estimation
-paste0("2:", stat4_risk_var - 1e6, "-", stat4_risk_var + 1e6) |>
-    write_lines("./data/stat4_coords_grch37.txt")
-
-# liftOver Langefeld data
+# liftOver Langefeld data for plotting with ATAC-seq data
 # LiftOver
 bed19_file <- "./data/langefeld_hg19.bed"
 bed38_file <- "./data/langefeld_hg38.bed"
 fail_file <- "./data/langefeld.failTolift.txt"
 chain_file <- "/reference_databases/ReferenceGenome/liftover_chain/hg19/hg19ToHg38.over.chain.gz"
 
-bed19 <- 
-    "./data/langefeld_stat4.tsv" |>
-    read_tsv() |>
-    mutate(chr = "chr2",
+bed19 <-
+    gwas_stats_regions_2 |>
+    mutate(chr = paste0("chr", chr),
 	   end = pos,
 	   start = pos - 1L) |>
     select(chr, start, end, rsid)
@@ -184,4 +159,3 @@ write_tsv(bed19, bed19_file, col_names = FALSE)
 
 command <- sprintf("liftOver %s %s %s %s", bed19_file, chain_file, bed38_file, fail_file)
 system(command)
-

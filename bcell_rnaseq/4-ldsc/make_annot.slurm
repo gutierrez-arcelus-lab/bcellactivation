@@ -4,8 +4,8 @@
 #SBATCH -c 1
 #SBATCH --mem=8gb
 #SBATCH -t 24:00:00
-#SBATCH -p bch-compute
-#SBATCH -a 1-110
+#SBATCH -p bch-compute-pe
+#SBATCH -a 1-88
 #SBATCH -J ldsc
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL

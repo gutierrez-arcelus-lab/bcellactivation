@@ -25,17 +25,25 @@ run_coloc <- function(min_df) {
 }
 
 main <- function(qtl_file) {
-    
+   
+    out_file <- 
+	file.path("./data/coloc",
+		  str_replace(basename(qtl_file), "\\.rds", ".tsv")
+		  )
+
     qtl_raw <- read_rds(qtl_file)
 
-    qtl_data <- qtl_raw |>
+    qtl_data <- 
+	qtl_raw |>
 	filter(map_lgl(result, ~!is.null(.))) |>
-	select(-gene_id, -error) |>
-	unnest(cols = result)
+	select(-error) |>
+	unnest(cols = result) 
 
     if ( nrow(qtl_data) > 0 ) {	
     
-	qtl_data <- qtl_data |>
+	qtl_data <- 
+	    qtl_data |>
+	    inner_join(genes_df, join_by(locus, gene_id)) |>
 	    group_by(molecular_trait_id) |>
 	    filter(any(pvalue < 1e-5)) |>
 	    ungroup()
@@ -43,23 +51,19 @@ main <- function(qtl_file) {
 
     if ( nrow(qtl_data) == 0 ) {
 	
-	out <- 
-	    tibble(locus = NA, gene_name = NA, molecular_trait_id = NA, nsnps = NA, 
-		   PP.H0.abf = NA, PP.H1.abf = NA, PP.H2.abf = NA, PP.H3.abf = NA, PP.H4.abf = NA)
-
-	return(out)
+	return(NA)
     }
 
     min_df <- 
 	inner_join(qtl_data, gwas_data, 
 		   join_by(locus, variant), 
 		   suffix = c("_qtl", "_gwas")) |>
-	distinct(locus, gene_name, molecular_trait_id, 
-		 variant, beta_qtl, beta_gwas, se_qtl, se_gwas, an_qtl = an, maf_qtl = maf)
+	distinct(locus, gene_id, gene_name, molecular_trait_id, variant, 
+		 beta_qtl, beta_gwas, se_qtl, se_gwas, an_qtl = an, maf_qtl = maf)
 
     res_df <- 
 	min_df |>
-	group_by(locus, gene_name, molecular_trait_id) |>
+	group_by(locus, gene_id, gene_name, molecular_trait_id) |>
 	nest() |>
 	ungroup() |>
 	mutate(result = map(data, run_coloc))
@@ -68,10 +72,10 @@ main <- function(qtl_file) {
 	res_df |>
 	mutate(summ = map(result, "summary"),
 	       summ = map(summ, ~enframe(.) |> pivot_wider(names_from = name, values_from = value))) |>
-	select(locus, gene_name, molecular_trait_id, summ) |>
+	select(locus, gene_id, gene_name, molecular_trait_id, summ) |>
 	unnest(cols = summ)
 
-    summary_df
+    write_tsv(summary_df, out_file)
 }
 
 # GWAS data
@@ -93,6 +97,26 @@ qtl_files <-
     glue("./data/qtls/Bentham_{datasets$dataset_id}.rds") |>
     setNames(datasets$dataset_id)
 
+genes_df <- 
+    read_tsv("./data/Bentham_genes.tsv") |>
+    select(-chrom)
+
+
 # Run
-out_df <- map_dfr(qtl_files, main, .id = "dataset_id")
-write_tsv(out_df, "./data/Bentham_coloc_results.tsv")
+walk(qtl_files, main)
+
+
+# Compile results
+	
+coloc_files <- list.files("./data/coloc", pattern = "Bentham_QTD\\d+", full.names = TRUE)
+names(coloc_files) <- str_extract(coloc_files, "QTD\\d+")
+
+coloc_res <- map_dfr(coloc_files, read_tsv, .id = "dataset_id")
+
+coloc_res |>
+    left_join(datasets, join_by(dataset_id)) |>
+    select(locus, gene_id, gene_name, molecular_trait_id, dataset_id, study_label, sample_group, 
+	   tissue_label, condition_label, quant_method, nsnps:PP.H4.abf) |>
+    mutate(locus = factor(locus, levels = unique(genes_df$locus))) |>
+    arrange(locus, desc(PP.H4.abf)) |>
+    write_tsv("./data/Bentham_coloc_results.tsv")

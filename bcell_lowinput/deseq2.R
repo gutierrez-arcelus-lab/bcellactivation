@@ -25,7 +25,6 @@ sample_table <-
 dds <- 
     DESeqDataSetFromTximport(dat, sample_table, ~group + donor_id) |>
     estimateSizeFactors() |>
-    {function(x) x[rowSums(counts(x, normalized = TRUE) >= 1 ) >= 3, ]}() |>
     DESeq(parallel = TRUE, BPPARAM = MulticoreParam(cpus))
 
 
@@ -59,4 +58,48 @@ comp2 |>
     left_join(gene_names) |>
     filter(padj <= 0.05) |>
     arrange(padj)
+
+
+
+
+# Save counts
+sample_info <- 
+    tibble(sample_id = colnames(counts(dds))) |>
+    separate(sample_id, 
+	     c("donor", "stim", "timep"), 
+	     sep = "_", remove = FALSE) |>
+    mutate(timep = parse_number(timep),
+	   timep = factor(timep, levels = sort(unique(timep))),
+	   stim = recode(stim, "IL4" = "IL-4c", "CD40L" = "CD40c", 
+			 "TLR9" = "TLR9c", "TLR7" = "TLR7c",
+			 "BCR" = "BCRc", "BCR-TLR7" = "BCR/TLR7c", "DN2" = "DN2c"),
+	   stim = factor(stim, levels = c("Unstim", "IL-4c", "CD40c", "TLR7c", 
+					  "TLR9c", "BCRc", "BCR/TLR7c", "DN2c"))) |>
+    arrange(stim, timep, donor)
+
+gene_ids <-
+    gene_names |> 
+    add_count(gene_name) |>
+    mutate(gene_label = case_when(n == 1 ~ gene_name,
+				  n > 1 ~ paste(str_remove(gene_id, "\\.\\d+$"), gene_name, sep = "_"))) |>
+    select(gene_id, gene_label)
+
+
+counts_df <- 
+    counts(dds, normalized = TRUE) |>
+    as.data.frame() |>
+    rownames_to_column("gene_id") |>
+    as_tibble() |>
+    left_join(gene_ids, join_by(gene_id)) |>
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
+    select(gene_id, gene_label, everything()) |>
+    pivot_longer(-(gene_id:gene_label), names_to = "sample_id", values_to = "norm_counts") |>
+    left_join(sample_info, join_by(sample_id)) |>
+    select(donor, stim, timep, gene_label, norm_counts) |>
+    arrange(stim, timep, donor, gene_label)
+
+
+
+write_rds(counts_df, "./data/deseq_normalized_counts.rds")
+#
 

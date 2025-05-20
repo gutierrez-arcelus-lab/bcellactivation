@@ -4,7 +4,6 @@ library(rvest)
 library(jsonlite)
 library(glue)
 
-
 if ( !file.exists("data") ) dir.create("data")
 
 # eQTL Catalogue
@@ -62,7 +61,7 @@ gencode <-
     select(chrom = 1, tss, gene_id, gene_name)
 
 inner_join(gencode, bed38, join_by(chrom, between(tss, start, end))) |>
-    select(locus, gene_id, gene_name) |>
+    select(locus, chrom, gene_id, gene_name) |>
     write_tsv(glue("./data/{gwas}_genes.tsv"))
 
 # Set for coloc.susie
@@ -79,3 +78,24 @@ if (gwas == "Bentham") {
 }
 
 write_tsv(gwas_38, glue("./data/{gwas}_hg38_snps.tsv"))
+
+# Slice 1Mb-windows into 100kb-windows to circumvent bug in eQTL Catalogue
+# Filter by gene in the API returns wrong data
+# And requesting data in 1Mb-windows sometimes go into the 100,000-row limit
+windows_df <- 
+    read_tsv(bed38_file, col_names = c("chrom", "start", "end", "locus")) |>
+    mutate(chrom = str_remove(chrom, "^chr"))
+
+windows_100kb <- 
+    windows_df |>
+    mutate(rg = map2(start, end, ~.x:.y)) |>
+    select(locus, chrom, rg) |>
+    unnest(cols = rg) |>
+    group_by(locus) |>
+    mutate(i = ntile(rg, 10)) |>
+    group_by(locus, chrom, i) |>
+    summarise(start = min(rg), end = max(rg)) |>
+    ungroup() |>
+    arrange(chrom, start, end)
+
+write_tsv(windows_100kb, glue("./data/{gwas}_windows_100kb.tsv"))

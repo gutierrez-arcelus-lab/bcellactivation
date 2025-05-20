@@ -13,6 +13,8 @@ pip_df <-
     left_join(windows_df, join_by(window_id)) |>
     select(window_id, locus, rsid, ref, alt, pip, cs, coverage)
 
+write_tsv(pip_df, "./data/susie_compiled_pip.tsv")
+
 summ_stats <-
     read_tsv("./data/summary_stats.tsv") |>
     select(locus, rsid, logp)

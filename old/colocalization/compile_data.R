@@ -20,4 +20,8 @@ res <-
 
 write_tsv(res, "./bentham_colocs.tsv")
 
-
+res |> 
+    filter(pp4 >= 0.9) |>
+    filter(tissue %in% c("LCL", "B cell")) |>
+    distinct(region, tissue, gene_name) |>
+    distinct(region)

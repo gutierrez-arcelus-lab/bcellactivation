@@ -4,21 +4,18 @@ library(RColorBrewer)
 library(cowplot)
 library(patchwork)
 library(uwot)
+library(extrafont)
 
 sle_data <- 
     "./mgb_data/sle_data.tsv" |>
     read_tsv(col_types = c(.default = "c")) |>
-    mutate(re = case_when(ethnic_group == "HISPANIC" ~ "Hispanic",
-			  ethnic_group == "Non Hispanic" ~ race,
-			  ethnic_group == "Unknown/Missing" & !is.na(race) ~ race,
-			  ethnic_group == "Unknown/Missing" & is.na(race) ~ ethnic_group,
-			  ethnic_group == "DECLINED" & !is.na(race) ~ race,
-			  TRUE ~ NA),
-	   re = case_when(is.na(re) | re == "Other" ~ "Unknown/Missing",
-			  TRUE ~ re),
-	   re = case_when(grepl("Native|American", re) ~ "Native American, Hawaiian, or other Pacific Islander",
-			  TRUE ~ re)) |>
-    select(subject_id, group, gender, race_ethn = re)
+    mutate(race_et = case_when(grepl("American Indian", race) & ethnic_group != "HISPANIC" ~ "Native American",
+			       race == "Asian" & ethnic_group != "HISPANIC" ~ "Asian",
+			       race == "Black" & ethnic_group != "HISPANIC" ~ "Black",
+			       race == "Hispanic or Latino" & ethnic_group != "HISPANIC" ~ "Hispanic",
+			       race == "White" & ethnic_group != "HISPANIC" ~ "White",
+			       race == "Other" & ethnic_group == "HISPANIC" ~ "Hispanic",
+			       TRUE ~ NA_character_))
 
 batches <- sprintf("04%02d", c(1:8, 10))
 
@@ -200,12 +197,11 @@ continental_colors <-
 
 race_colors <- 
     c(
-      "Unknown/Missing" = "grey",
       "White" = "cadetblue", 
       "Black" = "brown",
       "Asian" = "purple3", 
       "Hispanic" = "lightpink",
-      "Native American, Hawaiian, or other Pacific Islander" = "black")
+      "Native American" = "black")
 
 mgb_umap_model <- select(pca_df, PC1:PC8) |>
     umap(n_threads = future::availableCores(), ret_model = TRUE)
@@ -383,6 +379,150 @@ prs_violin <- admix |>
 	labs(x = NULL)
      
 ggsave("./plots/prs_violin.png", prs_violin, height = 2, width = 8)
+
+
+###############################################################################
+# For grant:
+prs_race_df <- prs_df |>
+    left_join(select(sle_data, subject_id, group, race_et), join_by(subject_id, group)) |>
+    drop_na() |>
+    select(group, subject_id, gender, race_et, prs) |>
+    group_by(race_et) |>
+    mutate(md = median(prs)) |>
+    ungroup() |>
+    arrange(md, prs) |>
+    mutate(group = factor(group, levels = c("Control", "SLE")),
+	   race_et = fct_inorder(race_et),
+	   race_et = fct_recode(race_et, "NatAm" = "Native American")) |>
+    select(-md)
+
+#race_colors <- 
+#    c("White" = "Royal Blue",
+#      "NatAm" = "Red",
+#      "Hispanic" = "Olive Drab",
+#      "Black" = "Dark Orange",
+#      "Asian" = "Medium Purple")
+
+prs_race_plot <- 
+    ggplot(data = prs_race_df,
+	   aes(x = race_et, y = prs)) +
+	geom_quasirandom(method = "smiley", alpha = .2, size = .5) +
+	scale_y_continuous(breaks = scales::pretty_breaks(4)) +
+	theme_minimal() +
+	theme(
+	      axis.text.x = element_text(size = 10, family = "Arial", angle = 45, hjust = 1, vjust = 1),
+	      axis.text.y = element_text(size = 10, family = "Arial"),
+	      axis.title = element_text(size = 10, family = "Arial"),
+	      strip.text = element_text(size = 10, family = "Arial"),
+	      legend.position = "none",
+	      panel.grid.major.x = element_blank(),
+	      panel.grid.minor.y = element_blank(),
+	      panel.grid.major.y = element_line(color = "grey96"),
+	      plot.background = element_rect(color = "white", fill = "white")
+	      ) +
+	labs(x = NULL, y = "PRS")
+
+# AUC
+library(pROC)
+library(gridExtra)
+
+races_to_test <- prs_race_df |>
+    filter(group == "SLE") |>
+    count(race_et) |>
+    filter(n > 25) |>
+    pull(race_et)
+
+rocs <- 
+    prs_race_df |>
+    filter(race_et %in% races_to_test) |>
+    {function(x) split(x, x$race_et)}() |>
+    keep(~nrow(.) > 0) |>
+    map(function(x) roc(x$group, x$prs, auc = TRUE, ci = TRUE))
+
+rocs_df <- rocs |>
+    map(smooth) |>
+    map(function(x) x[c("sensitivities", "specificities")]) |>
+    map(as.data.frame) |>
+    map_df(as_tibble, .id = "race_et")
+
+auc_df <- rocs |>
+    map(auc) |>
+    map(as.numeric) |>
+    bind_rows(.id = "race_et") |>
+    pivot_longer(everything(), names_to = "race_et", values_to = "auc") |>
+    mutate(auc = round(auc, 2)) |>
+    arrange(race_et) |>
+    select(" " = race_et, "AUC" = auc)
+
+roc_colors <- c("Black" = "black", "White" = "Dodger Blue")
+
+roc_p <- 
+    ggplot(rocs_df, aes(x = specificities, y = sensitivities, color = race_et)) +
+    geom_line(linetype = 1, linewidth = .75) +
+    scale_x_reverse(breaks = c(0, .5, 1), labels = function(x) round(x, 2)) +
+    scale_y_continuous(breaks = c(0, .5, 1), labels = function(x) round(x, 2)) +
+    scale_color_manual(values = roc_colors) +
+    theme_minimal() +
+    theme(axis.title = element_text(family = "Arial", size = 11),
+	  axis.text = element_text(family = "Arial", size = 11),
+	  panel.grid = element_line(color = "grey96"),
+	  panel.grid.minor.x = element_blank(),
+	  panel.grid.minor.y = element_blank(),
+	  plot.background = element_rect(color = "white", fill = "white"),
+	  legend.text = element_blank(),
+	  legend.position = c(.35, .275),
+	  legend.key.width = unit(.1, "in")
+	  ) +
+    labs(x = "Specificity", y = "Sensitivity", color = NULL) +
+    annotation_custom(tableGrob(auc_df, rows = NULL, 
+				theme = ttheme_minimal(base_size = 8)), 
+		      xmin = -1.25, xmax = .7, ymin = .2, ymax = .5)
+
+
+# Admixture plot
+admix_filt <- admix |>
+    filter(value >= 0.1) |>
+    inner_join(select(prs_df, subject_id, prs), join_by(subject_id)) |>
+    mutate(ancestry = factor(ancestry, levels = c("EUR", "AFR", "AMR", "EAS", "SAS")))
+
+p1 <- 
+    ggplot(data = admix_filt,
+	   aes(x = value, y = prs)) +
+	geom_point(aes(color = ancestry), size = .5, alpha = .25) +
+	geom_smooth(se = FALSE, method = "lm", 
+		    color = "black", linewidth = .5) +
+	scale_x_continuous(limits = c(0, 1),
+			   breaks = c(0, 1),
+			   labels = c("0", "1")) +
+	scale_color_manual(values = continental_colors) +
+	scale_fill_manual(values = continental_colors) +
+	facet_wrap(~ancestry, nrow = 1) +
+	theme_minimal() +
+	theme(
+	      axis.text = element_text(size = 10, family = "Arial"),
+	      axis.title = element_text(size = 10, family = "Arial"),
+	      strip.text = element_text(size = 10, family = "Arial"),
+	      panel.grid = element_blank(),
+	      legend.position = "none",
+	      plot.background = element_rect(color = "white", fill = "white")
+	      ) +
+	labs(x = "Proportion of ancestry", y = "PRS")
+
+ggsave("./plots/prs_race_gia.png", 
+       prs_race_plot + roc_p + p1 + 
+	   plot_layout(nrow = 1, widths = c(.6, .4, 1)) + plot_annotation(tag_levels = "A") +
+	   theme(plot.margin = margin(b = 0)),
+       height = 2, width = 7.5)
+
+p_out <- 
+    plot_grid(prs_race_plot, roc_p, p1,
+	      nrow = 1, rel_widths = c(.6, .5, 1), labels = c("A", "B", "C"))
+
+ggsave("./plots/prs_race_gia.png", p_out, height = 1.5, width = 7.5) 
+
+
+
+
 
 # AUC
 library(pROC)

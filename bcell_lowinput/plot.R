@@ -8,41 +8,16 @@ library(patchwork)
 library(gridExtra)
 
 stim_colors <- 
-    c("IL4_0hrs" = "#dbdbdb",
-      "CD40L_0hrs" = "#dbdbdb", 
-      "TLR9_0hrs" = "#dbdbdb", 
-      "TLR7_0hrs" = "#dbdbdb",
-      "BCR_0hrs" = "#dbdbdb",
-      "BCR+TLR7_0hrs" = "#dbdbdb",
-      "DN2_0hrs" = "#dbdbdb",
-      "IL4_4hrs" = "grey50",
-      "IL4_24hrs" = "black",
-      "CD40L_4hrs" = "#ffeba6",
-      "CD40L_24hrs" = "#ffde68",
-      "CD40L_48hrs" = "goldenrod3",
-      "CD40L_72hrs" = "goldenrod4",
-      "BCR_4hrs" = "#a1c2ed",
-      "BCR_24hrs" = "#6996e3",
-      "BCR_48hrs" = "#4060c8",
-      "BCR_72hrs" = "#0404bf",
-     "TLR7_4hrs" = "#98ab76",
-     "TLR7_24hrs" = "#748f46",
-     "TLR7_48hrs" = "#47632a",
-     "TLR7_72hrs" = "#275024",
-     "TLR9_4hrs" = "#a876d9",
-     "TLR9_24hrs" = "#955bd0",
-     "TLR9_48hrs" = "#803ec8",
-     "TLR9_72hrs" = "#691dbf",
-     "BCR+TLR7_4hrs" = "#ffa7db",
-     "BCR+TLR7_24hrs" = "#ff86d0",
-     "BCR+TLR7_48hrs" = "#ff61c4",
-     "BCR+TLR7_72hrs" = "#ff2bb8",
-     "DN2_4hrs" = "#e6907a",
-     "DN2_24hrs" = "#d76b51",
-     "DN2_48hrs" = "#c5432a",
-     "DN2_72hrs" = "#b00000")
+    "../figure_colors.txt" |>
+    read_tsv(col_names = c("condition", "color")) |>
+    mutate(condition = paste0(condition, "hrs")) |>
+    deframe()
 
-all_stims <- c("IL4", "CD40L", "TLR7", "TLR9", "BCR", "BCR+TLR7", "DN2")
+all_stims <-
+    names(stim_colors) |>
+    str_split("_") |>
+    map_chr(1) |>
+    unique()
 
 cpm_df <- 
     "./results/edger/cpm.tsv" |>
@@ -53,7 +28,6 @@ cpm_df <-
     separate(sample_id, c("sample_id", "dummy", "time"), sep = "_") |>
     mutate(hours = parse_number(time),
 	   hours = factor(hours, levels = sort(unique(hours))),
-	   stim = recode(stim, "BCR-TLR7" = "BCR+TLR7"),
            condition = paste(stim, time, sep = "_"),
 	   stim = factor(stim, levels = all_stims)) |>
     unnest(cols = data) |>
@@ -61,60 +35,9 @@ cpm_df <-
 
 edger_results <- 
     read_tsv("./results/edger/results.tsv") |>
-    mutate(stim = recode(stim, "BCR-TLR7" = "BCR+TLR7"),
-	   stim = factor(stim, levels = all_stims))
+    mutate(stim = factor(stim, levels = all_stims))
 
-selected_genes <-
-    c(
-      "ARID5B",
-      "ATG5",
-      "BANK1",
-      "BLK", 
-      "CD44",
-      "CSK",
-      "DHCR7",
-      "ETS1",
-      "FCGR2A",
-      "LYST",
-      "IFIH1",
-      "IKBKE",
-      "IKZF1",
-      "IKZF2",
-      "IKZF3",
-      "IL10",
-      "IL12A",
-      "IRAK1",
-      "IRF5",
-      "IRF7",
-      "IRF8",
-      "ITGAM",
-      "ITGAX",
-      "JAZF1",
-      "MECP2",
-      "MIR146A",
-      "MIR3142HG",
-      "NCF2",
-      "PTPN22",
-      "PRDM1",
-      "PXK",
-      "RAD51B",
-      "SH2B3",
-      "SLC15A4",
-      "SOCS1",
-      "SPRED2",
-      "STAT1", 
-      "STAT4",
-      "TASL",
-      "TCF7",
-      "TNFAIP3",
-      "TNFSF4",
-      "TNIP1",
-      "TREX1",
-      "TYK2",
-      "UHRF1BP1",
-      "UBE2L3",
-      "WDFY4"
-    )
+selected_genes <- read_lines("./data/sle_curated_genes.txt")
 
 cpm_plot_df <- cpm_df |>
     filter(gene_name %in% selected_genes)
@@ -160,8 +83,7 @@ walk(names(out_plot),
 
 
 
-# T-bet and ZEB2
-selected_genes <- c("TBX21", "ZEB2", "SLC15A4") 
+selected_genes <- "IRF5"
 
 cpm_plot_df <- cpm_df |>
     filter(gene_name %in% selected_genes)
@@ -175,28 +97,39 @@ p_vals <- edger_results |>
 	   p_lab = paste("p =", p_lab),
 	   p_lab = ifelse(fdr < 0.05, paste(p_lab, "*"), p_lab))
 
+stim_colors_0_names <- 
+    all_stims[all_stims != "Unstim"] |>
+    paste0("_0hrs")
+
+stim_colors_0 <- rep(stim_colors[[1]], length(stim_colors_0_names))
+names(stim_colors_0) <- stim_colors_0_names 
+
+
 b_tfs_plot <-
-    ggplot(data = cpm_plot_df) +
+    ggplot(data = cpm_plot_df |> filter(stim %in% c("CD40L", "DN2"))) +
     geom_quasirandom(aes(x = hours, y = obs_cpm, fill = condition),
-		     method = "smiley", width = .2, 
-		     shape = 21, stroke = .2, size = 3.5) +
-    geom_text(data = p_vals, 
-	      aes(x = 0.5, y = cpm * 1.25, label = p_lab),
-	      hjust = "inward", vjust = "inward", size = 4) +
-    scale_fill_manual(values = stim_colors) + 
+		     method = "smiley", width = .15, 
+		     shape = 21, stroke = .2, size = 2.75) +
+#    geom_text(data = p_vals, 
+#	      aes(x = 0.5, y = cpm * 1.25, label = p_lab),
+#	      hjust = "inward", vjust = "inward", size = 4) +
+    #scale_y_continuous(expand = expansion(mult = c(.2, .2))) +
+    scale_fill_manual(values = c(stim_colors_0, stim_colors)) + 
     facet_grid(gene_name~fct_relevel(stim, levels(cpm_plot_df)),
-	       scale = "free_y") +
+	       scale = "free", space = "free_x") +
+    theme_bw() +
     theme(panel.grid.minor = element_blank(),
 	  panel.grid.major.x = element_blank(),
 	  panel.background = element_rect(fill = "grey96"),
-	  strip.text.x = element_text(size = 12),
-	  strip.text.y = element_text(angle = 0, size = 12),
-	  axis.text = element_text(size = 12),
-	  axis.title = element_text(size = 14),
+	  strip.text.x = element_text(size = 10),
+	  strip.text.y = element_text(angle = 0, size = 12, margin = margin(r = 0, l = 0)),
+	  axis.text = element_text(size = 9),
+	  axis.title = element_text(size = 12),
 	  legend.position = "none") +
-    labs(x = NULL, y = "Normalized counts")
+    labs(x = NULL, y = "Counts per million")
 
-ggsave("./plots/tbet_zeb2.png", b_tfs_plot, height = 6, width = 10)
+#ggsave("./plots/tbet_zeb2.png", b_tfs_plot, height = 6, width = 10)
+ggsave("./plots/irf5.png", b_tfs_plot, height = 2, width = 4.5, dpi = 600)
 
 # Test genes
 cpm_df <- 
@@ -283,3 +216,151 @@ p <-
 	  name = NULL, width_ratio = 0.125, min_size = 100)
 
 ggsave("./plots/upset.png", p, width = 10, height = 5)
+
+
+
+# Differential expression
+diff_expr <- 
+    "./results/edger/diff_expr_all_times.tsv" |>
+    read_tsv()
+
+diff_expr_summ <-
+    diff_expr |>
+    group_by(group1, group2) |>
+    summarise(n = sum(!is.na(gene_id))) |>
+    ungroup() |>
+    separate(group1, c("stim1", "t1"), sep = "\\.", remove = FALSE, convert = TRUE) |>
+    separate(group2, c("stim2", "t2"), sep = "\\.", remove = FALSE, convert = TRUE) |>
+    mutate_at(vars(stim1, stim2), ~recode(., "BCR_TLR7" = "BCR-TLR7")) |>
+    mutate_at(vars(stim1, stim2), ~factor(., levels = all_stims)) |>
+    complete(group1, group2, fill = list(n = NA)) |>
+    arrange(stim1, stim2, t1, t2) |>
+    mutate_at(vars(group1, group2), ~factor(., levels = unique(c(group1, group2))))
+
+x_lines_df <- 
+    diff_expr_summ |>
+    filter(!is.na(n)) |>
+    distinct(group1, stim1, t1) |>
+    rowid_to_column() |>
+    group_by(stim1) |>
+    summarise(avg = mean(rowid), 
+	      rowid = max(rowid) + 0.5) |>
+    ungroup()
+
+y_lines_df <- 
+    diff_expr_summ |>
+    filter(!is.na(n)) |>
+    distinct(group2, stim2, t2) |>
+    rowid_to_column() |>
+    group_by(stim2) |>
+    summarise(avg = mean(rowid), 
+	      rowid = max(rowid) + 0.5) |>
+    ungroup()
+
+diff_plot <- 
+    ggplot(data = diff_expr_summ, 
+       aes(x = group1, y = group2)) +
+    geom_tile(aes(fill = n), alpha = .9) +
+    geom_vline(xintercept = head(x_lines_df$rowid, -1), 
+	       color = "midnightblue", linewidth = .35) +
+    geom_hline(yintercept = head(y_lines_df$rowid, -1), 
+	       color = "midnightblue", linewidth = .35) +
+    scale_x_discrete(labels = function(x) str_extract(x, "\\d+$")) +
+    scale_y_discrete(labels = function(x) str_extract(x, "\\d+$")) +
+    scale_fill_viridis_c(option = "cividis",
+			 na.value = "white",
+			 labels = scales::comma) +
+    theme_minimal() +
+    theme(
+	  axis.title = element_blank(),
+	  panel.grid.major = element_line(color = "black", linewidth = .35),
+	  legend.position = "top",
+	  legend.title.position = "top",
+	  plot.margin = margin(b = 0.25, l = 0.75, unit = "in"),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    labs(fill = "Number of DE genes:") +
+    guides(fill = guide_colorbar(barwidth = 15, barheight = .5)) +
+    annotate("text", x = x_lines_df$avg, y = -1, label = x_lines_df$stim1, 
+	     size = 9, size.unit = "pt") +
+    annotate("text", x = -1, y = y_lines_df$avg, label = y_lines_df$stim2, 
+	     size = 9, size.unit = "pt", hjust = 1) +
+    coord_cartesian(xlim = c(1, 28), ylim = c(1, 28), clip = "off")
+
+ggsave("./paper_plots/", diff_plot, width = 6, height = 6) 
+
+
+## splines
+diff_expr_splines <- 
+    "./results/edger/diff_expr_splines.tsv" |>
+    read_tsv()
+
+diff_expr_splines_summ <- 
+    diff_expr_splines |>
+    filter(!is.na(PValue)) |>    
+    count(group1, group2) |>
+    bind_rows(filter(diff_expr_splines, is.na(PValue)) |> mutate(n = 0)) |>
+    mutate_at(vars(group1, group2), ~recode(., "BCR_TLR7" = "BCR-TLR7")) |>
+    mutate_at(vars(group1, group2), ~factor(., levels = all_stims)) |>
+    arrange(group1, group2)
+
+testp <- 
+    ggplot(data = diff_expr_splines_summ,
+	   aes(x = group1, y = group2)) +
+    geom_tile(aes(fill = n)) +
+    geom_text(aes(label = n), color = "white", fontface = "bold") +
+    scale_fill_viridis_c(option = "cividis",
+			 na.value = "white",
+			 labels = scales::comma) +
+    theme_minimal() +
+    theme(axis.title = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white")) +
+    guides(fill = "none")
+    
+ggsave("./plots/testp.png", testp, width = 4, height = 4)
+
+# RPS24
+salmon_tx <-
+    read_tsv("./data/expression_pooled_reps_transcriptlevel.tsv") |>
+    
+rps24 <- 
+    salmon_tx |>
+    filter(gene_name == "RPS24") |>
+    separate(sample_id, c("donor_id", "stim", "timep"), sep = "_") |>
+    mutate(timep = parse_number(timep),
+	   stim = factor(stim, levels = c("Unstim", "IL4", "CD40L", "TLR7", "TLR9", "BCR", "BCR-TLR7", "DN2")))
+
+rps24_gene <- 
+    rps24 |>
+    group_by(donor_id, stim, timep, gene_id, gene_name) |>
+    summarise(tpm = sum(tpm)) |>
+    ungroup()
+
+rps_plot <- 
+    ggplot(rps24_gene |> filter(stim == "DN2"), 
+	   aes(x = factor(timep), y = tpm)) +
+    geom_quasirandom(method = "smiley", width = .2) +
+    facet_wrap(~gene_name, ncol = 2) +
+    theme_bw() +
+    theme(panel.grid.minor.y = element_blank())
+
+
+rps_plot_tx <- 
+    rps24 |> 
+    filter(stim == "DN2") |> 
+    group_by(tx_id) |>
+    filter(sum(tpm >= 5) > 2) |>
+    ungroup() |>
+    ggplot(aes(x = factor(timep), y = tpm)) +
+    geom_quasirandom(method = "smiley", width = .2) +
+    facet_wrap(~tx_id, ncol = 2, scales = "free_y") +
+    theme_bw() +
+    theme(panel.grid.minor.y = element_blank())
+
+rps_out <- 
+    plot_grid(plot_grid(rps_plot, NULL, ncol = 1, rel_heights = c(.64, 1)),
+	  rps_plot_tx, 
+	  nrow = 1, rel_widths = c(.5, 1)) +
+    theme(plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/rps24_dn2.png", rps_out, width = 7.5, height = 5)
+

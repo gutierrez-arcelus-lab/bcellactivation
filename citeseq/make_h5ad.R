@@ -3,7 +3,6 @@ unix::rlimit_as(1e12)
 
 library(Seurat)
 library(SeuratDisk)
-library(harmony)
 library(dplyr)
 library(readr)
 
@@ -29,8 +28,7 @@ genes_df <-
     select(gene_id, gene_lab)
 
 # Import Seurat object
-# Merge datasets
-bcells <- read_rds("./bcells.rds") 
+bcells <- read_rds("./data/seuratv4_qced.rds") 
 
 # Rename genes
 ## ensure that genes are in the same order
@@ -63,6 +61,14 @@ adt_meta_features <-
 bcells[['RNA']]@meta.features <- 
     rbind(bcells[['RNA']]@meta.features, adt_meta_features)
 
+# update var features
+bcells$RNA@var.features <- 
+    genes_df |> 
+    filter(gene_id %in% bcells$RNA@var.features) |>
+    mutate(gene_id = factor(gene_id, levels = bcells$RNA@var.features)) |>
+    arrange(gene_id) |>
+    pull(gene_lab)
+
 # Reduce Seurat object by keeping only essential elements for visualization
 bcells_out <- 
     DietSeurat(bcells,
@@ -74,13 +80,12 @@ bcells_out <-
 	       misc = FALSE)
 
 bcells_out@commands <- list()
-bcells_out@meta.data <- select(bcells_out@meta.data, -prob, -doublet_score, -RNA_snn_res.0.4)
 
 bcells_out@meta.data <- 
     bcells_out@meta.data |>
+    select(-RNA_snn_res.0.5) |>
     mutate(seurat_clusters = paste0("C", seurat_clusters))
 
 # Save data
-SaveH5Seurat(bcells_out, "bcells.h5Seurat", overwrite = TRUE)
-Convert("bcells.h5Seurat", dest = "h5ad", overwrite = TRUE)
-
+SaveH5Seurat(bcells_out, "./data/bcells.h5Seurat", overwrite = TRUE)
+Convert("./data/bcells.h5Seurat", dest = "h5ad", overwrite = TRUE)

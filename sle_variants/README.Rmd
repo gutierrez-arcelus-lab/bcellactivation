@@ -21,14 +21,14 @@ library(rvest)
 ```{r functions}
 parse_pvalues <- function(p) {
 
-    p %>%
-        gsub("\\s", "", .) %>%
-        sub("^([0-9.]+)[^0-9.]10[^0-9.](\\d+)$", "\\1e-\\2", .) %>%
+    p |>
+        gsub("\\s", "", .) |>
+        sub("^([0-9.]+)[^0-9.]10[^0-9.](\\d+)$", "\\1e-\\2", .) |>
         parse_number()
 }
 
 read_langefeld <- function(tab_path, sheet_number) {
-    read_excel(tab_path, sheet_number, skip = 2) %>%
+    read_excel(tab_path, sheet_number, skip = 2) |>
     select(snp_id = 1, 
            chr = 2, 
            pos = 3, 
@@ -37,23 +37,23 @@ read_langefeld <- function(tab_path, sheet_number) {
            ref_allele = 6, 
            p = `P-value`,
            or = `OR (95% CI)`,
-           p_stepwise = `Regional Stepwise  P-value`) %>% 
-    filter(!is.na(pos)) %>%
+           p_stepwise = `Regional Stepwise  P-value`) |> 
+    filter(!is.na(pos)) |>
     mutate(snp_id = gsub("\\s|[a-zA-Z,]+$", "", snp_id),  
            p = parse_pvalues(p),
            p_stepwise = parse_pvalues(p_stepwise),
-           or = parse_number(or)) %>%
+           or = parse_number(or)) |>
     select(snp_id, chr, pos, gene_region, region_rank, ref_allele, p, p_stepwise, or)
 }
 
 read_bentham <- function(url_address) {
 
-    read_html(url_address) %>%
-    html_node("table") %>%
-    html_table(header = TRUE, fill = TRUE) %>%
-    select(snp_id = 1, chr = 2, pos = 3, locus = 4, p = 11, or = 12) %>%
-    slice(-1) %>%
-    as_tibble() %>%
+    read_html(url_address) |>
+    html_node("table") |>
+    html_table(header = TRUE, fill = TRUE) |>
+    select(snp_id = 1, chr = 2, pos = 3, locus = 4, p = 11, or = 12) |>
+    slice(-1) |>
+    as_tibble() |>
     mutate(snp_id = gsub("\\s|[a-zA-Z,]+$", "", snp_id),
            pos = parse_number(pos),
            p = parse_pvalues(p),
@@ -68,8 +68,8 @@ tier1_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 1)
 tier2_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 2)
 tier3_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 3)
 
-langefeld_df <- bind_rows("1" = tier1_ea, "2" = tier2_ea, "3" = tier3_ea, .id = "tier") %>%
-    arrange(tier, region_rank, p) %>%
+langefeld_df <- bind_rows("1" = tier1_ea, "2" = tier2_ea, "3" = tier3_ea, .id = "tier") |>
+    arrange(tier, region_rank, p) |>
     mutate(chr = sub("^(\\d+)[qp].*$", "\\1", chr),
            chr = factor(chr, levels = c(1:22, "X")))
 
@@ -79,7 +79,7 @@ langefeld_df
 ### Import Bentham et al. data
 
 ```{r}
-bentham_df <- read_bentham("https://www.nature.com/articles/ng.3434/tables/1") %>%
+bentham_df <- read_bentham("https://www.nature.com/articles/ng.3434/tables/1") |>
     mutate(chr = factor(chr, levels = c(1:22, "X")))
 
 bentham_df
@@ -96,11 +96,11 @@ bentham_stats <- read_tsv("/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/be
 ```
 
 ```{r}
-bentham_38 <- bentham_stats %>%
-    select(chr = chromosome, pos = base_pair_location, snp_id = variant_id, p_value) %>%
+bentham_38 <- bentham_stats |>
+    select(chr = chromosome, pos = base_pair_location, snp_id = variant_id, p_value) |>
     mutate(chr = ifelse(chr == 23, "X", chr),
-           chr = factor(chr, levels = c(1:22, "X"))) %>%
-    left_join(bentham_df, ., by = c("chr", "snp_id")) %>%
+           chr = factor(chr, levels = c(1:22, "X"))) |>
+    left_join(bentham_df, ., by = c("chr", "snp_id")) |>
     select(snp_id, chr, locus, pos = pos.y, p_value)
     
 bentham_38
@@ -109,12 +109,12 @@ bentham_38
 ### Converting positions in Langefeld et al with liftOver
 
 ```{r}
-langefeld_bed <- langefeld_df %>%
-    select(chr, start = pos, snp_id) %>%
+langefeld_bed <- langefeld_df |>
+    select(chr, start = pos, snp_id) |>
     mutate(chr = paste0("chr", chr), 
            end = start,
-           start = start - 1L) %>%
-    arrange(chr, start) %>%
+           start = start - 1L) |>
+    arrange(chr, start) |>
     select(chr, start, end, snp_id)
 
 write_tsv(langefeld_bed, "./paper_data/langefeld.hg19.bed", col_names = FALSE)
@@ -130,15 +130,26 @@ system(command)
 
 
 ```{r}
-langefeld_38 <- read_tsv(bed38, col_names = c("chr", "start", "pos", "snp_id")) %>%
-    select(chr, pos, snp_id) %>%
+langefeld_38 <- 
+    read_tsv(bed38, col_names = c("chr", "start", "pos", "snp_id")) |>
+    select(chr, pos, snp_id) |>
     mutate(chr = sub("chr", "", chr),
-           chr = factor(chr, levels = c(1:22, "X"))) %>%
-    left_join(langefeld_df, by = c("chr", "snp_id")) %>%
+           chr = factor(chr, levels = c(1:22, "X"))) |>
+    left_join(langefeld_df, by = c("chr", "snp_id")) |>
     select(chr, pos = pos.x, snp_id, tier, gene_region, region_rank, p, p_stepwise)
 
 langefeld_38
 ```
 
+```{r, eval=FALSE, echo=FALSE}
+langefeld_38 |>
+    filter(tier == 1) |>
+    group_by(region_rank) |>
+    slice_min(p) |>
+    ungroup() |>
+    mutate(chr = paste0("chr", chr)) |>
+    select(chr, pos, snp_id, p, gene = gene_region) |>
+    write_tsv("./paper_data/langefeld_tier1_hg38.tsv")
+```
 
 

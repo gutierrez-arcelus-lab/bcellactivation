@@ -69,8 +69,8 @@ tier1_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 1)
 tier2_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 2)
 tier3_ea <- read_langefeld("./paper_data/langefeld_tableS2.xlxs", 3)
 
-langefeld_df <- bind_rows("1" = tier1_ea, "2" = tier2_ea, "3" = tier3_ea, .id = "tier") %>%
-    arrange(tier, region_rank, p) %>%
+langefeld_df <- bind_rows("1" = tier1_ea, "2" = tier2_ea, "3" = tier3_ea, .id = "tier") |>
+    arrange(tier, region_rank, p) |>
     mutate(chr = sub("^(\\d+)[qp].*$", "\\1", chr),
 	   chr = factor(chr, levels = c(1:22, "X")))
 
@@ -103,18 +103,18 @@ bentham_stats <-
 
 ```{r, eval=FALSE, echo=FALSE}
 
-data_cum <- bentham_stats %>% 
-  group_by(chr) %>% 
-  summarise(max_pos = max(pos)) %>% 
-  mutate(pos_add = lag(cumsum(max_pos), default = 0)) %>% 
+data_cum <- bentham_stats |> 
+  group_by(chr) |> 
+  summarise(max_pos = max(pos)) |> 
+  mutate(pos_add = lag(cumsum(max_pos), default = 0)) |> 
   select(chr, pos_add)
 
 bentham_top <- bentham_df |> 
     inner_join(data_cum) |> 
     mutate(pos_cumm = pos + pos_add)
 
-gwas_data <- bentham_stats %>% 
-  inner_join(data_cum, by = "chr") %>% 
+gwas_data <- bentham_stats |> 
+  inner_join(data_cum, by = "chr") |> 
   mutate(pos_cumm = pos + pos_add)
 
 gwas_signal <- gwas_data |>
@@ -129,13 +129,13 @@ gwas_noise <- gwas_data |>
 gwas_plot <- bind_rows(gwas_signal, gwas_noise) |>
     arrange(pos_cumm)
 
-axis_set <- gwas_data %>% 
-  group_by(chr) %>% 
+axis_set <- gwas_data |> 
+  group_by(chr) |> 
   summarize(center = mean(pos_cumm))
 
-ylim <- gwas_data %>% 
-  filter(p == min(p)) %>% 
-  mutate(ylim = abs(floor(log10(p))) + 2) %>% 
+ylim <- gwas_data |> 
+  filter(p == min(p)) |> 
+  mutate(ylim = abs(floor(log10(p))) + 2) |> 
   pull(ylim)
 
 manhplot <- 

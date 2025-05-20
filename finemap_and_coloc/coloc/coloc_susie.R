@@ -39,7 +39,7 @@ qtl_datasets <-
     select(dataset_id, study_label, sample_group, tissue_label, condition_label, quant_method)
 
 
-run_coloc <- function(dataset_id, ) {
+run_coloc <- function(dataset_id) {
 
     qtl <- 
 	glue("./data/qtls_susie/Bentham/{dataset_id}.lbf_variable.txt.gz") |>
@@ -144,8 +144,6 @@ out_filtered <-
     filter(nlog10p > 5) |>
     select(-nlog10p)
    
-
-
 out_filtered |>
     mutate(gene_id = str_extract(molecular_trait_id, "ENSG\\d+")) |>
     inner_join(gwas_genes, join_by(gene_id)) |>
@@ -153,4 +151,3 @@ out_filtered |>
 	   PP.H0.abf:PP.H4.abf) |>
     arrange(desc(PP.H4.abf)) |>	
     write_tsv("./data/coloc_susie/results_filtered.tsv")
-

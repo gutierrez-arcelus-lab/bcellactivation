@@ -1,3 +1,4 @@
+library(dplyr)
 library(leafviz)
 
 options(browser = "firefox")

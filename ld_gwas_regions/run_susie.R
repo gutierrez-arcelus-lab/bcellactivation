@@ -6,24 +6,24 @@ library(furrr)
 run_susie <- function(gene, region_coords, summ_stats) {
     
     ld_vcf <- 
-		glue("./data/chr{region_coords}.vcf.gz") |>
-		data.table::fread(skip = "#CHROM") |>
-		as_tibble() |>
-		unite("ID", c(ID, REF, ALT), sep = "-")
+	glue("./data/chr{region_coords}.vcf.gz") |>
+	data.table::fread(skip = "#CHROM") |>
+	as_tibble() |>
+	unite("ID", c(ID, REF, ALT), sep = "-")
 
     ld_plink <- 
-		glue("./data/chr{region_coords}_r.ld") |>
-		data.table::fread() |>
-		data.matrix()
+	glue("./data/chr{region_coords}_r.ld") |>
+	data.table::fread() |>
+	data.matrix()
 
     rownames(ld_plink) <- colnames(ld_plink) <- ld_vcf$ID
 
     stats <- 
-		summ_stats |>
-		filter(gene_region == gene) |>
-		select(chr, pos, rsid, alleleA, alleleB, p, beta, se) |>
-		mutate(snp_id = glue("{rsid}-{alleleA}-{alleleB}")) |>
-		filter(snp_id %in% colnames(ld_plink))
+	summ_stats |>
+	filter(gene_region == gene) |>
+	select(chr, pos, rsid, alleleA, alleleB, p, beta, se) |>
+	mutate(snp_id = glue("{rsid}-{alleleA}-{alleleB}")) |>
+	filter(snp_id %in% colnames(ld_plink))
 
     ld_plink_final <- ld_plink[stats$snp_id, stats$snp_id]
 

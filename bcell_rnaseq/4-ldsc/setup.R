@@ -19,14 +19,35 @@ ase_data <-
     read_tsv("../3-ase/ase_data.tsv") |>
     filter(!is.na(gene_id))
 
+### GLM for stim-dependent ASE
+ase_glm <- read_tsv("../3-ase/results_glm/glm_res_df.tsv")
+
+
 # Run liftOver to convert GRCh38 coordinates to GRCh37
 bed38_file <- "./data/hg38.bed"
 bed19_file <- "./data/hg19.bed"
 fail_file <- "./data/failTolift.txt"
 chain_file <- "/reference_databases/ReferenceGenome/liftover_chain/hg38/hg38ToHg19.over.chain.gz"
 
+#bed_38 <- 
+#    ase_data |>
+#    distinct(gene_id) |>
+#    rowid_to_column("idx") |>
+#    separate_rows(gene_id, sep = "/") |>
+#    inner_join(gencode, join_by(gene_id)) |>
+#    group_by(idx) |>
+#    slice(1) |>
+#    ungroup() |>
+#    mutate(chr = factor(chr, levels = paste0("chr", 1:22)),
+#	   gene_id = str_remove(gene_id, "\\.\\d+$")) |>
+#    arrange(chr, start, end) |>
+#    select(chr, start, end, gene_id) |>
+#    distinct()
+#
 bed_38 <- 
-    ase_data |>
+    ase_glm |>
+    distinct(variant_id) |>
+    left_join(distinct(ase_data, variant_id, gene_id), join_by(variant_id)) |>
     distinct(gene_id) |>
     rowid_to_column("idx") |>
     separate_rows(gene_id, sep = "/") |>
@@ -37,7 +58,8 @@ bed_38 <-
     mutate(chr = factor(chr, levels = paste0("chr", 1:22)),
 	   gene_id = str_remove(gene_id, "\\.\\d+$")) |>
     arrange(chr, start, end) |>
-    select(chr, start, end, gene_id)
+    select(chr, start, end, gene_id) |>
+    distinct()
 
 write_tsv(bed_38, bed38_file, col_names = FALSE)
 
@@ -55,15 +77,50 @@ bedlift |>
 write_lines(bedlift$gene_id, "./data/control.txt")
 
 # Make gene sets
-gene_sets <- 
-    ase_data |>
-    filter(p_bonferroni < 0.05) |>
-    distinct(stim, gene_id) |>
+#gene_sets <- 
+#    ase_data |>
+#    filter(q_value <= 0.01) |>
+#    #filter(p_bonferroni < 0.05) |>
+#    distinct(stim, gene_id) |>
+#    separate_rows(gene_id, sep = "/") |>
+#    mutate(stim = str_remove(stim, " "),
+#	   stim = factor(stim, levels = c("Day0", "TLR7", "BCR", "DN2")),
+#	   gene_id = str_remove(gene_id, "\\.\\d+$")) |>
+#    filter(gene_id %in% bedlift$gene_id) |>
+#    {function(x) split(x, x$stim)}() |> 
+#    map(~pull(., gene_id))
+#
+#walk2(gene_sets, names(gene_sets), 
+#     ~write_lines(.x, glue("./data/{.y}.txt")))
+#
+#
+
+#glm_top <- 
+#    ase_glm |>
+#    group_by(donor_id, replic, stim) |>
+#    mutate(pct = ntile(abs(z), 100)) |>
+#    ungroup() |> 
+#    filter(pct >= 90) |> 
+#    arrange(desc(abs(z)))
+
+glm_top <- 
+    ase_glm |>
+    filter(grepl("^Day 0", stim)) |>
+    mutate(stim = str_remove(stim, "Day 0-")) |>
+    left_join(distinct(ase_data, variant_id, gene_id)) |>
+    group_by(stim, gene_id) |>
+    slice_max(abs(z)) |>
+    ungroup() |>
+    mutate(pct = ntile(abs(z), 100)) |>
+    filter(pct >= 90) |>
     separate_rows(gene_id, sep = "/") |>
-    mutate(stim = str_remove(stim, " "),
-	   stim = factor(stim, levels = c("Day0", "TLR7", "BCR", "DN2")),
-	   gene_id = str_remove(gene_id, "\\.\\d+$")) |>
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
     filter(gene_id %in% bedlift$gene_id) |>
+    distinct(stim, gene_id)
+
+gene_sets <- 
+    glm_top |>
+    mutate(stim = factor(stim, levels = c("TLR7", "BCR", "DN2"))) |>
     {function(x) split(x, x$stim)}() |> 
     map(~pull(., gene_id))
 
@@ -90,3 +147,4 @@ tibble(set = stim_order) |>
 	   control = "data/ldscores/control.") |>
     unite("ldscores", c(annot, control), sep = ",") |>
     write_tsv("./data/genesets.ldcts", col_names = FALSE)
+

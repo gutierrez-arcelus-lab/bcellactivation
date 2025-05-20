@@ -60,7 +60,7 @@ run_edger <- function(stim, dge) {
 # Transcript to Gene map
 tx_to_gene <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens",
-	      "gencode.v38.primary_assembly.annotation.gtf") |>
+	      "gencode.v38.primary_assembly.annotation.gtf.gz") |>
     read_tsv(comment = "#", col_names = FALSE) |>
     filter(X3 == "transcript") |>
     mutate(tx_id = str_extract(X9, "(?<=transcript_id\\s\")[^\"]+"),

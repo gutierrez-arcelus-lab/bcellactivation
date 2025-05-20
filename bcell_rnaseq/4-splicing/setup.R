@@ -1,5 +1,8 @@
 library(tidyverse)
 
+if (!file.exists("data")) dir.create("data")
+if (!file.exists("results")) dir.create("results")
+
 # Exclude library 231227 because some files might be corrupt
 meta <- 
     "../0-qc_rnaseq/metadata.tsv" |>
@@ -7,7 +10,7 @@ meta <-
     separate_rows(R1:R2, sep = ",") |>
     filter(!grepl("/231227", R1))
 
-write_tsv(meta, "./metadata.tsv")
+write_tsv(meta, "./data/metadata.tsv")
 
 # MBV
 mbv <- 
@@ -31,48 +34,51 @@ meta_qced <-
     unite("sample_id", c(stim, vcf_donor_id, replic_id), sep = "_") |>
     select(sample_id, R1, R2)
 
-write_tsv(meta_qced, "./metadata_qced.tsv")
+write_tsv(meta_qced, "./data/metadata_qced.tsv")
 
 # Leafcutter
-if (!file.exists("data")) dir.create("data")
-if (!file.exists("results")) dir.create("results")
+# remove sample 10028815_unstday0 because it has a low proportion of uniquely mapped reads
+# if not removed, it is an outlier in the PCA by leafviz
 
-meta_qced |>
+meta_qced_filt <-
+    meta_qced |>
     select(sample_id) |>
+    filter(sample_id != "unstday0_10028815_1")
+
+meta_qced_filt |>
     mutate(juncfile = paste0(getwd(), "/bam/", sample_id, ".junc")) |>
     pull(juncfile) |>
     write_lines("./data/junction_files.txt")
 
-groups_file_tlr7 <-
-    meta_qced |>
-    select(sample_id) |>
+# make groups files
+samples_for_ds <- 
+    meta_qced_filt |>
     separate(sample_id, c("stim", "donor", "replic"), sep = "_", remove = FALSE) |>
-    filter(replic == 1) |>
-    filter(stim %in% c("unstday0", "TLR7")) |>
-    mutate(stim = factor(stim, levels = c("unstday0", "TLR7"))) |>
-    arrange(stim, donor, replic) |>
-    select(sample_id, stim)
+    filter(replic == 1) 
 
-groups_file_bcr <-
-    meta_qced |>
-    select(sample_id) |>
-    separate(sample_id, c("stim", "donor", "replic"), sep = "_", remove = FALSE) |>
-    filter(replic == 1) |>
-    filter(stim %in% c("unstday0", "BCR")) |>
-    mutate(stim = factor(stim, levels = c("unstday0", "BCR"))) |>
-    arrange(stim, donor, replic) |>
-    select(sample_id, stim)
+contrasts_df <- 
+    combn(c("unstday0", "TLR7", "BCR", "DN2"), 2) |>
+    t() |>
+    as.data.frame() |>
+    mutate(contrast = paste0(V1, "vs.", V2)) |>
+    select(contrast, stim1 = V1, stim2 = V2) |>
+    pivot_longer(-contrast) |>
+    select(-name)
 
-groups_file_dn2 <-
-    meta_qced |>
-    select(sample_id) |>
-    separate(sample_id, c("stim", "donor", "replic"), sep = "_", remove = FALSE) |>
-    filter(replic == 1) |>
-    filter(stim %in% c("unstday0", "DN2")) |>
-    mutate(stim = factor(stim, levels = c("unstday0", "DN2"))) |>
-    arrange(stim, donor, replic) |>
-    select(sample_id, stim)
+left_join(contrasts_df, samples_for_ds, 
+	  join_by(value == stim), 
+	  relationship = "many-to-many") |>
+    select(contrast, sample_id, group = value) |>
+    group_by(contrast) |>
+    nest() |>
+    ungroup() |>
+    mutate(file_name = glue::glue("./data/groups_{contrast}.tsv")) |>
+    select(data, file_name) |>
+    pwalk(~write_tsv(.x, .y, col_names = FALSE))
 
-write_tsv(groups_file_tlr7, "./data/groups_TLR7.txt", col_names = FALSE)
-write_tsv(groups_file_bcr, "./data/groups_BCR.txt", col_names = FALSE)
-write_tsv(groups_file_dn2, "./data/groups_DN2.txt", col_names = FALSE)
+# save contrasts for slurm
+contrasts_df |>
+    distinct(contrast) |>
+    pull(contrast) |>
+    write_lines("./data/contrasts.txt")
+

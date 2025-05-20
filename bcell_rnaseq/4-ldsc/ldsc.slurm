@@ -4,7 +4,7 @@
 #SBATCH -c 8
 #SBATCH --mem=16gb
 #SBATCH -t 24:00:00
-#SBATCH -p bch-compute
+#SBATCH -p bch-compute-pe
 #SBATCH -a 1-36
 #SBATCH -J ldsc
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
@@ -19,7 +19,7 @@ conda activate ldsc
 
 cd $SLURM_SUBMIT_DIR
 
-METADATA=./data/traits.txt
+METADATA=./data/traits.tsv
 STATSDIR=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" -F '\t' 'FNR==ARRID { print $1 }' $METADATA ) 
 TRAIT=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" -F '\t' 'FNR==ARRID { print $3 }' $METADATA )
 
@@ -29,7 +29,7 @@ WEIGHTS=${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC.
 FREQ=${LDSCDIR}/1000G_Phase3_frq/1000G.EUR.QC. 
 BASELINE=${LDSCDIR}/1000G_Phase3_baseline_v1.2_ldscores/baseline.
 
-DAY0=./data/ldscores/Day0.
+#DAY0=./data/ldscores/Day0.
 TLR=./data/ldscores/TLR7.
 BCR=./data/ldscores/BCR.
 DN2=./data/ldscores/DN2.
@@ -38,7 +38,7 @@ CTS=./data/genesets.ldcts
 # Run S-LDSC
 python2.7 /lab-share/IM-Gutierrez-e2/Public/tools/ldsc/ldsc.py \
     --h2 $GWAS \
-    --ref-ld-chr $BASELINE,$DAY0,$TLR,$BCR,$DN2 \
+    --ref-ld-chr $BASELINE,$TLR,$BCR,$DN2 \
     --w-ld-chr $WEIGHTS \
     --frqfile-chr $FREQ \
     --overlap-annot --print-coefficients \

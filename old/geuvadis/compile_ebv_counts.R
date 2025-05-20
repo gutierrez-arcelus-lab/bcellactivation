@@ -1,15 +1,17 @@
 library(tidyverse)
+library(furrr)
 
 annotations <- 
-    "../data/gencode.v38.primary_assembly.annotation.gtf" %>% 
-    read_tsv(comment = "#", col_names = FALSE, col_types = "c-cii-c-c") %>%
+    "/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens/gencode.v38.primary_assembly.annotation.gtf.gz" |>
+    read_tsv(comment = "#", col_names = FALSE, col_types = "c-cii-c-c") |>
     mutate(X9 = trimws(X9))
 
 transcript_annots <- annotations %>%
     filter(X3 == "transcript") %>%
     mutate(gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
+	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+"),
 	   transcript_id = str_extract(X9, "(?<=transcript_id\\s\")[^\"]+")) %>%
-    distinct(transcript_id, gene_id)
+    distinct(transcript_id, gene_id, gene_name)
 
 gene_annots <- annotations %>%
     filter(X3 == "gene") %>%
@@ -29,10 +31,12 @@ ebv_annots <-
     summarise(start = min(start), end = max(end)) %>%
     ungroup()
 
+plan(multisession, workers = availableCores())
+
 quant_df <- 
     list.files("./results/salmon", pattern = "quant\\.sf", full.names=TRUE, recursive = TRUE) %>%
     setNames(str_extract(., "ERR\\d+")) %>%
-    map_df(read_tsv, .id = "sampleid")
+    future_map_dfr(read_tsv, .id = "sampleid")
 
 
 #### CR2
@@ -51,6 +55,13 @@ write_tsv(cr2_df, "./results/salmon/cr2_quants.tsv")
 
 human_genes_df <- quant_df %>%
     filter(!grepl("^HHV", Name))
+
+quant_tx_df <- 
+    human_genes_df |>
+    left_join(transcript_annots, by = c("Name" = "transcript_id"))
+
+quant_tx_df
+
 
 quant_gene_df <- human_genes_df %>%
     left_join(transcript_annots, by = c("Name" = "transcript_id")) %>%
@@ -104,3 +115,35 @@ bed_final <- bind_rows(bed_humans, ebv_bed) %>%
     rename(`#chr` = chr)
 
 write_tsv(bed_final, "./geuvadis_salmon_quants_ebv.bed")
+
+
+geuvadis_ids <- 
+    "https://ftp.ebi.ac.uk/biostudies/fire/E-GEUV-/001/E-GEUV-1/Files/E-GEUV-1.sdrf.txt" |>
+    read_tsv() |>
+    distinct(id_kgp = `Source Name`, 
+             id_geuv = `Comment[ENA_RUN]`,
+             pop = `Characteristics[ancestry category]`)
+
+quant_gene_df |>
+    left_join(gene_annots, join_by(gene_id)) |>
+    filter(gene_name == "IL12A") |>
+    left_join(geuvadis_ids, join_by(sampleid == id_geuv)) |>
+    arrange(id_kgp) |>
+    pull(id_kgp)
+
+### SNRPC
+snrpc <- 
+    gene_annots |> 
+    filter(gene_name == "SNRPC") |>
+    pull(gene_id)
+
+snrpc_txs <- 
+    transcript_annots |>
+    filter(gene_id == snrpc) |>
+    pull(transcript_id)
+
+quant_df <- 
+    list.files("./results/salmon", pattern = "quant\\.sf", full.names=TRUE, recursive = TRUE) |>
+    {function(x) setNames(x, str_extract(x, "ERR\\d+"))}() |>
+    future_map_dfr(~read_tsv(.) |> filter(Name %in% snrpc_txs), .id = "sampleid")
+

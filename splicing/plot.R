@@ -1,8 +1,13 @@
 library(tidyverse)
 
 annot <- 
-    "/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens/gencode.v38.txToGene.tsv" %>%
-    read_tsv()
+    "/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens/gencode.v38.primary_assembly.annotation.gtf.gz" |>
+    read_tsv(comment = "##", col_names = FALSE) |> 
+    filter(X3 == "transcript") |>
+    mutate(gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
+	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+"),
+	   transcript_id = str_extract(X9, "(?<=transcript_id\\s\")[^\"]+")) |> 
+    select(gene_id, gene_name, transcript_id)    
 
 scharer_info <- 
     "/lab-share/IM-Gutierrez-e2/Public/External_datasets/Scharer/RNAseq/metadata/SraRunTable.txt" %>%
@@ -18,8 +23,8 @@ expr_df <-
 
 expr_annot_df <- expr_df %>%
     inner_join(annot, by = c("Name" = "transcript_id")) %>%
-    left_join(select(scharer_info, sampleid = run, status = subject_status), by = "sampleid") %>%
-    select(sampleid, status, gene_id, gene_name, transcript_id = Name, counts = NumReads, tpm = TPM)
+    left_join(select(scharer_info, sampleid = run, status = subject_status, cell_subtype), by = "sampleid") %>%
+    select(sampleid, status, cell_subtype, gene_id, gene_name, transcript_id = Name, counts = NumReads, tpm = TPM)
 
 
 dn2_samples <- filter(scharer_info, grepl("DN2", cell_subtype)) %>%
@@ -136,3 +141,34 @@ irf5_stims_plot <- cpm_irf %>%
     plot_grid(plotlist = ., ncol = 1)
 
 ggsave("./plots/irf5_stims.png", irf5_stims_plot, width = 4, height = 8)
+
+#IKZF2
+helios_df <- 
+    expr_annot_df |>
+    filter(gene_name == "IKZF2") |>
+    mutate(transcript_id = str_remove(transcript_id, "\\.\\d+$")) |>
+    select(-gene_id, -gene_name)
+
+helios_plot <- 
+    ggplot(helios_df, aes(x = tpm, y = transcript_id)) +
+    geom_boxplot(aes(fill = status, color = status), outlier.color = NA, alpha = .25) +
+    geom_jitter(aes(group = status, color = status), 
+		size = 1, position = position_dodge(width = 0.75)) +
+    scale_color_manual(values = c("midnightblue", "firebrick")) +
+    scale_fill_manual(values = c("midnightblue", "firebrick")) +
+    facet_wrap(~cell_subtype, nrow = 1, labeller = labeller(cell_subtype = label_wrap_gen(10))) +
+    theme_bw() +
+    theme(panel.grid.minor.x = element_blank(),
+	  legend.position = "top") +
+    labs(x = "Transcripts per Million", y = NULL)
+
+ggsave("./plots/ikzf2.png", helios_plot, height = 5, width = 8)
+
+
+
+
+
+
+
+
+

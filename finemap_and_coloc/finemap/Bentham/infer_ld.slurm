@@ -26,7 +26,7 @@ CHR=$( echo $REGION | cut -d':' -f1 )
 IDS=./data/ref_panel.txt
 
 if [[ "$CHR" == X ]]; then
-    VCF=/reference_databases/1000G_VCF/phase3/ALL.chrX.phase3_shapeit2_mvncall_integrated_v1b.20130502.genotypes.vcf.gz
+    VCF=/reference_databases/1000G_VCF/phase3/ALL.chr${CHR}.phase3_shapeit2_mvncall_integrated_v1b.20130502.genotypes.vcf.gz
 else
     VCF=/reference_databases/1000G_VCF/phase3/ALL.chr${CHR}.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.gz
 fi

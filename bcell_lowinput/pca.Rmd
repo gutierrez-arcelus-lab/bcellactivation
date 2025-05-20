@@ -16,60 +16,52 @@ opts_chunk$set(echo = TRUE,
 
 ```{r}
 library(tidyverse)
-library(RColorBrewer)
 ```
 
 ## Set colors for PCA plot
 
 ```{r}
-stims_order <-
-    c("Unstim_0hrs", "Unstim_4hrs", "Unstim_24hrs", "IL4_4hrs", "IL4_24hrs",
-      paste("CD40L", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
-      paste("BCR", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
-      paste("TLR7", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
-      paste("BCR-TLR7", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
-      paste("TLR9", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"),
-      paste("DN2", paste0(c(4, 24, 48, 72), "hrs"), sep = "_"))
-      
 stim_colors <- 
-    c("white", "#e2e2e2", "#909090", "#474747", "#000000",
-      brewer.pal(n = 9, "YlOrRd")[c(1, 3, 4, 5)],
-      brewer.pal(n = 9, "Blues")[c(2, 4, 6, 8)],
-      brewer.pal(n = 9, "Greens")[c(2, 4, 6, 8)],
-      grep("cyan", colors(), value = TRUE)[c(8, 2, 4, 6)],
-      grep("pink", colors(), value = TRUE)[c(16, 7, 1, 4)],
-      "#f1c9bd", "#dd957f", "#c36144", "#a3280a")
-
-names(stim_colors) <- stims_order
+    "../figure_colors.txt" |>
+    read_tsv(col_names = c("stim", "color")) |>
+    mutate(stim = str_replace(stim, "_", " "),
+	   stim = paste0(stim, "hrs")) |>
+    deframe()
 ```
 
 ## sample meta data
 
 ```{r}
-sample_info <- read_tsv("./data/data/sample_decode.tsv") |>
-    separate(sample_name, c("donor_id", "stim", "timepoint"), sep = "_")
+sample_info <- 
+    read_tsv("./data/data/sample_decode.tsv") |>
+    separate(sample_name, c("donor_id", "stim", "timepoint"), sep = "_") |>
+    mutate(condition = paste(stim, timepoint))
 ```
 
 ## expression data
 
 ```{r}
-quant_df <- read_tsv("./data/data/lowinput_tpm.tsv") |>
-    pivot_longer(-(1:2), names_to = "sample_id", values_to = "tpm")
+quant_df <- 
+    read_tsv("./data/data/lowinput_tpm.tsv") |>
+    pivot_longer(-(1:2), names_to = "sample_id", values_to = "tpm") |>
+    left_join(sample_info, join_by(sample_id))
 ```
 
 ## select top 2,000 variable genes
 
 ```{r}
-variable_genes <- quant_df |>
+variable_genes <- 
+    quant_df |>
     group_by(gene_id, gene_name) |>
     summarise(v = var(tpm)) |>
     ungroup() |>
     top_n(2000, v) |>
     arrange(desc(v))
 
-variable_matrix <- quant_df |>
+variable_matrix <- 
+    quant_df |>
     filter(gene_id %in% variable_genes$gene_id) |>
-    select(-gene_name) |>
+    select(sample_id, gene_id, tpm) |>
     pivot_wider(names_from = gene_id, values_from = tpm) |>
     column_to_rownames("sample_id") |>
     as.matrix()
@@ -96,11 +88,11 @@ pc_varexp <-
 ## Plot
 
 ```{r, fig.height = 6}
-pca_df <- pc_scores |>
+pca_df <- 
+    pc_scores |>
     select(sample_id, PC1:PC2) |>
     left_join(sample_info, join_by(sample_id)) |>
-    unite(stim, c("stim", "timepoint"), sep = "_") |>
-    mutate(stim = factor(stim, levels = stims_order))
+    mutate(stim = factor(stim, levels = names(stim_colors)))
 
 ggplot(pca_df, aes(PC1, PC2)) +
     geom_point(aes(fill = stim), size = 4, shape = 21) +
@@ -133,8 +125,7 @@ dat <- read_rds("./wgcna/data/gene_expression.rds")
 
 sample_table <- 
     tibble(sample_id = colnames(dat$counts)) |>
-    extract(sample_id, c("group"), "[^_]+_(.+)", remove = FALSE) |>
-    column_to_rownames("sample_id")
+    extract(sample_id, c("group"), "[^_]+_(.+)", remove = FALSE)
 
 dds <- 
     DESeqDataSetFromTximport(dat, sample_table, ~1) |>
@@ -144,8 +135,7 @@ dds <-
     vst()
 
 top_variable_genes <- 
-    rowVars(assay(dds)) |> 
-    setNames(rownames(assay(dds))) |>
+    rowVars(assay(dds), useNames = TRUE) |>  
     enframe("gene_id", "var") |>
     arrange(desc(var)) |>
     slice(1:2000)
@@ -176,23 +166,17 @@ pc_varexp_2 <-
 ## Plot
 
 ```{r, fig.height = 6}
-
-stim_colors_2 <- stim_colors
-names(stim_colors_2) <- sub("_", " ", names(stim_colors_2))
-names(stim_colors_2) <- sub("DN2", "DN cocktail", names(stim_colors_2))
-
 pca_df_2 <- 
     pc_scores_2 |>
     select(sample_id, PC1:PC2) |>
     separate(sample_id, c("donor_id", "stim", "timep"), sep = "_") |>
     mutate(condition = paste(stim, timep, sep = " "),
-	   condition = sub("DN2", "DN cocktail", condition),
-	   condition = factor(condition, levels = names(stim_colors_2)))
+	   condition = factor(condition, levels = names(stim_colors)))
 
 pca_vst <- 
     ggplot(pca_df_2, aes(PC1, PC2)) +
     geom_point(aes(fill = condition), size = 4, shape = 21) +
-    scale_fill_manual("Condition:", values = stim_colors_2) +
+    scale_fill_manual("Condition:", values = stim_colors) +
     theme_bw() +
     theme(panel.grid = element_blank(),
           legend.key.height = unit(.25, "cm"),
@@ -216,8 +200,7 @@ dds_dn2 <-
     vst()
 
 top_variable_genes_dn2 <- 
-    rowVars(assay(dds_dn2)) |> 
-    setNames(rownames(assay(dds_dn2))) |>
+    rowVars(assay(dds_dn2), useNames = TRUE) |>  
     enframe("gene_id", "var") |>
     arrange(desc(var)) |>
     slice(1:2000)
@@ -239,20 +222,17 @@ pc_varexp_dn2 <-
     select(PC, pct) |>
     unite("lab", c(PC, pct), sep = " ", remove = FALSE)
 
-stim_colors_dn2 <- stim_colors
-names(stim_colors_dn2) <- sub("_", " ", names(stim_colors_dn2))
-
 pca_df_dn2 <- 
     pc_scores_dn2 |>
     select(sample_id, PC1:PC2) |>
     separate(sample_id, c("donor_id", "stim", "timep"), sep = "_") |>
     mutate(condition = paste(stim, timep, sep = " "),
-	   condition = factor(condition, levels = names(stim_colors_dn2)))
+	   condition = factor(condition, levels = names(stim_colors)))
 
 pca_vst_dn2 <- 
     ggplot(pca_df_dn2, aes(PC1, PC2)) +
     geom_point(aes(fill = condition), size = 4, shape = 21) +
-    scale_fill_manual("Condition:", values = stim_colors_dn2) +
+    scale_fill_manual("Condition:", values = stim_colors) +
     theme_bw() +
     theme(panel.grid = element_blank(),
           legend.key.height = unit(.25, "cm"),

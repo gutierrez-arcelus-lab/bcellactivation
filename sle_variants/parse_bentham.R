@@ -43,6 +43,12 @@ summ_stats_original <-
     data.table::fread() |>
     as_tibble()
 
+summ_stats_original |>
+    filter(chrom == 3, pos > 159e6, pos < 161e6) |>
+    arrange(p) |>
+    select(chrom:beta)
+
+
 summ_stats_original |> filter(rsid %in% balloons1) |> arrange(p)
 summ_stats_original |> filter(rsid %in% balloons2) |> arrange(p)
 
@@ -51,3 +57,68 @@ summ_stats |>
 
 summ_stats |>
     filter(chromosome == 14, base_pair_location == 56820049)
+
+
+# WANG
+wang <- 
+    "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Wang2021/ASN/GCST90011866_buildGRCh37.tsv" |>
+    data.table::fread() |>
+    as_tibble()
+
+wang |> filter(variant_id == "rs564799")
+
+
+# Compare versions of Bentham et al
+gwascat_harm <- 
+    "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/harmonized/26502338-GCST003156-EFO_0002690-build37.f.tsv.gz" |>
+    data.table::fread() |>
+    as_tibble() |>
+    select(chrom = chromosome, pos = base_pair_location, rsid = variant_id, other_allele, effect_allele, beta)
+
+open_gwas <- 
+    "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/opengwas/ebi-a-GCST003156.vcf.gz" |>
+    data.table::fread(skip = "#CHROM") |>
+    as_tibble() |>
+    select(chrom = `#CHROM`, pos = POS, rsid = ID, REF, ALT, FORMAT, stats = starts_with("EBI")) 
+
+open_gwas_stats <- 
+    open_gwas |>
+    select(FORMAT, stats) |>
+    separate_rows(c(FORMAT, stats), sep = ":") |>
+    pivot_wider(names_from = FORMAT, values_from = stats)
+
+
+# Compare with Wang
+bentham <- 
+    "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Bentham/harmonized/26502338-GCST003156-EFO_0002690-build37.f.tsv.gz" |>
+    data.table::fread() |>
+    as_tibble() |>
+    mutate(z = beta/standard_error) |>
+    select(chrom = chromosome, pos = base_pair_location, rsid = variant_id, other_allele, effect_allele, z)
+
+wang <- 
+    "/lab-share/IM-Gutierrez-e2/Public/GWAS/SLE/Wang2021/EUR/Meta_Results.txt" |>
+    data.table::fread() |>
+    as_tibble() |>
+    select(chrom = CHR, pos = BP, rsid = SNP, other_allele = A1lele1, effect_allele = Allele2, z = Zscore) |>
+    mutate_at(vars(ends_with("allele")), toupper) |>
+    mutate(chrom = as.character(chrom))
+
+bentham_wang_df <- 
+    inner_join(bentham, wang, join_by(chrom, pos, rsid), suffix = c("_bentham", "_wang")) |>
+    mutate(chrom = paste0("chr", chrom),
+	   chrom = factor(chrom, levels = paste0("chr", 1:22))) |>
+    arrange(chrom, pos)
+
+bentham_plot <- 
+    ggplot(bentham_wang_df |> sample_frac(.1), 
+	   aes(x = abs(z_bentham), y = abs(z_wang))) +
+    geom_abline() +
+    geom_point(size = .25, alpha = .25) +
+    facet_wrap(~chrom, nrow = 5) +
+    theme_bw() +
+    theme(panel.grid = element_blank())
+
+ggsave("./bentham_wang.png", bentham_plot)
+
+

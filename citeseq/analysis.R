@@ -408,16 +408,17 @@ write_tsv(cluster_markers_2, "./data/cluster_markers.tsv")
 
 
 # Gating
-naive_gate <- gating_model(name = "naive", signature = c("IgD+", "CD27-"))
-	    
-mem_gate <- gating_model(name = "memory", signature = c("IgD-", "CD27+"))
-
-abc_gate <- gating_model(name = "abc", signature = c("IgD-", "CD11c+"))
-
+naive_gate <- gating_model(name = 'naive', signature = c('IgD+', 'CD27-'))
+dn_gate <- gating_model(name = 'dn', signature = c('IgD-', 'CD27-'))
+mem_gate <- gating_model(name = 'memory', signature = c('IgD-', 'CD27+'))
+usw_gate <- gating_model(name = 'unswitch', signature = c('IgD+', 'CD27+'))
+abc_gate <- gating_model(name = 'abc', signature = c('CD11c+'))
 
 protein_gates <- 
     list(naive = naive_gate,
+	 dn = dn_gate,
 	 mem = mem_gate,
+	 usw = usw_gate,
 	 abc = abc_gate)
     
 bcells <- scGate(bcells, model = protein_gates, assay = "ADT", reduction = "harmony")

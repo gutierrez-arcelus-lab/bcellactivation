@@ -57,7 +57,7 @@ if (! file.exists("data/susie/lbf")) dir.create("data/susie/lbf")
 
 tier1_ea <-
     "../../../sle_variants/paper_data/langefeld_tableS2.xlxs" |>
-    read_langefeld(1) |>
+    read_langefeld(1) |> 
     group_by(gene_region) |>
     slice(which.min(p)) |>
     ungroup() |>
@@ -92,7 +92,6 @@ kgp_data <-
     read_tsv(comment = "##") |> 
     select(-QUAL, -FILTER, -INFO) |>
     inner_join(tier1_regions, join_by(`#CHROM` == chr, between(POS, start, end))) |> 
-
     select(chr = `#CHROM`, pos = POS, rsid = ID, ref = REF, alt = ALT) |> 
     separate_rows(alt, sep = ",") |> 
     distinct()

@@ -10,7 +10,6 @@ library(patchwork)
 library(ggbeeswarm)
 library(ggh4x)
 
-
 if (!file.exists("plots")) dir.create("plots")
 
 # Plot parameters
@@ -401,13 +400,13 @@ ggsave("./plots/ase_by_coverage.png", ase_by_coverage_plot, width = 6, height = 
 
 ## GLM results
 res_norand_df <- 
-    read_tsv("./results_glm/glm_res_df_annotated.tsv", col_types = "cfccddccc") |>
+    read_tsv("./results_glm/glm_res_df_annotated.tsv", col_types = "cfccdddccc") |>
     filter(grepl("^Day 0-", stim)) |>
     mutate(stim = str_remove(stim, "Day 0-"),
 	   stim = factor(stim, levels = names(stim_colors)[-1]),
-	   fdr = p.adjust(p, method = "fdr"),
+	   fdr = p.adjust(p_dev, method = "fdr"),
 	   gene_id = str_remove(gene_id, "\\.\\d+$")) |>
-    select(donor_id, replic, stim, variant_id, annot, gene_id, gene_name, beta_stim, p, fdr)
+    select(donor_id, replic, stim, variant_id, annot, gene_id, gene_name, beta_stim, p = p_dev, fdr)
 
 ## Summary
 summary_1_dyn <- 
@@ -734,6 +733,89 @@ p_beta_reps <-
 
 ggsave("./plots/betas_replic.png", p_beta_reps, height = 8.5, width = 5)
 
+# Color by number of reads
+total_reads <-
+    star_log_df |>
+    filter(reads == "unique") |> 
+    select(-reads) |>
+    pivot_wider(names_from = stim, values_from = number_of_reads) |>
+    pivot_longer(BCR:DN2, names_to = "stim") |>
+    janitor::clean_names()
+
+plot_data_2 <- 
+    plot_data |>
+    mutate(sample_id_1 = case_when(replic.x == "A" ~ paste0(donor_id, "_1"),
+				   replic.x == "B" ~ paste0(donor_id, "_2"),
+				   replic.x == "C" ~ paste0(donor_id, "_3")),
+	   sample_id_2 = case_when(replic.y == "A" ~ paste0(donor_id, "_1"),
+				   replic.y == "B" ~ paste0(donor_id, "_2"),
+				   replic.y == "C" ~ paste0(donor_id, "_3"))) |>
+    left_join(total_reads, join_by(sample_id_1 == sample_id, stim)) |>
+    left_join(total_reads, join_by(sample_id_2 == sample_id, stim)) |>
+    mutate(min_reads = pmin(value.x, value.y)/1e6,
+	   min_day0 = pmin(day_0.x, day_0.y)/1e6,
+	   stim = factor(stim, levels = c("BCR", "TLR7", "DN2"))) |>
+    select(donor_id, stim, lab, variant_id, beta_stim.x, beta_stim.y, min_reads, min_day0)
+
+p_beta_reps_2 <- 
+    ggplot(plot_data_2, aes(x = beta_stim.x, y = beta_stim.y)) +
+    geom_abline() +
+    geom_vline(xintercept = 0, color = "grey90") +
+    geom_hline(yintercept = 0, color = "grey90") +
+    geom_point(aes(fill = min_reads), shape = 21, stroke = .1, size = 2) +
+    geom_text(data = cor_data, aes(x = xmin, y = ymax + .1, label = cor_lab),
+	      size = 3, family = "Arial", hjust = "inward") +
+    scale_fill_gradient(low = "Light Cyan", high = "Midnight Blue",
+			guide = guide_colorbar(barheight = .5)) +
+    scale_x_continuous(breaks = scales::pretty_breaks(3)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(3)) +
+    facet_grid(lab~stim, scales = "free") +
+    theme_minimal() +
+    theme(legend.position = "top",
+	  axis.title = element_blank(),
+	  strip.text.x = element_text(size = 12, family = "arial", face = "bold"),
+	  strip.text.y = element_text(size = 12, family = "arial", angle = 0),
+	  panel.grid = element_blank(),
+	  plot.background = element_rect(fill = "white", color = "white"))
+
+ggsave("./plots/betas_replic_depth.png", p_beta_reps_2, height = 8.5, width = 5)
+
+plot_data_3 <-
+    cor_data |>
+    mutate(sample_id_1 = case_when(replic.x == "A" ~ paste0(donor_id, "_1"),
+				   replic.x == "B" ~ paste0(donor_id, "_2"),
+				   replic.x == "C" ~ paste0(donor_id, "_3")),
+	   sample_id_2 = case_when(replic.y == "A" ~ paste0(donor_id, "_1"),
+				   replic.y == "B" ~ paste0(donor_id, "_2"),
+				   replic.y == "C" ~ paste0(donor_id, "_3"))) |>
+    select(sample_id_1, sample_id_2, stim, r) |>
+    left_join(total_reads, join_by(sample_id_1 == sample_id, stim)) |>
+    left_join(total_reads, join_by(sample_id_2 == sample_id, stim)) |>
+    mutate("Min reads stim" = pmin(value.x, value.y),
+	   "Average reads stim" = (value.x + value.y)/2L,
+	   "Min reads day0" = pmin(day_0.x, day_0.y),
+	   "Average reads day0" = (day_0.x + day_0.y)/2L,
+	   "Min reads all" = pmin(value.x, value.y, day_0.x, day_0.y),
+	   "Average reads all" = (value.x + value.y + day_0.x + day_0.y)/4) |>
+    select(sample_id_1, sample_id_2, stim, r, contains("Min"), contains("Average")) |>
+    pivot_longer(-c(1:4), names_to = "metric", values_to = "reads") |>
+    mutate(reads = reads/1e6)
+   
+rho_by_depth_plot <- 
+    ggplot(plot_data_3) +
+    geom_point(aes(x = r, y = reads, color = stim), size = 2) +
+    scale_color_manual(values = stim_colors) +
+    facet_wrap(~metric, ncol = 3) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+	  plot.background = element_rect(color = "white", fill = "white")) +
+    labs(x = "rho") +
+    guides(color = "none")
+
+ggsave("./plots/betas_rho_by_depth.png", rho_by_depth_plot, width = 7.5, height = 5)
+
+
+
 # test
 min_cov_df <- 
     ase_res |>
@@ -761,15 +843,15 @@ p_beta_reps_cov <-
     geom_abline() +
     geom_vline(xintercept = 0, color = "grey80") +
     geom_hline(yintercept = 0, color = "grey80") +
-    geom_point(aes(color = log2(min_cov)), size = .7) +
-    scale_color_viridis_c("log2 min counts:", 
-			  guide = guide_colorbar(barheight = .5)) +
+    geom_point(aes(fill = log2(min_cov)), shape = 21, stroke = .1, size = 2) +
+    scale_fill_gradient(low = "Light Cyan", high = "Midnight Blue",
+			guide = guide_colorbar(barheight = .5)) +
     scale_x_continuous(breaks = scales::pretty_breaks(3)) +
     scale_y_continuous(breaks = scales::pretty_breaks(3)) +
     geom_text(data = cor_data, aes(x = xmin, y = ymax + .1, label = cor_lab),
 	      size = 3, family = "Arial", hjust = "inward") +
     facet_grid(lab~stim, scales = "free") +
-    theme_bw() +
+    theme_minimal() +
     theme(legend.position = 'top',
 	  axis.title = element_blank(),
 	  strip.text.x = element_text(size = 12, family = "Arial", face = "bold"),
@@ -791,10 +873,13 @@ fdr01 <-
     unite("sample_id", c(donor_id, replic), sep = "_")
 
 tmp <- 
-    inner_join(distinct(fdr01, variant_id), ase_res) |>
-    mutate(total = ref_count + alt_count) |>
-    filter(fdr <= 0.01, total >= 40) |>
-    distinct(variant_id)
+    fdr01 |>
+    group_by(variant_id) |>
+    slice_min(fdr) |>
+    ungroup() |>
+    select(variant_id, fdr) |>
+    arrange(fdr) |>
+    select(-fdr)
 
 ase_plot_data <- 
     inner_join(distinct(fdr01, variant_id), ase_res) |>
@@ -805,8 +890,19 @@ ase_plot_data <-
     arrange(sample_id, stim, variant_id)
 
 ase_plot_data_i <-
-    ase_plot_data |>
-    filter(variant_id == unique(variant_id)[1])
+    ase_plot_data |>     
+    filter(variant_id == tmp$variant_id[8])
+
+pvals_i <-
+    fdr01 |>
+    filter(variant_id == unique(ase_plot_data_i$variant_id)) |>
+    distinct(variant_id, sample_id, stim, p, fdr) |>
+    mutate(lab = format(p, scientific = TRUE)) |>
+    separate(lab, c("tmp1", "tmp2"), sep = "e") |>
+    mutate(tmp1 = round(as.numeric(tmp1), 1),
+	   tmp2 = as.integer(tmp2),
+	   lab = glue("P = {tmp1}x10^{tmp2}")) |>
+    select(-p, -tmp1, -tmp2)
 
 p <- 
     ggplot(ase_plot_data_i, 
@@ -814,24 +910,31 @@ p <-
     geom_col(aes(fill = stim)) +
     scale_x_continuous(breaks = scales::pretty_breaks(2)) +
     scale_fill_manual(values = stim_colors) +
-    facet_grid2(sample_id~stim, scales = "free_x", independent = "x", drop = FALSE) +
+    geom_text(data = pvals_i,
+	      aes(x = 0, y = 2, label = lab, color = fdr <= 0.1),
+	      hjust = "inward", nudge_y = .7, size = 2.5, show.legend = FALSE) +
+    scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black")) +
+    facet_grid2(sample_id~stim, scales = "free_x", independent = "x", drop = TRUE) +
     theme_minimal() +
-    theme(axis.text.y = element_text(size = 11),
+    theme(axis.text.x = element_text(hjust = 1, color = "grey70"),
+	  axis.text.y = element_text(size = 11),
+	  axis.ticks.x = element_line(linewidth = .5, color = "grey70"),
 	  strip.text.x = element_text(size = 11),
 	  strip.text.y = element_text(angle = 0),
+	  panel.grid = element_line(color = "grey96"),
 	  plot.background = element_rect(fill = "white", color = "white")) +
     labs(y = NULL) +
-    guides(fill = "none")
+    guides(fill = "none") +
+    coord_cartesian(clip = "off")
 
-ggsave("./plots/ase_time.png", p, height = 10, width = 5)
+ggsave("./plots/ase_time.png", p, height = 8, width = 5)
 
-ase_plot_data_i |> 
-    distinct(variant_id) |>
-    inner_join(fdr01) |>
-    arrange(fdr) |>
-    mutate(fdr = fdr * 100,
-	   fdr = round(fdr, 2)) |>
-    print(n = Inf)
+# Ref ratio of selected sample
+ase_plot_data_i |>
+    filter(sample_id == "10059706_1") |>
+    pivot_wider(names_from = allele, values_from = counts) |>
+    mutate(ref_r = ref/(ref+alt)) |>
+    select(variant_id, sample_id, stim, ref_r)
 
 
 
@@ -976,3 +1079,44 @@ p_vals_plot <-
     labs(x = "P-value (Deviance)", y = "P-value (regression)")
 
 ggsave("./plots/glm_pvals_comparison.png", p_vals_plot, height = 9, width = 3)
+
+# Test STAT1
+
+paste("bcftools view -r chr2:191105394 -O v -o stat4_mgb.vcf",
+      "../../mgb_biobank/sle_variants/sle.MGB.vcf.gz") |>
+    system()
+
+vcf <- 
+    data.table::fread("./stat4_mgb.vcf", skip = "#CHROM") |>
+    select(-`#CHROM`, -POS, -c(QUAL:FORMAT)) |>
+    pivot_longer(-c(ID:ALT), names_to = "sample_id", values_to = "gt") |>
+    mutate(donor_id = str_extract(sample_id, "\\d+$"))
+
+ase_res |>
+    filter(gene_name %in% c("STAT1", "STAT4")) |>
+    arrange(fdr) |>
+    mutate(donor_id = str_extract(sample_id, "^\\d+")) |>
+    filter(donor_id %in% c("10028815", "10044277", "10048130", "10049365", "10068728")) |>
+    filter(stim == "DN2") |>
+    print(width = Inf)
+
+ase_donors <- 
+    distinct(ase_res, sample_id) |>
+    mutate(donor_id = str_extract(sample_id, "^\\d+")) |>
+    distinct(donor_id) |>
+    pull(donor_id)
+
+vcf |> 
+    filter(donor_id %in% ase_donors) |> 
+    arrange(donor_id) |> 
+    distinct(donor_id, .keep_all = T) |> 
+    filter(gt %in% c("0|1", "1|0")) |>
+    print(n = Inf)
+
+
+
+
+
+
+
+

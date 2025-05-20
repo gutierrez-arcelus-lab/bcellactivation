@@ -2,6 +2,8 @@ library(tidyverse)
 library(readxl)
 library(patchwork)
 library(ggridges)
+library(extrafont)
+
 
 stim_colors <- 
     c("unstim_0h" = "#dbdbdb", 
@@ -50,7 +52,7 @@ lowinput <-
 rnaseq <- 
     "/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_rnaseq/metadata.tsv" |>
     read_tsv(col_types = c(.default = "c")) |>
-    distinct(donor_id = subject_id, stim) |>
+    distinct(donor_id, stim) |>
     mutate(stim = recode(stim, "unstday0" = "unstim"),
 	   time = ifelse(stim == "unstim", "0h", "24h"))
 
@@ -90,12 +92,15 @@ assay_df <-
 	   stim = factor(stim, levels = c("unstim", "IL4", "sCD40L", "TLR9", "TLR7", "BCR", "BCR+TLR7", "DN2")),
 	   assay = factor(assay, levels = c("Low-input RNAseq", "Normal-input RNAseq", "ATACseq", "CITEseq")))
 
-summ_assays <- distinct(assay_df, assay, color, stim, time)
-
 summ_assays <- 
-    bind_rows(summ_assays,
-	      distinct(summ_assays, assay) |>
-	      mutate(color = NA, stim = factor("IL4"), time = factor(48)))
+    distinct(assay_df, assay, color, stim, time) |>
+    mutate(stim = fct_recode(stim, "BCR-TLR7" = "BCR+TLR7"))
+    
+
+#summ_assays <- 
+#    bind_rows(summ_assays,
+#	      distinct(summ_assays, assay) |>
+#	      mutate(color = NA, stim = factor("IL4"), time = factor(48)))
 
 # Plot
 
@@ -106,21 +111,20 @@ sample_size_p <-
     ggplot(aes(x = n, y = assay)) +
     geom_col(fill = "black") +
     scale_x_reverse(limits = c(NA, 0)) +
-    geom_text(aes(label = n), hjust = 0, color = "white", fontface = "bold") +
+    geom_text(aes(label = n), hjust = 0, color = "white", 
+	      fontface = "bold", family = "Arial", size = 10, size.unit = "pt") +
     facet_grid(assay~., switch = "y", scales = "free") +
-    theme_bw() +
+    theme_minimal() +
     theme(panel.grid = element_blank(),
-	  panel.background = element_rect(color = "white", fill = "white"),
 	  axis.title = element_blank(),
-	  axis.ticks = element_blank(),
 	  axis.text = element_blank(),
-	  strip.text.y.left = element_text(angle = 0, size = 12),
+	  strip.text.y.left = element_text(angle = 0, size = 10, family = "Arial", hjust = 1),
 	  strip.placement = "outside",
-	  strip.background = element_rect(fill = "white", color = "white"),
+	  strip.switch.pad.grid = unit(-1, "cm"),
 	  panel.spacing = unit(0, "lines"),
-	  panel.border = element_blank(),
-	  plot.margin = margin(.5, 0, .5, .5),
-	  plot.title = element_text(face = "bold", hjust = .5, margin = margin(t = 0, b = -50))) +
+	  plot.margin = margin(.5, 0, .5, 0),
+	  plot.title = element_text(face = "bold", family = "Arial", size = 10,
+				    hjust = .5, margin = margin(t = 0, b = -50))) +
     labs(title = "N")
 
 p0 <- 
@@ -130,11 +134,9 @@ p0 <-
 	geom_line() +
 	theme_minimal() +
 	theme(panel.grid = element_blank(),
-	      panel.background = element_rect(color = "white", fill = "white"),
 	      axis.title = element_blank(),
-	      axis.ticks = element_blank(),
 	      axis.text = element_blank(),
-	      plot.margin = margin(.5, 0, .5, 0))
+	      plot.margin = margin(0, 0, 0, 0))
 
 p <- 
     ggplot(summ_assays, aes(x = time, y = assay, fill = color)) +
@@ -145,21 +147,29 @@ p <-
     theme_bw() +
     theme(legend.position = "none",
 	  panel.grid = element_blank(),
-	  panel.background = element_rect(color = "white", fill = "white"),
+	  panel.background = element_blank(),
+	  plot.background = element_blank(),
+	  strip.background = element_blank(),
 	  axis.title = element_blank(),
+	  axis.text.x = element_text(size = 9, family = "Arial"),
 	  axis.text.y = element_blank(),
 	  axis.ticks = element_blank(),
-	  strip.text.x = element_text(size = 12),
+	  strip.text.x = element_text(size = 10, family = "Arial"),
 	  strip.text.y.left = element_blank(),
 	  strip.placement = "outside",
 	  panel.spacing = unit(0, "lines"),
 	  panel.border = element_rect(linewidth = .1),
-	  strip.background = element_rect(fill = "white", color = "white"),
 	  plot.margin = margin(.5, .5, .5, 0))
 
+
 ggsave("./study_design.png", 
-       sample_size_p + p0 + p + plot_layout(widths = c(.1, .025, 1.1)), 
-       height = 1.8, width = 10, dpi = 600)
+       sample_size_p + p0 + p + plot_layout(widths = c(.08, .0075, 1)), 
+       height = 1.5, width = 7.5, dpi = 600)
+
+ggsave("./study_design.svg", 
+       sample_size_p + p0 + p + plot_layout(widths = c(.08, .0075, 1)), 
+       height = 1.5, width = 7.5)
+
 
 # density
 #y <- rnorm(5e4, 100, 10)

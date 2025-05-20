@@ -1,29 +1,35 @@
 library(tidyverse)
 library(glue)
 library(qvalue)
+library(furrr)
+
+plan(multisession, workers = availableCores())
 
 # Annotations
 annotations <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens",
 	      "gencode.v45.primary_assembly.annotation.gtf.gz") |>
-    read_tsv(comment = "#", col_names = FALSE, col_types = "ccciicccc")
+    vroom::vroom(comment = "#", col_names = FALSE, col_types = "ccciicccc")
 
 exon_annot <- 
     annotations |>
     filter(X3 == "exon", X1 %in% paste0("chr", c(1:22, "X"))) |>
-    mutate(gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
-	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+")) |>
-    select(chr = X1, start = X4, end = X5, gene_id, gene_name) |>
-    distinct()
+    group_split(X1) |>
+    future_map_dfr(~mutate(., gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
+			   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+")) |>
+		   select(chr = X1, start = X4, end = X5, gene_id, gene_name) |>
+		   distinct())
 
 gene_annot <- 
     annotations |>
     filter(X3 == "gene", X1 %in% paste0("chr", c(1:22, "X"))) |>
-    mutate(gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
-	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+")) |>
-    select(chr = X1, start = X4, end = X5, gene_id, gene_name)
+    group_split(X1) |>
+    future_map_dfr(~mutate(., gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
+			   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+")) |>
+		   select(chr = X1, start = X4, end = X5, gene_id, gene_name))
 
-# Static ASE
+
+# Standard ASE
 meta <- 
     "../2-mbv/matching_results.tsv" |>
     read_tsv() |>
@@ -40,6 +46,8 @@ ase_df <-
     select(-f) |>
     unnest(cols = data)
 
+write_tsv(ase_df, "./ase_data_raw.tsv")
+
 ase_clean_df <- 
     ase_df |>
     filter(totalCount >= 20,
@@ -48,7 +56,6 @@ ase_clean_df <-
 	   otherBases/totalCount < 0.05) |>
     select(sample_id, stim, variantID, refCount, altCount) |>
     janitor::clean_names()
-
 
 exonic_variants <- 
     ase_clean_df |>
@@ -83,11 +90,17 @@ ase_annotated <-
 
 ase_res <- 
     ase_annotated |>
-    mutate(p_value = map2_dbl(ref_count, ref_count + alt_count, 
-			      ~binom.test(.x, .y, p = .5, alternative = "two.sided")$p.value),
-	   q_value = qvalue(p_value)$qvalues)
+    group_split(stim) |>
+    future_map_dfr(~mutate(., p_value = map2_dbl(ref_count, ref_count + alt_count, 
+						~binom.test(.x, .y, p = .5, alternative = "two.sided")$p.value)))
+
+ase_res <- ase_res |> 
+    mutate(q_value = qvalue(p_value)$qvalues,
+	   p_bonferroni = p.adjust(p_value, method = "bonferroni"))
 
 write_tsv(ase_res, "./ase_data.tsv")
+
+plan(sequential)
 
 
 # Dynamic ASE
@@ -142,3 +155,38 @@ ldsc_genes <-
     ungroup()
 
 write_tsv(ldsc_genes, "./ldsc_genes.tsv")
+
+ldsc_genes_hg38 <- ldsc_genes |>
+    left_join(gene_annot, join_by(gene_id, gene_name)) |>
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$"))
+
+write_tsv(ldsc_genes_hg38, "./ldsc_genes_hg38.tsv")
+
+# Use liftOver to convert annotations to hg19
+dir.create("temp")
+chain <- "/reference_databases/ReferenceGenome/liftover_chain/hg38/hg38ToHg19.over.chain.gz"
+bedfile_38 <- "./temp/ldsc_genes_hg38.bed"
+bedfile_19 <- "./temp/ldsc_genes_hg19.bed"
+fail <- "./temp/fail.txt"
+
+bed38 <- ldsc_genes_hg38 |>
+    distinct(chr, start, end, gene_id) |>
+    mutate(chr = factor(chr, levels = paste0("chr", c(1:22, "X"))),
+	   start = start - 1L) |>
+    arrange(chr, start, end)
+
+write_tsv(bed38, bedfile_38, col_names = FALSE)
+
+command <- glue("liftOver {bedfile_38} {chain} {bedfile_19} {fail}")
+system(command)
+
+bed19 <-
+    read_tsv(bedfile_19, col_names = c("chr", "start", "end", "gene_id")) |>
+    mutate(start = start + 1L)
+
+ldsc_genes_hg19 <-
+    ldsc_genes |>
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
+    left_join(bed19, join_by(gene_id))
+
+write_tsv(ldsc_genes_hg19, "./ldsc_genes_hg19.tsv")

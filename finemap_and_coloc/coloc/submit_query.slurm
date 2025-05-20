@@ -5,7 +5,7 @@
 #SBATCH --mem=8gb
 #SBATCH -t 24:00:00
 #SBATCH -p bch-compute
-#SBATCH -a 320-383%6
+#SBATCH -a 1-758%6
 #SBATCH -J eqtl_cat
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
