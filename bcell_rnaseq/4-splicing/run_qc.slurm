@@ -15,7 +15,7 @@ source /programs/biogrids.shrc
 export FASTQC_X=0.11.9
 
 # INPUT
-META=${SLURM_SUBMIT_DIR}/metadata.tsv
+META=${SLURM_SUBMIT_DIR}/data/metadata.tsv
 FQ1=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $4 }')
 FQ2=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $5 }')
 

@@ -16,7 +16,7 @@ source /programs/biogrids.shrc
 export SALMON_X=1.10.1
 
 # INPUT
-META=${SLURM_SUBMIT_DIR}/metadata_qced.tsv
+META=${SLURM_SUBMIT_DIR}/data/metadata_qced.tsv
 SAMPLEID=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $1 }' )
 FQ1=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $2 }' ) 
 FQ2=$( awk 'FNR>1' $META | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'NR==ARRID { print $3 }' ) 
