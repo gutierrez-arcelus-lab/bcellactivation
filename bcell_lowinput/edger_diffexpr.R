@@ -77,13 +77,13 @@ design <- model.matrix(~0 + group, data = sample_table_filt)
 
 colnames(design) <- sub("group", "", colnames(design))
 
-colnames(design)
-
 keep_y <- filterByExpr(y, design, group = sample_table_filt$group)
 y <- y[keep_y, ]
 
 # Run edgeR
 y <- estimateDisp(y, design)
+write_rds(y, "./results/edger/diff_expr_all_times_dge.rds")
+
 fit <- glmQLFit(y, design, robust = TRUE)
 
 # Test for all
