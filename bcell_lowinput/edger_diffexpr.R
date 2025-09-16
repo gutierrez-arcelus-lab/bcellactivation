@@ -83,6 +83,7 @@ y <- y[keep_y, ]
 # Run edgeR
 y <- estimateDisp(y, design)
 write_rds(y, "./results/edger/diff_expr_all_times_dge.rds")
+write_rds(design, "./results/edger/diff_expr_all_times_design.rds")
 
 fit <- glmQLFit(y, design, robust = TRUE)
 
