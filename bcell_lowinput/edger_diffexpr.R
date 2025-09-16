@@ -82,8 +82,6 @@ y <- y[keep_y, ]
 
 # Run edgeR
 y <- estimateDisp(y, design)
-write_rds(y, "./results/edger/diff_expr_all_times_dge.rds")
-write_rds(design, "./results/edger/diff_expr_all_times_design.rds")
 
 fit <- glmQLFit(y, design, robust = TRUE)
 
@@ -126,4 +124,43 @@ qlf_all <-
     left_join(distinct(tx_to_gene, gene_id, gene_name), join_by(gene_id)) |>
     select(group1, group2, gene_id, gene_name, everything())
 
+
+write_rds(y, "./results/edger/diff_expr_all_times_dge.rds")
+write_rds(design, "./results/edger/diff_expr_all_times_design.rds")
 write_tsv(qlf_all, "./results/edger/diff_expr_all_times.tsv")
+
+
+
+# Alternative
+# Save all genes, not just signif
+contrast_strings <- 
+    combn(gs, 2, FUN = function(x) paste(x[2], x[1], sep = "-"))
+
+contrast_matrix <- 
+    makeContrasts(contrasts = contrast_strings, levels = design)
+
+ 
+# Running this with 128GB of RAM, but 32GB may be enough
+library(mirai)
+
+daemons(8)
+
+dge_results_list <- 
+    map(setNames(seq_along(contrast_strings), contrast_strings),
+	in_parallel(function(i)
+		    edgeR::glmQLFTest(fit, contrast = contrast_matrix[, i]) |>
+		    edgeR::topTags(n = Inf) |>
+		    {function(x) x$table}() |>
+		    tibble::rownames_to_column("gene_id") |>
+		    tibble::as_tibble(),
+		    contrast_matrix = contrast_matrix, fit = fit))
+
+daemons(0)
+
+dge_results_df <- 
+    dge_results_list |>
+    bind_rows(.id = "contrast") |>
+    left_join(distinct(tx_to_gene, gene_id, gene_name), join_by(gene_id)) |>
+    select(contrast, gene_id, gene_name, everything())
+
+write_tsv(dge_results_df, "./results/edger/diff_expr_all_times_all_genes.tsv")
