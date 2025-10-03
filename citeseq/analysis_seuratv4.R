@@ -406,3 +406,288 @@ write_tsv(cluster_markers_2, "./data/v4_cluster_markers.tsv")
 # Save object
 write_rds(bcells, "./data/seuratv4_qced.rds")
 
+
+################################################################################
+# Tests
+################################################################################
+stim_colors <- 
+    read_tsv("../paper_plots/figure_colors.txt", col_names = c("stim", "time", "color")) |>
+    unite("stim", c(stim, time), sep = " ") |>
+    mutate(stim = paste0(stim, "h")) |>
+    deframe()
+
+bcells <- read_rds("./data/seuratv4_qced.rds")
+
+adt_df <- 
+    bcells@assays$ADT@data[c('IgD', 'CD27', 'CD69', 'CD86'), ] |>
+    t() |>
+    as_tibble(rownames = 'barcode')
+
+umap_df <- 
+    read_tsv("./data/v4_umap_df.tsv", col_types = "ccccfdd") |>
+    mutate(hto = str_replace(hto, "IL4", "IL-4c"),
+	   hto = str_replace(hto, "TLR7", "TLR7c"),
+	   hto = str_replace(hto, "BCR", "BCRc"),
+	   hto = str_replace(hto, "DN2", "DN2c")) |>
+    left_join(adt_df, join_by(barcode)) |>
+    mutate(hto = factor(hto, levels = names(stim_colors)))
+
+
+igd_cd27_plot_density <- 
+    ggplot(umap_df, aes(x = IgD, y = CD27)) +
+    scale_fill_continuous(type = "viridis") +
+    geom_vline(xintercept = .75, linetype = 2, color = "green") +
+    geom_hline(yintercept = .25, linetype = 2, color = "green") +
+    facet_wrap(~hto, nrow = 2) +
+    geom_hex(aes(fill = after_stat(count/max(count))), bins = 100) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    guides(fill = "none")
+
+umap_cd27 <-
+    ggplot(data = umap_df |> arrange(CD27) |> mutate(barcode = fct_inorder(barcode)), 
+	    aes(x = umap_1, y = umap_2)) +
+    geom_point(aes(color = CD27), size = .5, stroke = 0) +
+    scale_color_gradientn("CD27",
+			  colors = c("grey85","#FFF7EC","#FEE8C8","#FDD49E","#FDBB84",
+				     "#FC8D59","#EF6548","#D7301F","#B30000","#7F0000"),
+			  label = function(x) sprintf("%.1f", x)) +
+    theme_minimal() +
+    theme(axis.title = element_blank(),
+	  axis.text = element_blank(),
+	  panel.grid = element_blank(),
+	  ) +
+    labs(color = NULL) +
+    guides(color = guide_colorbar(barwidth = .5, barheight = 4))
+
+umap_cd27_pos <- 
+    ggplot(data = umap_df |> mutate(pos = CD27 >= 0.25) |> arrange(pos) |> mutate(barcode = fct_inorder(barcode)) ,
+	    aes(x = umap_1, y = umap_2)) +
+    geom_point(aes(color = pos), size = .5, stroke = 0) +
+    scale_color_manual("CD27+", values = c("TRUE" = "midnightblue", "FALSE" = "grey85")) +
+    theme_minimal() +
+    theme(axis.title = element_blank(),
+	  axis.text = element_blank(),
+	  panel.grid = element_blank(),
+	  ) +
+    labs(color = NULL) +
+    guides(color = guide_legend(override.aes = list(size = 3)))
+
+
+set.seed(1)
+umap_cd27_random <-
+    ggplot(data = umap_df |> sample_frac(1) |> mutate(barcode = fct_inorder(barcode)), 
+	    aes(x = umap_1, y = umap_2)) +
+    geom_point(aes(color = CD27), size = .5, stroke = 0) +
+    scale_color_gradientn("CD27",
+			  colors = c("grey85","#FFF7EC","#FEE8C8","#FDD49E","#FDBB84",
+				     "#FC8D59","#EF6548","#D7301F","#B30000","#7F0000"),
+			  label = function(x) sprintf("%.1f", x)) +
+    theme_minimal() +
+    theme(axis.title = element_blank(),
+	  axis.text = element_blank(),
+	  panel.grid = element_blank(),
+	  ) +
+    labs(color = NULL) +
+    guides(color = guide_colorbar(barwidth = .5, barheight = 4))
+
+set.seed(1)
+umap_cd27_pos_random <- 
+    ggplot(data = umap_df |> mutate(pos = CD27 >= 0.25) |> sample_frac(1) |> mutate(barcode = fct_inorder(barcode)) ,
+	    aes(x = umap_1, y = umap_2)) +
+    geom_point(aes(color = pos), size = .5, stroke = 0) +
+    scale_color_manual("CD27+", values = c("TRUE" = "midnightblue", "FALSE" = "grey85")) +
+    theme_minimal() +
+    theme(axis.title = element_blank(),
+	  axis.text = element_blank(),
+	  panel.grid = element_blank(),
+	  ) +
+    labs(color = NULL) +
+    guides(color = guide_legend(override.aes = list(size = 3)))
+
+#library(patchwork)
+
+
+subsets_df <- 
+    adt_df |>
+    mutate(
+	   "IgD<sup>+</sup>  CD27<sup>+</sup>"  = ifelse(IgD >= .75 & CD27 >= .25, 1, 0),
+	   "IgD<sup>–</sup>  CD27<sup>–</sup>" = ifelse(IgD < .75 & CD27 < .25, 1, 0),
+	   "IgD<sup>–</sup>  CD27<sup>+</sup>" = ifelse(IgD < .75 & CD27 >= .25, 1, 0),
+	   "IgD<sup>+</sup>  CD27<sup>–</sup>" = ifelse(IgD >= .75 & CD27 < .25, 1, 0)
+	   ) |>
+    select(barcode, contains("sup")) |>
+    pivot_longer(-barcode, names_to = 'subtype') |>
+    mutate(subtype = fct_inorder(subtype)) |>
+    left_join(select(umap_df, barcode, hto)) |>
+    group_by(hto, subtype) |>
+    summarise(pct = mean(value)) |>
+    ungroup()
+
+proportions_plot <- 
+    ggplot(subsets_df, aes(x = hto, y = pct)) +
+    geom_col(aes(fill = hto)) +
+    scale_fill_manual(values = stim_colors) +
+    scale_y_continuous(limits = c(0, 1), breaks = c(0, .25, .5, .75, 1)) +
+    facet_wrap(~subtype, nrow = 1) +
+    theme_minimal() +
+    theme(axis.text.x = element_blank(),
+	  panel.grid.major.x = element_blank(),
+	  panel.grid.minor.y = element_blank(),
+	  panel.spacing.x = unit(1, "lines"),
+	  axis.ticks.x = element_blank(),
+	  strip.text = ggtext::element_markdown(size = 8),
+	  strip.clip = "off",
+	  plot.background = element_rect(color = "white", fill = "white")
+	  ) +
+    guides(fill = "none") +
+    labs(x = NULL, y = NULL)
+
+
+library(cowplot)
+
+
+fig_a_title <- 
+    ggdraw() + 
+    draw_label(
+	       "Gating",
+	       x = 0,
+	       size = 9,
+	       hjust = 0
+	       ) +
+    theme(text = element_text(size = 12),
+	  plot.margin = margin(l = 1.25, unit = "lines"))
+
+fig_a <- 
+    plot_grid(fig_a_title,
+	      igd_cd27_plot_density, 
+	      ncol = 1, 
+	      rel_heights = c(.1, 1),
+	      labels = 'a', label_size = 12, vjust = .75)
+
+fig_b_title <- 
+    ggdraw() + 
+    draw_label(
+	       "UMAP with droplets sorted by CD27 expression",
+	       x = 0,
+	       size = 9,
+	       hjust = 0
+	       ) +
+    theme(text = element_text(size = 12),
+	  plot.margin = margin(l = 1.25, unit = "lines"))
+
+fig_b <- 
+    plot_grid(fig_b_title,
+	      plot_grid(umap_cd27, umap_cd27_pos),
+	      ncol = 1, 
+	      rel_heights = c(.1, 1),
+	      labels = 'b', label_size = 12, vjust = .75)
+
+fig_c_title <- 
+    ggdraw() + 
+    draw_label(
+	       "UMAP with droplets randomly sorted",
+	       x = 0,
+	       size = 9,
+	       hjust = 0
+	       ) +
+    theme(text = element_text(size = 12),
+	  plot.margin = margin(l = 1.25, unit = "lines"))
+
+fig_c <- 
+    plot_grid(fig_c_title,
+	      plot_grid(umap_cd27_random, umap_cd27_pos_random),
+	      ncol = 1, 
+	      rel_heights = c(.1, 1),
+	      labels = 'c', label_size = 12, vjust = .75)
+
+fig_d_title <- 
+    ggdraw() + 
+    draw_label(
+	       "Proportion of cell subsets in each condition",
+	       x = 0,
+	       size = 9,
+	       hjust = 0
+	       ) +
+    theme(text = element_text(size = 12),
+	  plot.margin = margin(l = 1.25, unit = "lines"))
+
+fig_d <- 
+    plot_grid(fig_d_title,
+	      proportions_plot,
+	      ncol = 1, 
+	      rel_heights = c(.1, 1),
+	      labels = 'd', label_size = 12, vjust = .75)
+
+plot_out <- 
+    plot_grid(fig_a, fig_b, fig_c, fig_d, ncol = 1, rel_heights = c(1, .8, .8, .5)) +
+    theme(plot.background = element_rect(color = "white", fill = "white"))
+
+
+ggsave("./plots/bcell_cd27.png", plot_out, width = 6.5, height = 8.5)
+
+# Try kmeans
+cd27_vec <- 
+    adt_df |>
+    select(barcode, CD27) |>
+    deframe()
+
+head(cd27_vec)
+km <- kmeans(cd27_vec, centers = 2)
+
+km_df <- km$cluster |> enframe("barcode", "k")
+
+umap_df_k <- 
+    left_join(umap_df, km_df, join_by(barcode))
+
+set.seed(1)
+umap_cd27_kmeans <- 
+    ggplot(data = umap_df_k |> sample_frac(1) |> mutate(barcode = fct_inorder(barcode)),
+	    aes(x = umap_1, y = umap_2)) +
+    geom_point(aes(color = factor(k)), size = .5, stroke = 0) +
+    scale_color_manual("CD27+", values = c("2" = "midnightblue", "1" = "grey85")) +
+    theme_bw() +
+    theme(axis.title = element_blank(),
+	  axis.text = element_blank(),
+	  panel.grid = element_blank(),
+	  ) +
+    labs(color = NULL) +
+    guides(color = guide_legend(override.aes = list(size = 3)))
+
+
+kmean_violin <- 
+    ggplot(umap_df_k, aes(x = factor(k), y = CD27)) +
+    geom_violin() +
+    theme_bw()
+
+ggsave("./plots/umap_cd27_kmeans.png", 
+       plot_grid(kmean_violin, umap_cd27_kmeans, nrow = 1, align = "h", rel_widths = c(.6, 1)), 
+       width = 8, height = 4)
+
+
+library(mclust)
+
+fit <- Mclust(cd27_vec[cd27_vec>0], G = 2)
+
+# Sample points between the peaks
+low_peak <- min(fit$parameters$mean)
+high_peak <- max(fit$parameters$mean)
+test_points <- seq(low_peak, high_peak, length.out = 100)
+
+# Find where density is lowest
+densities <- dens(modelName = fit$modelName, 
+                  data = test_points,
+                  parameters = fit$parameters)
+
+threshold <- test_points[which.min(densities)]
+
+cd27_hist <- 
+    ggplot(umap_df |> filter(CD27 > 0), aes(x = CD27)) +
+    geom_histogram(bins = 100) +
+    geom_vline(xintercept = c(low_peak, high_peak)) +
+    geom_vline(xintercept = threshold, color = "red", linetype = 3) +
+    scale_x_continuous() +
+    theme_minimal() +
+    theme(plot.background = element_rect(color = "white", fill = "white"))
+
+ggsave("./plots/cd27_hist.png", cd27_hist, width = 4, height = 1.5)
