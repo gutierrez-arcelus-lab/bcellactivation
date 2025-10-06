@@ -362,9 +362,18 @@ ggsave(glue("./plots/go_{stim_i}.png"),
 
 # Plot correlation between Lupus-associated genes and modules in a heatmap
 # List of Lupus-associated genes
+open_targets <- 
+    read_tsv("./data/OT-MONDO_0007915-associated-targets-10_6_2025-v25_09 (1).tsv") |>
+    select(1:3) |>
+    filter(gwasCredibleSets != "No data") |>
+    mutate_at(vars(gwasCredibleSets), as.numeric) |>
+    filter(gwasCredibleSets >= 0.5) |>
+    arrange(desc(gwasCredibleSets))
+
+
 sle_genes <- 
     c("PTPN22", 
-      "FCGR2A", 
+      "FCGR2A", "FCFR2B", 
       "TNFSF4", 
       "NCF2", 
       "IL10",
@@ -405,8 +414,11 @@ sle_genes <-
       "UBE2L3", 
       "TASL",
       "IRAK1", "MECP2",
-      "IKBKE", "IL10" 
+      "IKBKE", "IL10",
+      "DNASE1L3", "CLEC16A"
     )
+
+sle_genes <- sle_genes[sle_genes %in% open_targets$symbol]
 
 
 sle_genes_cormatrix <- 
@@ -415,8 +427,8 @@ sle_genes_cormatrix <-
     left_join(kme_all_df, join_by(gene_id)) |>
     filter(!is.na(module)) |>
     #group_by(gene_id) |>
-    #filter(any(kme >= 0.85)) |>
-    #ungroup() |>
+    #filter(any(kme >= 0.75)) |>
+    #ungroup() |> 
     select(-gene_id) |>
     pivot_wider(names_from = module, values_from = kme) |>
     column_to_rownames("gene_name") |>
@@ -431,6 +443,15 @@ pheatmap(sle_genes_cormatrix,
 	 color = colorRampPalette(rev(brewer.pal(n = 11, name ="RdYlBu")))(100),
 	 display_numbers = round(sle_genes_cormatrix, 2),
 	 legend = FALSE)
+dev.off()
+
+png(glue("./plots/slegenes_{stim_i}_2.png"), 
+    units = "in", height = 3, width = 6, res = 300)
+pheatmap(t(sle_genes_cormatrix),
+	 fontsize = 9, angle_col = 90, cluster_rows = FALSE, cluster_cols = TRUE, 
+	 color = colorRampPalette(rev(brewer.pal(n = 11, name ="RdYlBu")))(100),
+	 display_numbers = FALSE,
+	 legend = TRUE)
 dev.off()
 
 # Save data for analysis of module preservation across stims
