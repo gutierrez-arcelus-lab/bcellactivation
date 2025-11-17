@@ -14,10 +14,10 @@ library(tidyverse)
 
 # Colors
 stim_colors <- 
-    "../figure_colors.txt" |>
-    read_tsv(col_names = c("stim", "color")) |>
-    mutate(stim = sub("_", " ", stim),
-	   stim = paste0(stim, "h")) |>
+    "../paper_plots/figure_colors.txt" |>
+    read_tsv(col_names = c("stim", "timep", "color")) |>
+    unite("stim", c("stim", "timep"), sep = " ") |>
+    mutate(stim = paste0(stim, "h")) |>
     deframe()
 
 # Processing function
@@ -215,14 +215,19 @@ lib1990_obj <- subset(lib1990_obj, cells = good_cells[["1990"]])
 #			     overwrite = TRUE)
 
 
-# Demultiplexing and doublet detection
+# Demultiplexing donors
 libs <- c("1984", "1988", "1990")
 
 demuxlet_df <-
     "./demultiplexing/demuxlet/results/demuxlet_calls.tsv" |>
     read_tsv() |>
     rename("orig.ident" = "batch", "demuxlet_call" = "status") |>
-    mutate(orig.ident = factor(orig.ident, levels = libs))
+    mutate(orig.ident = factor(orig.ident, levels = libs)) |>
+    add_count(orig.ident, donor_id) |>
+    mutate(demuxlet_call = case_when(demuxlet_call == "SNG" & n < 50 ~ "ERROR",
+				     .default = demuxlet_call)) |>
+    select(-n)
+
 
 #scrublet_df <- 
 #    glue::glue("./demultiplexing/scrublet/scrublet_calls_{libs}.tsv") |>
@@ -249,14 +254,12 @@ lib1988_obj <- add_to_metadata(lib1988_obj)
 lib1990_obj <- add_to_metadata(lib1990_obj)
 
 singlet_cells <- 
-    list(lib1984_obj, lib1988_obj, lib1990_obj) |>
-    map_dfr(function(x) x@meta.data |> 
-	    as_tibble(rownames = "barcode")) |>
-    filter(demuxlet_call == "SNG", 
-	   #scrublet_doublet_score < 0.5,
-	   dmm_type == "singlet") |>
-    {function(x) split(x, x$orig.ident)}() |>
-    map(~pull(., barcode))
+    list("1984" = lib1984_obj, "1988" = lib1988_obj, "1990" = lib1990_obj) |>
+    map(function(x) x@meta.data |> 
+	as_tibble(rownames = "barcode") |>
+	filter(demuxlet_call == "SNG", dmm_type == "singlet") |>
+	pull(barcode)
+    )
 
 lib1984_obj <- subset(lib1984_obj, cells = singlet_cells[["1984"]])
 lib1988_obj <- subset(lib1988_obj, cells = singlet_cells[["1988"]])
