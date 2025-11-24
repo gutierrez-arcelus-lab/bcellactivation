@@ -83,9 +83,10 @@ legend_df <-
 
 legend_plot <-
     ggplot(legend_df, aes(x = time, y = fct_rev(stim))) +
-    geom_point(aes(fill = condition), 
-	       shape = 21, size = 2.5, stroke = .25) +
+    geom_point(aes(fill = condition, shape = time), 
+	       size = 2, stroke = .25) +
     scale_fill_manual(values = stim_colors) +
+    scale_shape_manual(values = c(23, 25, 22, 21, 24)) +
     theme_minimal() +
     theme(text = element_text(size = 8),
 	  axis.text.y = element_text(size = 9, margin = margin(r = -.5, unit = "lines")),
@@ -98,23 +99,34 @@ legend_plot <-
 	  plot.title = element_text(size = 9, margin = margin(t = 0, b = 0))
 	  ) +
     labs(x = "hours", title = "Conditions:") +
-    guides(fill = "none")
+    guides(fill = "none", shape = "none")
 
 pca_plot <- 
     ggplot(pca_df, aes(PC1, PC2)) +
     geom_hline(yintercept = 0, color = "grey94") +
     geom_vline(xintercept = 0, color = "grey94") +
-    geom_point(data = pca_df, 
-	       aes(fill = condition), 
-	       shape = 21, size = 2, stroke = .15) +
+    stat_ellipse(aes(group = time), level = .85,
+		 linetype = 2, linewidth = 0.25, color = "grey50") +
+    geom_text(data = 
+	       tribble(~x, ~y, ~lab,
+		       0, 50, "0h",
+		       -75, 0, "4h",
+		       -25, -50, "24h",
+		       25, -75, "48h",
+		       42, -50, "72h"),
+	       aes(x, y, label = lab),
+	       size = 8, size.unit = "pt") +
+    geom_point(aes(fill = condition, shape = time), 
+	       size = 1.75, stroke = .15) +
     scale_fill_manual(values = stim_colors) +
+    scale_shape_manual(values = c(23, 25, 22, 21, 24)) +
     theme_minimal() +
     theme(
 	  axis.text = element_blank(),
 	  axis.title = element_text(size = 9),
 	  panel.grid = element_blank(),
 	  plot.margin = margin(0, 0, 0, .5, unit = "lines")) +
-    guides(fill = "none") +
+    guides(fill = "none", shape = "none") +
     labs(x = glue("PC1 ({pca_var[1]})"), y = glue("PC2 ({pca_var[2]})"))
 
 pca_inset <- 
@@ -160,6 +172,11 @@ fig_a_grid <-
 	      rel_heights = c(.1, 1),
 	      labels = c("a", NULL), label_size = 12
     )
+
+
+#ggsave("pca.png",
+#       fig_a_grid + theme(plot.background = element_rect(fill = "white", color = "white")),
+#       width = 5, height = 4)
 
 
 # Fig B #######################################################################
@@ -702,3 +719,8 @@ ggsave("./fig2.png",
        theme(plot.background = element_rect(fill = "white", color = "white")),
        width = 6.5, height = 8.5, dpi = 300)
 
+ggsave("./high_res/fig2.png",
+       plot_grid(top_grid, NULL, fig_c, NULL, bottom_grid, 
+		 ncol = 1, rel_heights = c(0.55, 0.03, 0.25, 0.001, 1)) +
+       theme(plot.background = element_rect(fill = "white", color = "white")),
+       width = 6.5, height = 8.5, dpi = 600)

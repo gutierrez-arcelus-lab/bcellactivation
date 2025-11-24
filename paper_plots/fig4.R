@@ -401,3 +401,4 @@ final_grid <-
     theme(panel.background = element_rect(color = "white", fill = "white"))
 
 ggsave("fig4.png", final_grid, width = 6.5, height = 7.5, dpi = 300)
+ggsave("./high_res/fig4.png", final_grid, width = 6.5, height = 7.5, dpi = 600)

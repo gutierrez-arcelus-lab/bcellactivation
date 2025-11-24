@@ -34,13 +34,10 @@ bcells <- read_rds("../citeseq/data/seuratv4_qced.rds")
 
 umap_df <- 
     read_tsv("../citeseq/data/v4_umap_df.tsv") |>
-    mutate(hto = str_replace(hto, "IL4", "IL-4c"),
-	   hto = str_replace(hto, "TLR7", "TLR7c"),
-	   hto = str_replace(hto, "BCR", "BCRc"),
-	   hto = str_replace(hto, "DN2", "DN2c")) |>
     mutate(hto = factor(hto, levels = names(stim_colors)))
 
-bcells@meta.data <- bcells@meta.data |>
+bcells@meta.data <- 
+    bcells@meta.data |>
     mutate(dmm_hto_call = str_replace(dmm_hto_call, "IL4", "IL-4c"),
 	   dmm_hto_call = str_replace(dmm_hto_call, "TLR7", "TLR7c"),
 	   dmm_hto_call = str_replace(dmm_hto_call, "BCR", "BCRc"),
@@ -343,15 +340,19 @@ rna_df <-
 #    geom_hline(yintercept = .0)
 #
 #
-#testp <-
+#testp_igd <-
 #    ggplot(adt_df, aes(x = cluster, y = IgD)) +
 #    geom_violin() +
 #    geom_hline(yintercept = .75)
 #
-#testp <-
+#ggsave("./adt_dist_igd.png", testp_igd, height = 4)
+#
+#testp_cd27 <-
 #    ggplot(adt_df, aes(x = cluster, y = CD27)) +
 #    geom_violin() +
 #    geom_hline(yintercept = .25)
+#
+#ggsave("./adt_dist_cd27.png", testp_cd27, height = 4)
 #
 #testp <-
 #    ggplot(adt_df, aes(x = cluster, y = CD11c)) +
@@ -360,6 +361,36 @@ rna_df <-
 #
 #ggsave("./testp.png", testp, height = 4)
 #
+#
+#adt_df <- 
+#    adt_df |>
+#    mutate(hto = factor(hto, levels = c("Unstim 0h", "IL4 24h", "IL4 72h", "TLR7 24h", "TLR7 72h", "BCR 24h", "BCR 72h", "DN2 24h", "DN2 72h")))
+#
+#igd_cd27_plot_scatter <- 
+#    ggplot(adt_df, aes(x = IgD, y = CD27)) +
+#    geom_point(size = .5, alpha = .05) +
+#    geom_vline(xintercept = .75, linetype = 2, color = "green") +
+#    geom_hline(yintercept = .75, linetype = 2, color = "green") +
+#    facet_wrap(~hto, nrow = 1) +
+#    theme_bw() +
+#    theme(panel.grid = element_blank())
+#
+#igd_cd27_plot_density <- 
+#    ggplot(adt_df, aes(x = IgD, y = CD27)) +
+#    scale_fill_continuous(type = "viridis") +
+#    geom_vline(xintercept = .75, linetype = 2, color = "green") +
+#    geom_hline(yintercept = .75, linetype = 2, color = "green") +
+#    facet_wrap(~hto, nrow = 2) +
+#    geom_hex(aes(fill = after_stat(count/max(count))), bins = 100) +
+#    theme_bw() +
+#    theme(panel.grid = element_blank()) +
+#    guides(fill = "none")
+#
+#ggsave("./IgD_CD27.png", 
+#       plot_grid(igd_cd27_plot_density, ncol = 1),
+#       width = 5, height = 2.5)
+
+
 subsets_df <- 
     left_join(adt_df, rna_df) |>
     mutate(
@@ -554,6 +585,12 @@ fig_f <- plot_grid(fig_f_title, umaps_disease, ncol = 1, rel_heights = c(.1, 1),
 
 ggsave("./fig3.png", 
        plot_grid(grid_ab, NULL, grid_cd, NULL, fig_e, NULL, fig_f, 
-		 ncol = 1, rel_heights = c(.75, .025, 1.05, 0.05, .3, 0.05, .33)), 
+		 ncol = 1, rel_heights = c(.75, .025, 1.05, 0.05, .3, 0.05, .33)) +
+       theme(plot.background = element_rect(fill = "white", color = "white")), 
        width = 6.5, height = 8.5, dpi = 300)
 
+ggsave("./high_res/fig3.png", 
+       plot_grid(grid_ab, NULL, grid_cd, NULL, fig_e, NULL, fig_f, 
+		 ncol = 1, rel_heights = c(.75, .025, 1.05, 0.05, .3, 0.05, .33)) +
+       theme(plot.background = element_rect(fill = "white", color = "white")), 
+       width = 6.5, height = 8.5, dpi = 600)

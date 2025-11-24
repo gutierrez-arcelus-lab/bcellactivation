@@ -401,3 +401,7 @@ ggsave("fig5.png",
 	   theme(plot.background = element_rect(fill = "white", color = "white")),
        width = 6.5, height = 6, dpi = 300)
 
+ggsave("./high_res/fig5.png", 
+       plot_grid(fig_ab_grid, NULL, bottom_panel, ncol = 1, rel_heights = c(1, .025, .4)) +
+	   theme(plot.background = element_rect(fill = "white", color = "white")),
+       width = 6.5, height = 6, dpi = 600)
