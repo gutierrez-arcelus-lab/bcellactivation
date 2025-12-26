@@ -410,15 +410,14 @@ prs_race_plot <-
 	scale_y_continuous(breaks = scales::pretty_breaks(4)) +
 	theme_minimal() +
 	theme(
-	      axis.text.x = element_text(size = 10, family = "Arial", angle = 45, hjust = 1, vjust = 1),
-	      axis.text.y = element_text(size = 10, family = "Arial"),
-	      axis.title = element_text(size = 10, family = "Arial"),
-	      strip.text = element_text(size = 10, family = "Arial"),
+	      axis.text.x = element_text(size = 8, angle = 45, hjust = 1, vjust = 1, margin = margin(t = -2)),
+	      axis.text.y = element_text(size = 8),
+	      axis.title = element_text(size = 8),
+	      strip.text = element_text(size = 8),
 	      legend.position = "none",
 	      panel.grid.major.x = element_blank(),
 	      panel.grid.minor.y = element_blank(),
-	      panel.grid.major.y = element_line(color = "grey96"),
-	      plot.background = element_rect(color = "white", fill = "white")
+	      panel.grid.major.y = element_line(color = "grey96")
 	      ) +
 	labs(x = NULL, y = "PRS")
 
@@ -452,31 +451,32 @@ auc_df <- rocs |>
     pivot_longer(everything(), names_to = "race_et", values_to = "auc") |>
     mutate(auc = round(auc, 2)) |>
     arrange(race_et) |>
-    select(" " = race_et, "AUC" = auc)
-
-roc_colors <- c("Black" = "black", "White" = "Dodger Blue")
+    select(race_et, AUC = auc) |>
+    mutate(AUC = glue::glue("{race_et}: {AUC}"))
 
 roc_p <- 
-    ggplot(rocs_df, aes(x = specificities, y = sensitivities, color = race_et)) +
-    geom_line(linetype = 1, linewidth = .75) +
+    ggplot(rocs_df, 
+	   aes(x = specificities, y = sensitivities)) +
+    geom_line(aes(color = race_et), linetype = 1, linewidth = .75) +
     scale_x_reverse(breaks = c(0, .5, 1), labels = function(x) round(x, 2)) +
     scale_y_continuous(breaks = c(0, .5, 1), labels = function(x) round(x, 2)) +
-    scale_color_manual(values = roc_colors) +
+    scale_color_manual(values = c("grey40", "cornflowerblue"),
+		       labels = auc_df$AUC) +
     theme_minimal() +
-    theme(axis.title = element_text(family = "Arial", size = 11),
-	  axis.text = element_text(family = "Arial", size = 11),
+    theme(axis.title = element_text(size = 8),
+	  axis.text = element_text(size = 8),
 	  panel.grid = element_line(color = "grey96"),
 	  panel.grid.minor.x = element_blank(),
 	  panel.grid.minor.y = element_blank(),
-	  plot.background = element_rect(color = "white", fill = "white"),
-	  legend.text = element_blank(),
-	  legend.position = c(.35, .275),
-	  legend.key.width = unit(.1, "in")
+	  legend.position = c(0.98, 0), 
+	  legend.justification = c("right", "bottom"),
+	  legend.text = element_text(size = 7),
+	  legend.key.width = unit(0.25, "cm"),
+	  legend.key.spacing.y = unit(-.2, "cm"),
+	  legend.box.margin = margin(0, 0, 0, 0),
+	  legend.margin = margin(0, 0, 0, 0)
 	  ) +
-    labs(x = "Specificity", y = "Sensitivity", color = NULL) +
-    annotation_custom(tableGrob(auc_df, rows = NULL, 
-				theme = ttheme_minimal(base_size = 8)), 
-		      xmin = -1.25, xmax = .7, ymin = .2, ymax = .5)
+    labs(x = "Specificity", y = "Sensitivity", color = NULL)
 
 
 # Admixture plot
@@ -495,30 +495,44 @@ p1 <-
 			   breaks = c(0, 1),
 			   labels = c("0", "1")) +
 	scale_color_manual(values = continental_colors) +
-	scale_fill_manual(values = continental_colors) +
 	facet_wrap(~ancestry, nrow = 1) +
 	theme_minimal() +
 	theme(
-	      axis.text = element_text(size = 10, family = "Arial"),
-	      axis.title = element_text(size = 10, family = "Arial"),
-	      strip.text = element_text(size = 10, family = "Arial"),
-	      panel.grid = element_blank(),
-	      legend.position = "none",
-	      plot.background = element_rect(color = "white", fill = "white")
+	      axis.text.x = element_text(size = 8, hjust = c(0, .5)),
+	      axis.text.y = element_text(size = 8),
+	      axis.title = element_text(size = 8),
+	      strip.text.x = element_text(size = 8, margin = margin(b = 0, t = 0)),
+	      panel.grid.minor.x = element_blank(),
+	      panel.grid.minor.y = element_blank(),
+	      panel.spacing.x = unit(0, "cm"),
+	      legend.position = "none"
 	      ) +
 	labs(x = "Proportion of ancestry", y = "PRS")
 
-ggsave("./plots/prs_race_gia.png", 
-       prs_race_plot + roc_p + p1 + 
-	   plot_layout(nrow = 1, widths = c(.6, .4, 1)) + plot_annotation(tag_levels = "A") +
-	   theme(plot.margin = margin(b = 0)),
-       height = 2, width = 7.5)
-
 p_out <- 
     plot_grid(prs_race_plot, roc_p, p1,
-	      nrow = 1, rel_widths = c(.6, .5, 1), labels = c("A", "B", "C"))
+	      nrow = 1, rel_widths = c(.6, .5, 1), 
+	      labels = c("A", "B", "C"), label_size = 8) +
+    theme(plot.background = element_rect(color = "white", fill = "white"))
 
-ggsave("./plots/prs_race_gia.png", p_out, height = 1.5, width = 7.5) 
+ggsave("./plots/prs_race_gia.png", p_out, height = 1.1, width = 6.5) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
