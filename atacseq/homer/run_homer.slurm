@@ -2,7 +2,7 @@
 
 #SBATCH -N 1
 #SBATCH -c 4
-#SBATCH --mem=24gb
+#SBATCH --mem=12gb
 #SBATCH -t 08:00:00
 #SBATCH -p bch-compute
 #SBATCH -a 1-4
@@ -22,10 +22,11 @@ STIM=$( awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $1 }' ./stims.tx
 GENOME=/lab-share/IM-Gutierrez-e2/Public/References/Genomes/hsapiens/GRCh38/GRCh38.primary_assembly.genome.fa
 BED=./data/${STIM}.bed
 BG=./data/consensus.bed
-OUT=./results/${STIM}
+OUT=./results_vert/${STIM}
 
 findMotifsGenome.pl $BED $GENOME $OUT \
     -bg $BG \
     -size 200 \
-    -p $SLURM_CPUS_PER_TASK \
-    -mask
+    -mask \
+    -mset vertebrates \
+    -p $SLURM_CPUS_PER_TASK

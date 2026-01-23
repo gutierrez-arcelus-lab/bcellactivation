@@ -1,7 +1,6 @@
 library(tidyverse)
 library(glue)
      
-# select negative fold-change because analysis was done using unstim as effect stim
 process_bed <- function(s) {
 
     glue("../results_deseq2/{s}_24vsunst_24.tsv") |>
