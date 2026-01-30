@@ -102,3 +102,115 @@ plot_out <-
     theme(strip.background = element_rect(fill = "grey90"))
 
 ggsave("./donors_vs_pool.png", plot_out, width = 6.5, height = 4, dpi = 300)
+
+# plot QC metrics
+stim_colors <- 
+    read_tsv("../paper_plots/figure_colors.txt", col_names = c("stim", "timep", "col")) |>
+    mutate(condition = glue("{stim} {timep}hrs")) |>
+    select(condition, col) |>
+    deframe()
+
+frip_df <- 
+    "./results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_frip_score-plot.txt" |>
+    read_tsv() |>
+    pivot_longer(-Sample) |>
+    drop_na() |>
+    select(Sample, frip = value) |>
+    left_join(unite(samplesheet, "Sample", c(condition, replic), sep = "_", remove = FALSE), join_by(Sample)) |>
+    filter(donor_id != "3donors") |>
+    select(sample_id = Sample, condition, donor_id, frip) |>
+    separate(condition, c("stim", "timep"), sep = "_") |>
+    mutate(stim = recode(stim, 
+			 "unst" = "Unstim", 
+			 "IL4" = "IL-4c",
+			 "TLR7" = "TLR7c",
+			 "BCR" = "BCRc",
+			 "DN2" = "DN2c"),
+           stim = factor(stim, levels = c("Unstim", "IL-4c", "TLR7c", "BCRc", "DN2c"))) |> 
+    arrange(stim, as.numeric(timep), donor_id) |>
+    mutate(condition = glue("{stim} {timep}hrs"),
+	   condition = fct_inorder(condition))
+
+frip_plot <- 
+    ggplot(data = frip_df,
+	   aes(x = frip, y = donor_id)) +
+    geom_col(alpha = .75, color = "black", linewidth = .2) +
+    scale_x_continuous(limits = c(0, 1)) +
+    facet_wrap(~condition, ncol = 1, strip.position = "right") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 7),
+	  axis.text.y = element_blank(),
+	  axis.title = element_text(size = 8),
+	  strip.text.y.right = element_text(size = 8, angle = 0, hjust = 0),
+	  panel.spacing = unit(0.1, "lines"),
+	  panel.grid.minor.x = element_blank(),
+	  plot.title = element_text(size = 8),
+	  plot.background = element_rect(fill = "white", color = "white")
+    ) +
+    labs(y = "Donor", x = "FriP", title = "Fraction of reads in peaks") 
+
+ggsave("./plots/frip.png", frip_plot, height = 2, width = 3.25)
+
+peak_annot <- 
+    "./results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_peak_annotation-plot.txt" |>
+    read_tsv() |>
+    pivot_longer(-Sample, names_to = "annotation") |>
+    left_join(unite(samplesheet, "Sample", c(condition, replic), sep = "_", remove = FALSE), join_by(Sample)) |>
+    filter(donor_id != "3donors") |>
+    separate(condition, c("stim", "timep"), sep = "_") |>
+    mutate(stim = recode(stim, 
+			 "unst" = "Unstim", 
+			 "IL4" = "IL-4c",
+			 "TLR7" = "TLR7c",
+			 "BCR" = "BCRc",
+			 "DN2" = "DN2c"),
+           stim = factor(stim, levels = c("Unstim", "IL-4c", "TLR7c", "BCRc", "DN2c"))) |> 
+    arrange(stim, as.numeric(timep), donor_id) |>
+    mutate(condition = glue("{stim} {timep}hrs"),
+	   condition = fct_inorder(condition)) |>
+    select(donor_id, condition, annotation, value)
+   
+annot_colors <- 
+    c(
+      "promoter-TSS" = "#E41A1C",  # Red
+      "exon"         = "#377EB8",  # Blue
+      "intron"       = "#A6CEE3",  # Light Blue
+      "TTS"          = "#FF7F00",  # Orange
+      "Intergenic"   = "#999999",  # Medium Grey
+      "Unassigned"   = "#525252"   # Dark Grey
+    )
+
+annot_plot <- 
+    ggplot(data = peak_annot) +
+    geom_col(aes(x = value, y = donor_id, fill = annotation), position = "fill") +
+    scale_x_continuous(labels = scales::percent,
+		       expand = c(0, 0)) +
+    scale_fill_manual(values = annot_colors) + 
+    facet_wrap(~condition, ncol = 1, strip.position = "right") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 7),
+	  axis.text.y = element_blank(),
+	  axis.title = element_text(size = 8),
+	  strip.text.y.right = element_text(size = 8, angle = 0, hjust = 0),
+	  panel.spacing = unit(0.1, "lines"),
+	  panel.grid.minor.x = element_blank(),
+	  legend.position = "right",
+	  legend.text  = element_text(size = 7),
+	  legend.title = element_text(size = 8),
+	  legend.key.size = unit(0.3, "cm"),
+	  legend.box.margin = margin(0, 0, 0, -10), 
+	  legend.spacing.y = unit(0.2, "cm"),
+	  legend.key = element_blank(),
+	  plot.title = element_text(size = 8),
+	  plot.background = element_rect(fill = "white", color = "white")
+    ) +
+    labs(y = "Donor", x = "Percentage", title = "HOMER peak annotation") 
+
+ggsave("./plots/peak_annot.png", annot_plot, height = 2, width = 3.25)
+
+library(patchwork)
+
+ggsave("./plots/plot_qc.png", frip_plot + annot_plot, height = 2, width = 6.5)
+
+
+
