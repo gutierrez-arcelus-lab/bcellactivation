@@ -1,191 +1,88 @@
 library(tidyverse)
 library(WGCNA)
 
-counts_dn2 <- read_rds("./data/DN2_counts.rds")
-counts_bcr <- read_rds("./data/BCR_counts.rds")
+multi_expr <-
+    list(
+	 "CD40L"    = list(data = read_rds("./data/CD40L_counts.rds")),
+	 "TLR9"     = list(data = read_rds("./data/TLR9_counts.rds")),
+	 "TLR7"     = list(data = read_rds("./data/TLR7_counts.rds")),
+	 "BCR"      = list(data = read_rds("./data/BCR_counts.rds")),
+	 "BCR-TLR7" = list(data = read_rds("./data/BCR-TLR7_counts.rds")),
+	 "DN2"      = list(data = read_rds("./data/DN2_counts.rds"))
+    )
 
-modules_dn2 <-
-    read_tsv("./data/DN2_modules.tsv") |>
-    deframe() |>
-    {function(x) x[colnames(counts_dn2)]}()
-
-modules_bcr <-
-    read_tsv("./data/BCR_modules.tsv") |>
-    deframe() |>
-    {function(x) x[colnames(counts_bcr)]}()
-
-multi_expr <- list()
-multi_expr[[1]] <- list(data = counts_dn2)
-multi_expr[[2]] <- list(data = counts_bcr)
-names(multi_expr) <- c("DN2", "BCR")
-
-color_list <- list("DN2" = modules_dn2, "BCR" = modules_bcr)
+multi_color <- 
+    list(
+	 "CD40L"    = read_tsv("./data/CD40L_modules.tsv") |> deframe(),
+	 "TLR9"     = read_tsv("./data/TLR9_modules.tsv") |> deframe(),
+	 "TLR7"     = read_tsv("./data/TLR7_modules.tsv") |> deframe(),
+	 "BCR"      = read_tsv("./data/BCR_modules.tsv") |> deframe(),
+	 "BCR-TLR7" = read_tsv("./data/BCR-TLR7_modules.tsv") |> deframe(),
+	 "DN2"      = read_tsv("./data/DN2_modules.tsv") |> deframe()
+    )
 
 mp <- 
-    modulePreservation(multi_expr, color_list, 
-		       referenceNetworks = 1,
-		       testNetworks = 2,
+    modulePreservation(multi_expr, multi_color, 
+		       referenceNetworks = 1:6,
 		       loadPermutedStatistics = FALSE,
+		       networkType = "signed",
 		       nPermutations = 100,
-		       verbose = 3)
+		       randomSeed = 1,
+		       verbose = 3,
+		       parallelCalculation = TRUE
+    )
 
-str(mp)
+write_rds(mp, "data/module_preservation.rds")
 
-# Correlation of module eigen genes
-library(RColorBrewer)
-library(pheatmap)
+mp <- read_rds("data/module_preservation.rds")
 
-eigen_dn2 <- 
-    read_tsv("./data/DN2_eigen.tsv") |>
-    select(-MEgrey) |>
-    separate(sample_name, c("donor_id", "stim", "time"), sep = "_") |>
-    unite("sample_id", c(donor_id, time), sep = "_") |>
-    select(-stim) |>
-    pivot_longer(-sample_id, names_to = "module_dn2", values_to = "values_dn2")
-    
-eigen_bcr <- 
-    read_tsv("./data/BCR_eigen.tsv") |>
-    select(-MEgrey) |>
-    separate(sample_name, c("donor_id", "stim", "time"), sep = "_") |>
-    unite("sample_id", c(donor_id, time), sep = "_") |>
-    select(-stim) |>
-    pivot_longer(-sample_id, names_to = "module_bcr", values_to = "values_bcr")
-
-eigen_tlr7 <- 
-    read_tsv("./data/TLR7_eigen.tsv") |>
-    select(-MEgrey) |>
-    separate(sample_name, c("donor_id", "stim", "time"), sep = "_") |>
-    unite("sample_id", c(donor_id, time), sep = "_") |>
-    select(-stim) |>
-    pivot_longer(-sample_id, names_to = "module_tlr7", values_to = "values_tlr7")
-
-
-# DN2 vs BCR
-mod_cors <-
-    inner_join(eigen_dn2, eigen_bcr, 
-	       join_by(sample_id),
-	       relationship = "many-to-many") |>
-    group_by(module_dn2, module_bcr) |>
-    summarise(r = cor(x = values_dn2, y = values_bcr)[,1]) |>
+z_tidy <- 
+    mp$preservation$Z |>
+    list_flatten() |>
+    map_dfr(~as_tibble(., rownames = "module"), .id = "pair") |>
+    select(pair, module, ngenes = moduleSize, zsumm = Zsummary.pres) |>
+    drop_na(zsumm) |>
+    separate(pair, c("ref_net", "test_net"), sep = "_") |>
+    mutate(ref_net = str_remove(ref_net, "ref\\."),
+	   test_net = str_remove(test_net, "inColumnsAlsoPresentIn\\.")) |>
+    filter(! module %in% c("grey", "gold")) |>
+    mutate_at(vars(ref_net, test_net), 
+	      ~recode(., "CD40L" = "CD40c", "TLR9" = "TLR9c", "TLR7" = "TLR7c",
+		      "BCR" = "BCRc", "BCR-TLR7" = "BCR/TLR7c", "DN2" = "DN2c")) |>
+    mutate_at(vars(ref_net, test_net),
+	      ~factor(., levels = c("CD40c", "TLR9c", "TLR7c", "BCRc", "BCR/TLR7c", "DN2c"))) |>
+    group_by(ref_net, test_net) |>
+    arrange(desc(ngenes)) |>
+    mutate(module_id = factor(1:n())) |>
     ungroup() |>
-    mutate_at(vars(module_dn2, module_bcr), ~str_remove(., "ME")) |>
-    pivot_wider(names_from = module_bcr, values_from = r) |>
-    column_to_rownames("module_dn2")
+    arrange(ref_net, test_net)
 
+z_plot <- 
+    ggplot(z_tidy, aes(x = module_id, y = test_net)) +
+    geom_tile(aes(fill = zsumm), color = "white") +
+    #scale_fill_viridis_c(option = "magma") +
+    scale_fill_gradient2(low = "beige",
+			mid = "gold",
+			high = "tomato3",
+			midpoint = 10,
+			limits = c(0, 20),
+			oob = scales::squish
+    ) +
+    facet_grid(.~ref_net, scales = "free_x", space = "free_x") +
+    theme_minimal() +
+    theme(
+	  axis.text = element_text(size = 7),
+	  axis.title.x = element_text(size = 8),
+	  legend.text = element_text(size = 7),
+	  legend.title = element_text(size = 8),
+	  strip.text = element_text(size = 8),
+	  panel.grid.major.x = element_line(color = "gray90", linewidth = .2),
+	  panel.grid.major.y = element_blank(),
+	  panel.spacing.x = unit(.1, "lines"),
+	  legend.box.margin = margin(l = -10),
+	  plot.background = element_rect(fill = "white", color = "white")
+    ) +
+    guides(fill = guide_colorbar(barwidth = .5, barheight = 5)) +
+    labs(x = "Module", y = NULL, fill = expression(Z[summ]))
 
-png("./plots/heatmap_modules_DN2_BCR.png", 
-    units = "in", height = 5, width = 5, res = 300)
-pheatmap(mod_cors,
-	 fontsize = 9, angle_col = 90,
-	 display_numbers = TRUE,
-	 color = colorRampPalette(rev(brewer.pal(n = 9, name ="RdYlBu")))(100),
-	 legend_breaks = seq(-1, 1, by = .2))
-dev.off()
-
-mod_cors_long <- 
-    mod_cors |>
-    rownames_to_column("module_dn2") |>
-    pivot_longer(-module_dn2, names_to = "module_bcr") |>
-    group_by(module_dn2) |>
-    slice_max(value) |>
-    ungroup()
-
-bcr_kme <- 
-    read_tsv("./data/BCR_kme.tsv") |>
-    pivot_longer(-gene_id, names_to = "module", values_to = "kme") |>
-    filter(kme >= 0.9) |>
-    mutate(module = str_remove(module, "kME")) |>
-    group_by(gene_id) |>
-    slice_max(kme) |>
-    ungroup() |>
-    select(gene_id, module)
-
-dn2_kme <- 
-    read_tsv("./data/DN2_kme.tsv") |>
-    pivot_longer(-gene_id, names_to = "module", values_to = "kme") |>
-    filter(kme >= 0.9) |>
-    mutate(module = str_remove(module, "kME")) |>
-    group_by(gene_id) |>
-    slice_max(kme) |>
-    ungroup() |>
-    select(gene_id, module)
-
-inner_join(dn2_kme, bcr_kme, join_by(gene_id), suffix = c("_dn2", "_bcr")) |>
-    count(module_dn2, module_bcr, sort = TRUE) |>
-    print(n = Inf)
-
-gene_ids <- 
-    "../results/edger/results.tsv" |>
-    read_tsv() |>
-    distinct(gene_id, gene_name)
-
-inner_join(dn2_kme, bcr_kme, join_by(gene_id), suffix = c("_dn2", "_bcr")) |>
-    filter(module_dn2 == "brown", module_bcr == "brown") |>
-    left_join(gene_ids)
-
-    
-###############################################################################
-# BCR vs TLR7
-
-mod_cors_tlr7 <-
-    inner_join(eigen_bcr, eigen_tlr7, 
-	       join_by(sample_id),
-	       relationship = "many-to-many") |>
-    group_by(module_bcr, module_tlr7) |>
-    summarise(r = cor(x = values_bcr, y = values_tlr7)[,1]) |>
-    ungroup() |>
-    mutate_at(vars(module_bcr, module_tlr7), ~str_remove(., "ME")) |>
-    pivot_wider(names_from = module_tlr7, values_from = r) |>
-    column_to_rownames("module_bcr")
-
-
-png("./plots/heatmap_modules_BCR_TLR7.png", 
-    units = "in", height = 5, width = 5, res = 300)
-pheatmap(mod_cors_tlr7,
-	 fontsize = 9, angle_col = 90,
-	 display_numbers = TRUE,
-	 color = colorRampPalette(rev(brewer.pal(n = 9, name ="RdYlBu")))(100),
-	 legend_breaks = seq(-1, 1, by = .2))
-dev.off()
-
-mod_cors_long <- 
-    mod_cors |>
-    rownames_to_column("module_dn2") |>
-    pivot_longer(-module_dn2, names_to = "module_bcr") |>
-    group_by(module_dn2) |>
-    slice_max(value) |>
-    ungroup()
-
-bcr_kme <- 
-    read_tsv("./data/BCR_kme.tsv") |>
-    pivot_longer(-gene_id, names_to = "module", values_to = "kme") |>
-    filter(kme >= 0.9) |>
-    mutate(module = str_remove(module, "kME")) |>
-    group_by(gene_id) |>
-    slice_max(kme) |>
-    ungroup() |>
-    select(gene_id, module)
-
-dn2_kme <- 
-    read_tsv("./data/DN2_kme.tsv") |>
-    pivot_longer(-gene_id, names_to = "module", values_to = "kme") |>
-    filter(kme >= 0.9) |>
-    mutate(module = str_remove(module, "kME")) |>
-    group_by(gene_id) |>
-    slice_max(kme) |>
-    ungroup() |>
-    select(gene_id, module)
-
-inner_join(dn2_kme, bcr_kme, join_by(gene_id), suffix = c("_dn2", "_bcr")) |>
-    count(module_dn2, module_bcr, sort = TRUE) |>
-    print(n = Inf)
-
-gene_ids <- 
-    "../results/edger/results.tsv" |>
-    read_tsv() |>
-    distinct(gene_id, gene_name)
-
-inner_join(dn2_kme, bcr_kme, join_by(gene_id), suffix = c("_dn2", "_bcr")) |>
-    filter(module_dn2 == "brown", module_bcr == "brown") |>
-    left_join(gene_ids)
-
+ggsave("./plots/zsummary.png", z_plot, height = 1.75, width = 6.5)
