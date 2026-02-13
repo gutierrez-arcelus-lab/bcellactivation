@@ -21,12 +21,10 @@ rna_colors[c("TLR7c 24h", "BCRc 24h", "DN2c 24h")] <- fig_colors[c("TLR7c 24h", 
 tx_to_gene <- 
     file.path("/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens",
 	      "gencode.v41.primary_assembly.annotation.gtf.gz") |>
-    vroom::vroom(comment = "#", col_names = FALSE) |>
-    filter(X3 == "transcript") |>
-    mutate(tx_id = str_extract(X9, "(?<=transcript_id\\s\")[^\"]+"),
-	   gene_id = str_extract(X9, "(?<=gene_id\\s\")[^\"]+"),
-	   gene_name = str_extract(X9, "(?<=gene_name\\s\")[^\"]+")) |>
-    select(tx_id, gene_id, gene_name)
+    rtracklayer::import(feature.type = "transcript") |>
+    as.data.frame() |>
+    as_tibble() |>
+    select(tx_id = transcript_id, gene_id, gene_name)
 
 meta <- 
     read_tsv("../bcell_rnaseq/4-splicing/data/metadata_qced.tsv") |>
@@ -99,7 +97,7 @@ read_leaf <- function(contrast) {
     sig <- 
         glue("../bcell_rnaseq/4-splicing/results/{contrast}_cluster_significance.txt") |>
         read_tsv() |>
-	filter(status == "Success") |>
+        filter(status == "Success") |>
         separate(cluster, c("chr", "cluster"), sep = ":") |>
         select(cluster, p, padj = p.adjust, genes)
 
@@ -107,7 +105,7 @@ read_leaf <- function(contrast) {
         glue("../bcell_rnaseq/4-splicing/results/{contrast}_effect_sizes.txt") |>
         read_tsv() |>
         mutate(cluster = sub("^.*(clu.*)$", "\\1", intron)) |>
-        select(cluster, logef, deltapsi)
+        select(intron, cluster, logef, deltapsi)
 
     inner_join(sig, eff, join_by(cluster))
 }
@@ -354,9 +352,7 @@ make_leaf_plot <- function(contrast, cluster_lab, title_plot) {
     ylab(NULL)
 }
 
-cd86_grid <- make_leaf_plot("unstday0vs.DN2", "clu_9774_+", c("DN2c 24h", "Unstim 0h"))
-zbtb38_grid <- make_leaf_plot("BCRvs.DN2", "clu_9831_+", c("DN2c 24h", "BCRc 24h"))
-
+library(GenomicRanges)
 
 ah <- AnnotationHub::AnnotationHub()
 ens_data <- ah[["AH98047"]]
@@ -364,79 +360,124 @@ ens_data <- ah[["AH98047"]]
 filter <- dplyr::filter
 select <- dplyr::select
 
-track_cd86 <- 
-    locus(gene = "CD86",
-	  flank = c(1e3, 1e3),
-	  ens_db = ens_data)
+tian <- 
+    "../external/data/tian_splicing/41588_2024_2019_MOESM4_ESM.xlsx" |>
+    readxl::read_excel(sheet = "Supplementary Table 11", skip = 2) |>
+    rowid_to_column()
 
-track_zbtb38 <- 
-    locus(gene = "ZBTB38",
-	  flank = c(1e3, 1e3),
-	  ens_db = ens_data)
+tian_tmp <- 
+    tian |>
+    filter(grepl("_RA_|_GD|SLE|Asthma|_AD|_LYM", trait)) |>
+    select(rowid, Intron) |>
+    separate(Intron, c("chrom", "start", "end", "clu"), sep = ":", convert = TRUE)
 
+bcell_tmp <- 
+    leaf_df |>
+    rowid_to_column() |>
+    group_by(cluster) |>
+    filter(any(abs(deltapsi) >= 0.1)) |>
+    ungroup() |>
+    select(rowid, intron) |>
+    separate(intron, c("chrom", "start", "end", "clu"), sep = ":", convert = TRUE)
 
-track_plot_cd86 <- 
-    gg_genetracks(track_cd86, cex.text = .7) + 
-    geom_rect(xmin = 122054000/1e6, 
-	      xmax = 122093000/1e6, 
-	      ymin = -.1, ymax = .5,
-	      fill = NA, color = "red") +
+tian_gr <- 
+    GRanges(seqnames = tian_tmp$chrom,
+            ranges = IRanges(start = tian_tmp$start, end = tian_tmp$end),
+            rowid = tian_tmp$rowid)
+
+bcell_gr <- 
+    GRanges(seqnames = bcell_tmp$chrom,
+            ranges = IRanges(start = bcell_tmp$start, end = bcell_tmp$end),
+            rowid = bcell_tmp$rowid)
+    
+overlaps <- findOverlaps(bcell_gr, tian_gr, type = "equal")
+   
+matched_indices <- queryHits(overlaps)
+
+my_matches <- 
+    bcell_gr[matched_indices, ] |>
+    as.data.frame() |>
+    as_tibble()
+
+leaf_df |>
+    rowid_to_column() |>
+    filter(rowid %in% my_matches$rowid, padj <= 0.05) |>
+    group_by(cluster) |>
+    mutate(m = min(p)) |>
+    ungroup() |>
+    arrange(m, intron) |> filter(abs(deltapsi) >= .05) |> print(n = Inf)
+    #filter(genes %in% c("BCL2A1", "STAT6")) |> print(width = Inf, n = Inf)
+
+bcl2a1_grid <- make_leaf_plot("unstday0vs.DN2", "clu_1476_-", c("DN2c 24h", "Unstim 0h"))
+stat6_grid <- make_leaf_plot("unstday0vs.DN2", "clu_13231_-", c("DN2c 24h", "Unstim 0h"))
+
+track_bcl2a1 <- 
+    locus(gene = "BCL2A1",
+          flank = c(1e3, 1e3),
+          ens_db = ens_data)
+
+track_stat6 <- 
+    locus(gene = "STAT6",
+          flank = c(1e3, 1e3),
+          ens_db = ens_data)
+
+track_plot_bcl2a1 <- 
+    gg_genetracks(track_bcl2a1, cex.text = .7) + 
     theme_minimal() +
     theme(
-	  axis.text = element_blank(),
-	  axis.title = element_blank(),
-	  axis.line.x = element_blank(),
-	  axis.ticks.x = element_blank(),
-	  panel.grid = element_blank()) +
+        axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid = element_blank()) +
     coord_cartesian(clip = "off")
 
-track_plot_zbtb38 <- 
-    gg_genetracks(track_zbtb38, cex.text = .7, filter_gene_name = "ZBTB38") + 
-    geom_rect(xmin = 141386000/1e6, 
-	      xmax = 141404000/1e6, 
-	      ymin = -.1, ymax = .5,
-	      fill = NA, color = "red") +
+track_plot_stat6 <- 
+    gg_genetracks(track_stat6, cex.text = .7, filter_gene_name = "STAT6") + 
+    geom_rect(xmin = 57109000/1e6,
+              xmax = 57112200/1e6,
+              ymin = -.002, ymax = .5,
+              fill = NA, color = "red") +
     theme_minimal() +
     theme(
-	  axis.text = element_blank(),
-	  axis.title = element_blank(),
-	  axis.line.x = element_blank(),
-	  axis.ticks.x = element_blank(),
-	  panel.grid = element_blank()) +
+        axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid = element_blank()) +
     coord_cartesian(clip = "off")
 
 fig_e_title <- 
     ggdraw() + 
     draw_label(
-	       "Differential splicing in the CD86 gene",
-	       x = 0,
-	       size = 9,
-	       hjust = 0
-	       ) +
+        "Differential splicing in the BCL2A1 gene",
+        x = 0,
+        size = 9,
+        hjust = 0
+    ) +
     theme(text = element_text(size = 9),
-	  plot.margin = margin(l = 1.25, unit = "lines"))
+          plot.margin = margin(l = 1.25, unit = "lines"))
 
 fig_e_grid <- 
-    plot_grid(fig_e_title, track_plot_cd86, cd86_grid, 
-	      ncol = 1, rel_heights = c(.1, .2, 1)) |>
+    plot_grid(fig_e_title, track_plot_bcl2a1, bcl2a1_grid, 
+              ncol = 1, rel_heights = c(.1, .2, 1)) |>
     plot_grid(labels = "e", label_size = 12)
 
 fig_f_title <- 
     ggdraw() + 
     draw_label(
-	       "Differential splicing in the ZBTB38 gene",
-	       x = 0,
-	       size = 9,
-	       hjust = 0
-	       ) +
+        "Differential splicing in the STAT6 gene",
+        x = 0,
+        size = 9,
+        hjust = 0
+    ) +
     theme(text = element_text(size = 9),
-	  plot.margin = margin(l = 1.25, unit = "lines"))
+          plot.margin = margin(l = 1.25, unit = "lines"))
 
 fig_f_grid <- 
-    plot_grid(fig_f_title, track_plot_zbtb38, zbtb38_grid, 
-	      ncol = 1, rel_heights = c(.1, .2, 1)) |>
+    plot_grid(fig_f_title, track_plot_stat6, stat6_grid, 
+              ncol = 1, rel_heights = c(.1, .2, 1)) |>
     plot_grid(labels = "f", label_size = 12)
-
 
 bottom_grid <- plot_grid(fig_e_grid, fig_f_grid, nrow = 1)
 
@@ -461,4 +502,3 @@ ggsave("./high_res/fig6.png",
 		 rel_heights = c(1, .05, 1, .05, 1, .1, 1.5)) +
        theme(plot.background = element_rect(color = "white", fill = "white")),
        width = 6.5, height = 8.5, dpi = 600)
-
