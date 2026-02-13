@@ -334,12 +334,54 @@ rna_df <-
     left_join(bcells@meta.data |> as_tibble(rownames = 'barcode') |> select(barcode, dmm_hto_call, seurat_clusters)) |>
     select(barcode, hto = dmm_hto_call, cluster = seurat_clusters, everything())
 
-#testp <-
-#    ggplot(rna_df, aes(x = cluster, y = MKI67)) +
-#    geom_violin() +
-#    geom_hline(yintercept = .0)
-#
-#
+
+#### test
+library(ggridges)
+
+threshold_df <-
+   tribble(~marker, ~thr,
+    "IgD", .75,
+    "CD27", .25,
+    "CD11c", .75,
+    "MKI67", 1,
+    "XBP1", 2.5,
+   ) |>
+    mutate(marker = fct_inorder(marker))
+
+thres_plot <-
+    left_join(adt_df, rna_df, join_by(barcode, hto, cluster)) |>
+    pivot_longer(-c(barcode, hto, cluster), names_to = "marker") |>
+    mutate(marker = fct_inorder(marker)) |>
+        ggplot(aes(y = cluster, x = value)) +
+        geom_density_ridges(size = .2) +
+        geom_vline(data = threshold_df, aes(xintercept = thr), linewidth = .2, color = "red") +
+        facet_wrap(~marker, nrow = 1, scales = "free_x") +
+        theme_bw() +
+        theme(panel.grid.minor.x = element_blank(),
+              panel.grid.major.x = element_line(color = "grey96")
+        )
+
+igd_cd27_plot_density <-
+   ggplot(adt_df, aes(x = IgD, y = CD27)) +
+   scale_fill_continuous(type = "viridis") +
+   geom_vline(xintercept = .75, color = "red", linewidth = .2) +
+   geom_hline(yintercept = .25, color = "red", linewidth = .2) +
+   facet_wrap(~factor(hto, levels = names(stim_colors)), nrow = 1) +
+   geom_hex(aes(fill = after_stat(count/max(count))), bins = 100) +
+   theme_bw() +
+   theme(panel.grid = element_blank(),
+         strip.text = element_text(size = 8),
+         panel.spacing.x = unit(.1, "lines")
+         ) +
+   guides(fill = "none")
+
+library(patchwork)
+
+ggsave("./supp_fig_marker_threshold.png",
+      thres_plot / igd_cd27_plot_density + plot_layout(heights = c(1, 0.45)) + plot_annotation(tag_levels = "A"),
+      width = 6.5, height = 4)
+
+
 #testp_igd <-
 #    ggplot(adt_df, aes(x = cluster, y = IgD)) +
 #    geom_violin() +
@@ -362,52 +404,84 @@ rna_df <-
 #ggsave("./testp.png", testp, height = 4)
 #
 #
-#adt_df <- 
-#    adt_df |>
-#    mutate(hto = factor(hto, levels = c("Unstim 0h", "IL4 24h", "IL4 72h", "TLR7 24h", "TLR7 72h", "BCR 24h", "BCR 72h", "DN2 24h", "DN2 72h")))
-#
-#igd_cd27_plot_scatter <- 
-#    ggplot(adt_df, aes(x = IgD, y = CD27)) +
-#    geom_point(size = .5, alpha = .05) +
-#    geom_vline(xintercept = .75, linetype = 2, color = "green") +
-#    geom_hline(yintercept = .75, linetype = 2, color = "green") +
-#    facet_wrap(~hto, nrow = 1) +
-#    theme_bw() +
-#    theme(panel.grid = element_blank())
-#
-#igd_cd27_plot_density <- 
-#    ggplot(adt_df, aes(x = IgD, y = CD27)) +
-#    scale_fill_continuous(type = "viridis") +
-#    geom_vline(xintercept = .75, linetype = 2, color = "green") +
-#    geom_hline(yintercept = .75, linetype = 2, color = "green") +
-#    facet_wrap(~hto, nrow = 2) +
-#    geom_hex(aes(fill = after_stat(count/max(count))), bins = 100) +
-#    theme_bw() +
-#    theme(panel.grid = element_blank()) +
-#    guides(fill = "none")
-#
-#ggsave("./IgD_CD27.png", 
-#       plot_grid(igd_cd27_plot_density, ncol = 1),
-#       width = 5, height = 2.5)
 
-
-subsets_df <- 
+subsets_tmp <- 
     left_join(adt_df, rna_df) |>
     mutate(
-	   "IgD<sup>+</sup>  CD27<sup>+</sup>"  = ifelse(IgD >= .75 & CD27 >= .75, 1, 0),
-	   "IgD<sup>–</sup>  CD27<sup>–</sup>" = ifelse(IgD < .75 & CD27 < .75, 1, 0),
-	   "IgD<sup>–</sup>  CD27<sup>+</sup>" = ifelse(IgD < .75 & CD27 >= .75, 1, 0),
-	   "IgD<sup>+</sup>  CD27<sup>–</sup>" = ifelse(IgD >= .75 & CD27 < .75, 1, 0),
-	   "CD11c<sup>+</sup>" = ifelse(CD11c >= .75, 1, 0),
-	   "*XBP1*<sup>high</sup>" = ifelse(XBP1 >= 2.5, 1, 0),
-	   "*MKI67*<sup>+</sup>" = ifelse(MKI67 >= 1, 1, 0)) |>
+	   "IgD<sup>+</sup> CD27<sup>+</sup>"  = ifelse(IgD >= .75 & CD27 >= .25, 1, 0),
+	   "IgD<sup>+</sup> CD27<sup>–</sup>"  = ifelse(IgD >= .75 & CD27 < .25, 1, 0),
+	   "IgD<sup>–</sup> CD27<sup>+</sup>"  = ifelse(IgD < .75 & CD27 >= .25, 1, 0),
+	   "IgD<sup>–</sup> CD27<sup>–</sup>"  = ifelse(IgD < .75 & CD27 < .25, 1, 0),
+	   "CD11c<sup>+</sup>"                 = ifelse(CD11c >= .75, 1, 0),
+	   "*XBP1* <sup>high</sup>"            = ifelse(XBP1 >= 2.5, 1, 0),
+	   "*MKI67* <sup>high</sup>"           = ifelse(MKI67 >= 1, 1, 0))
+
+subsets_df <- 
+    subsets_tmp |>
     select(-(cluster:MKI67)) |>
     pivot_longer(-(barcode:hto), names_to = 'subtype') |>
     mutate(hto = factor(hto, names(stim_colors)),
-	   subtype = fct_inorder(subtype)) |>
+           subtype = fct_inorder(subtype)) |>
     group_by(hto, subtype) |>
     summarise(pct = mean(value)) |>
     ungroup()
+
+subsets_stim_donor <- 
+    subsets_tmp |>
+    select(-cluster, -IgD, -CD27, -CD11c, -XBP1, -MKI67) |>
+    left_join(select(umap_df, barcode, donor_id), join_by(barcode)) |>
+    select(barcode, donor_id, hto, everything()) |>
+    pivot_longer(-(barcode:hto), names_to = "subtype") |>
+    group_by(donor_id, hto, subtype) |>
+    summarize(mean_prop = mean(value)) |>
+    ungroup() |>
+    mutate(hto = factor(hto, names(stim_colors)),
+           subtype = factor(subtype, levels = levels(subsets_df$subtype)))
+
+subsets_stim_donor |>
+    group_by(hto, subtype) |>
+    summarise(min_prop = min(mean_prop),
+              max_prop = max(mean_prop)) |>
+    ungroup() 
+
+
+mean_min_max <- 
+    left_join(subsets_df, subsets_stim_donor) |>
+    mutate(subtype = str_remove_all(subtype, "\\*|<sup>|</sup>"),
+           hto = factor(hto, levels = levels(umap_df$hto))) |>
+    arrange(hto) |>
+    mutate_at(vars(pct, mean_prop), ~round(.x * 100, 2))
+
+# In BCRc 72h, proportion of cells per cluster
+umap_df |>
+    filter(hto == "BCRc 72h") |>
+    count(cluster) |>
+    mutate(p = n/sum(n) * 100) |>
+    ungroup()
+
+umap_df |>
+    filter(hto == "BCRc 72h") |>
+    count(cluster, donor_id) |>
+    group_by(donor_id) |>
+    mutate(p = n/sum(n) * 100) |>
+    ungroup() |>
+    group_by(cluster) |>
+    summarise(min_p = min(p),
+              max_p = max(p)) |>
+    ungroup()
+
+umap_df |>
+    filter(hto == "BCRc 72h") |>
+    count(cluster, donor_id) |>
+    group_by(donor_id) |>
+    mutate(p = n/sum(n) * 100) |>
+    filter(cluster %in% 9:10) |>
+    summarise(p9_10 = sum(p)) |>
+    ungroup() |>
+    summarise(min_p = min(p9_10),
+              max_p = max(p9_10))
+
+
 
 #bcells_v5 <- read_rds("../citeseq/data/seurat_qced.rds")
 #
@@ -456,28 +530,34 @@ subsets_df <-
 #
 proportions_plot <- 
     ggplot(subsets_df, aes(x = hto, y = pct)) +
-    geom_col(aes(fill = hto)) +
+    geom_col(aes(color = hto, fill = hto), linewidth = .3, alpha = .25) +
+    geom_jitter(data = subsets_stim_donor, 
+                aes(x = hto, y = mean_prop, color = hto), 
+                size = .2, width = .2) +
+    scale_color_manual(values = stim_colors) +
     scale_fill_manual(values = stim_colors) +
     facet_wrap(~subtype, nrow = 1, scales = "free_y") +
     ggh4x::facetted_pos_scales(y = list(
-					subtype == "IgD<sup>+</sup>  CD27<sup>–</sup>" ~ scale_y_continuous(limits = c(0, 0.8), breaks = c(0, 0.4, 0.8)),
-					subtype == "IgD<sup>–</sup>  CD27<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)),
-					subtype == "IgD<sup>+</sup>  CD27<sup>+</sup>" ~ scale_y_continuous(limits = c(0, 0.005), breaks = c(0, 0.005)),
-					subtype == "IgD<sup>–</sup>  CD27<sup>–</sup>" ~ scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)),
-					subtype == "CD11c<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)),
-					subtype == "*XBP1*<sup>high</sup>" ~ scale_y_continuous(limits = c(0, .5), breaks = c(0, 0.25, 0.5)),
-					subtype == "*MKI67*<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)))) +
+					subtype == "IgD<sup>+</sup> CD27<sup>+</sup>" ~ scale_y_continuous(limits = c(0, 0.2), breaks = c(0, 0.2)),
+					subtype == "IgD<sup>+</sup> CD27<sup>–</sup>" ~ scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)),
+					subtype == "IgD<sup>–</sup> CD27<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .6), breaks = c(0, 0.2, 0.4, 0.6)),
+					subtype == "IgD<sup>–</sup> CD27<sup>–</sup>" ~ scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)),
+					subtype == "CD11c<sup>+</sup>" ~ scale_y_continuous(limits = c(0, .3), breaks = c(0, 0.1, 0.2, 0.3)),
+					subtype == "*XBP1* <sup>high</sup>" ~ scale_y_continuous(limits = c(0, .6), breaks = c(0, 0.2, 0.4, 0.6)),
+					subtype == "*MKI67* <sup>high</sup>" ~ scale_y_continuous(limits = c(0, .2), breaks = c(0, 0.1, 0.2)))) +
     theme_minimal() +
-    theme(axis.text.x = element_blank(),
-	  panel.grid.major.x = element_blank(),
-	  panel.grid.minor.y = element_blank(),
-	  panel.spacing.x = unit(1, "lines"),
-	  axis.ticks.x = element_blank(),
-	  strip.text = ggtext::element_markdown(size = 8),
-	  strip.clip = "off",
-	  plot.margin = margin(t = 5.5, r = 5.5/2, b = 5.5, l = 5.5/2, "pt")
-	  ) +
-    guides(fill = "none") +
+    theme(
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 7),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.spacing.x = unit(.5, "lines"),
+        axis.ticks.x = element_blank(),
+        strip.text = ggtext::element_markdown(size = 8),
+        strip.clip = "off",
+        plot.margin = margin(t = 5.5, r = 5.5/2, b = 5.5, l = 5.5/2, "pt")
+	) +
+    guides(color = "none", fill = "none") +
     labs(x = NULL, y = NULL)
 
 
