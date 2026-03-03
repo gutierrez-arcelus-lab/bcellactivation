@@ -34,6 +34,7 @@ donor_ids <-
 
 # Figure A ####################################################################
 pca_file <- "../atacseq/results_deseq2/pcadata_5000peaks.rds"
+#pca_file <- "../atacseq/results_deseq2/mRp/pcadata_5000peaks.rds"
 
 pca_5000_df <- 
     read_rds(pca_file) |>
@@ -93,10 +94,16 @@ fig_a_grid <- plot_grid(fig_a_title,
 
 
 # Figure B ####################################################################
+#da_files <- 
+#    list.files("../atacseq/results_deseq2/mRp",
+#	       pattern = ".+vs.+\\.tsv$",
+#	       full.names = TRUE)
+
 da_files <- 
     list.files("../atacseq/results_deseq2",
 	       pattern = ".+vs.+\\.tsv$",
 	       full.names = TRUE)
+
 
 da_files <- setNames(da_files, basename(da_files) |> str_remove("\\.tsv"))
 
@@ -141,7 +148,8 @@ da_plot <-
     geom_tile(aes(fill = n)) +
     geom_text(aes(label = scales::comma(lab)), 
 	      color = "black", fontface = "bold", size = 7, size.unit = "pt") +
-    scale_x_discrete(position = "top") +
+    scale_x_discrete(position = "top", expand = c(0, 0)) +
+    scale_y_discrete(expand = c(0, 0)) +
     scale_fill_gradient2(high = '#e66101', mid = 'white', low = '#5e3c99', midpoint = 0) +
     theme_minimal() + 
     theme(
@@ -165,7 +173,7 @@ cond_vertical <-
 	  axis.ticks.y = element_blank(),
 	  plot.margin = margin(0, 0, 0, 0)) +
     guides(fill = "none") +
-    coord_cartesian(xlim = c(1, 1))
+    coord_cartesian(xlim = c(0.5, 1.5), expand = FALSE)
 
 cond_horizontal <- 
     ggplot(da_summ |> distinct(stim_b),
@@ -179,14 +187,12 @@ cond_horizontal <-
 	  axis.ticks.y = element_blank(),
 	  plot.margin = margin(0, 0, 0, 0, "lines")) +
     guides(fill = "none") +
-    coord_cartesian(ylim = c(1, 1))
-
+    coord_cartesian(ylim = c(0.5, 1.5), expand = FALSE)
 
 fig_b <- 
     plot_grid(NULL, cond_horizontal, cond_vertical, da_plot,
 	      ncol = 2, nrow = 2, align = "hv",
 	      rel_heights = c(.125, 1), rel_widths = c(0.05, 1))
-
 
 fig_b_title <- 
     ggdraw() + 
@@ -200,63 +206,134 @@ fig_b_title <-
 	  plot.margin = margin(l = 1.25, unit = "lines"))
 
 fig_b_grid <- 
-    plot_grid(fig_b_title, fig_b, ncol = 1, rel_heights = c(.1, 1)) +
+    plot_grid(fig_b_title, NULL, fig_b, ncol = 1, rel_heights = c(.1, .01, 1)) +
     theme(plot.margin = margin(r = 5.5 * 2, unit = "pt"))
 	
 
 # Figure C ####################################################################
+ 
+## Filter motifs for TFs that are expressed in the RNA-seq data
+motif_gene_mappings <- 
+    "./data/homer_motif_gene_mappings.xlsx" |>
+    readxl::read_excel() |>
+    select(motif_info = 1, gene_name = 2, notes = 3) |>
+    mutate(gene_name = case_match(gene_name,
+				  "STAT5A, STAT5B" ~ "STAT5A/STAT5B",
+				  "CREB1, ATF1" ~ "CREB1/ATF1",
+				  "IRF4, IRF8, BATF" ~ "IRF8, BATF",
+				  "NFATC1, NFATC2" ~ "NFATC1/NFATC2",
+				  "FOS, JUN, FOSL1/2" ~ "FOS, JUN, FOSL1/FOSL2",
+				  .default = gene_name))
+
+gene_expression <-
+    "../bcell_lowinput/data/expression_pooled_reps.tsv" |>
+    read_tsv()
+
+rnaseq_meta <- 
+    gene_expression |>
+    distinct(sample_id) |>
+    separate(sample_id, c("donor", "stim", "timep"), sep = "_", remove = FALSE) |>
+    filter(stim %in% c("IL4", "TLR7", "BCR", "DN2"),
+	   timep %in% c("4hrs", "24hrs"))
+
+genes_expressed <- 
+    gene_expression |>
+    inner_join(rnaseq_meta, join_by(sample_id)) |>
+    group_by(gene_id, gene_name, stim, timep) |>
+    summarize(mean_tpm = mean(tpm)) |>
+    ungroup() |>
+    group_by(gene_id, gene_name) |>
+    filter(any(mean_tpm >= 5)) |>
+    ungroup() |>
+    distinct(gene_id, gene_name) |>
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$"))
+
 stims <- read_lines("../atacseq/homer/stims.txt")
 
-homer_df <- 
-    glue("../atacseq/homer/results/{stims}/knownResults.txt") |>
+homer_df <-
+    glue("../atacseq/homer/results_vert/{stims}/knownResults.txt") |>
+    #glue("../atacseq/homer/results_vert_mRp/{stims}/knownResults.txt") |>
     setNames(paste0(stims, "c")) |>
-    map_dfr(~read_tsv(.) |> 
-	    janitor::clean_names() |>
-	    {function(x) setNames(x, str_remove(names(x), "_of_\\d+$"))}(),
-	    .id = "stim") |> 
+    map_dfr(~read_tsv(.) |>
+            janitor::clean_names() |>
+            {function(x) setNames(x, str_remove(names(x), "_of_\\d+$"))}(),
+            .id = "stim") |>
+    rename(motif_info = motif_name) |>
     mutate_at(vars(starts_with("percent_of_")), parse_number) |>
     mutate(stim = factor(stim, levels = paste0(stims, "c")),
-	   fc = percent_of_target_sequences_with_motif/percent_of_background_sequences_with_motif) |>
-    filter(!grepl("bias", motif_name, ignore.case = TRUE)) |>
-    mutate(motif_name = str_replace(motif_name, "NR/Ini-like", "NR;Ini-like")) |>
-    separate(motif_name, c("motif", "dataset", "db"), sep = "/") |>
-    separate(motif, c("motif", "tf_family"), sep = "\\(") |>
-    mutate(tf_family = str_remove(tf_family, "\\)$")) |>
+           fc = percent_of_target_sequences_with_motif/percent_of_background_sequences_with_motif) |>
+    extract(motif_info,
+            c("motif", "motif_family", "dataset", "db"),
+            "(.+?)(?:\\((.+)\\))?/([^/]+)/(.+)",
+            remove = FALSE) |>
     mutate(log10p = log_p_value/log(10)) |>
-    select(stim, motif, tf_family, dataset, 
-	   pct_target =  percent_of_target_sequences_with_motif,
-	   pct_bg = percent_of_background_sequences_with_motif,
-	   fc, log10p, q_value = q_value_benjamini)
-    
-#homer_top25 <- 
-#    homer_df |>
-#    filter(q_value <= 0.05) |>
-#    group_by(stim) |>
-#    top_n(25, -log10p) |>
-#    ungroup()
+    select(stim, motif_info, motif, motif_family, dataset, consensus,
+           pct_target =  percent_of_target_sequences_with_motif,
+           pct_bg = percent_of_background_sequences_with_motif,
+           fc, log10p, q_value = q_value_benjamini)
 
-homer_top25 <- 
+get_expression_status <- function(g) {
+
+    if ( !grepl(",|/", g) ) {    
+	
+	res <- g %in% genes_expressed$gene_name
+
+    } else if ( grepl("/", g) && !grepl(",", g) ) {
+	
+	res <- any(unlist(str_split(g, "/")) %in% genes_expressed$gene_name)
+
+    } else if ( grepl(",", g) && !grepl("/", g) ) { 
+       
+	res <- all(unlist(str_split(g, ", ")) %in% genes_expressed$gene_name)
+
+    } else if ( grepl("/", g) && grepl(",", g) ) {
+
+	g1 <- unlist(str_split(g , ", ")) |> {function(x) keep(x, !grepl("/", x))}()
+	g2 <- unlist(str_split(g , ", ")) |> {function(x) keep(x, grepl("/", x))}() |> str_split("/") |> unlist()  
+
+	res <- all(g1 %in% genes_expressed$gene_name) && any(g2 %in% genes_expressed$gene_name)
+    }
+}
+
+motifs_expressed_tf <- 
     homer_df |>
     filter(q_value <= 0.01) |>
+    distinct(motif_info) |>
+    left_join(motif_gene_mappings) |>
+    mutate(is_expressed = map_lgl(gene_name, get_expression_status)) |>
+    filter(is_expressed) |>
+    select(motif_info)
+
+homer_top <- 
+    homer_df |>
+    inner_join(motifs_expressed_tf) |>
     group_by(motif) |>
     slice_min(log10p) |>
     ungroup() |>
     top_n(50, -log10p)
 
+motif_family_order <- 
+    homer_top |>
+    group_by(motif_family) |>
+    slice_min(log10p) |>
+    arrange(log10p) |>
+    select(motif_info, motif_family, fc, log10p, q_value) |>
+    pull(motif_family)
 
-homer_top25_inall <- 
+homer_top_inall <- 
     homer_df |>
-    inner_join(distinct(homer_top25, motif, tf_family)) |>
+    inner_join(distinct(homer_top, motif, motif_family)) |>
     arrange(log10p) |>
     mutate(motif = fct_inorder(motif),
-	   motif = fct_rev(motif))
+	   motif = fct_rev(motif),
+	   motif_family = factor(motif_family, levels = motif_family_order))
 
 fig_c <- 
-    ggplot(homer_top25_inall, 
+    ggplot(homer_top_inall, 
 	   aes(x = stim, y = motif)) +
     geom_point(aes(fill = log2(fc), size = -log10p), 
 	       shape = 21, stroke = .2) +
-    geom_text(data = filter(homer_top25_inall, q_value <= 0.01), 
+    geom_text(data = filter(homer_top_inall, q_value <= 0.01), 
 	      aes(x = stim, y = motif, label = "*"), 
 	      size = 8, fontface = "bold", size.unit = "pt", 
 	      nudge_x = .35, nudge_y = -.2) +
@@ -264,7 +341,7 @@ fig_c <-
     scale_y_discrete(position = "left") +
     scale_fill_gradient2(high = '#e66101', mid = 'white', low = '#5e3c99', midpoint = 0) +
     scale_size(range = c(2, 5)) +
-    facet_grid(rows = vars(tf_family), scales = "free", space = "free", switch = "x") +
+    facet_grid(rows = vars(motif_family), scales = "free", space = "free", switch = "x") +
     theme_minimal() +
     theme(
 	  axis.text.x.top = element_text(size = 8, hjust = 0.5), 
@@ -302,10 +379,11 @@ traits <-
 
 results <- 
     read_tsv("../atacseq/ldsc/compiled_results.tsv") |>
+    #read_tsv("../atacseq/ldsc/mRp/compiled_results.tsv") |>
     rename(gwas = trait) |>
     mutate(set = paste0(set, "c"),
 	   set = factor(set, levels = c("IL4c", "TLR7c", "BCRc", "DN2c")),
-	   group = case_when(grepl("T2D|Height|HEIGHTz|Type_2_Diabetes|Schizophrenia|MDD|LDL|HDL|Covid19_Infection|cancer", gwas) ~ "control",
+	   group = case_when(grepl("T2D|Height|HEIGHTz|Type_2_Diabetes|Schizophrenia|MDD|LDL|HDL|cancer", gwas) ~ "control",
 			     TRUE ~ "test")) |>
     left_join(traits, join_by(gwas)) |>
     filter(!grepl("cancer_ALL", gwas)) |>
@@ -354,12 +432,13 @@ results <-
 			 "PASS_UC_deLange2017" = "UC (deLange2017)")) |>
     arrange(group, gwas) |>
     mutate(gwas = factor(gwas),
-	   gwas = fct_rev(gwas))
+           gwas = fct_relevel(gwas, "Covid19 infection (hg_v7)", after = Inf),
+           gwas = fct_rev(gwas))
 
 fig_d <- 
     ggplot(data = results, aes(x = set, y = gwas)) +
     geom_tile(aes(fill = tau_star)) +
-    geom_text(data = filter(results, pfdr <= 0.01),
+    geom_text(data = filter(results, pfdr <= 1.01),
 	      aes(x = set, y = gwas, label = "*"), 
 	      size = 10, fontface = "bold", size.unit = "pt", nudge_y = -.2) +
     scale_x_discrete(position = "top") +
@@ -390,7 +469,7 @@ fig_d_grid <- plot_grid(fig_d_title, fig_d, ncol = 1, rel_heights = c(.05, 1))
 # Final panel
 top_grid <- 
     plot_grid(fig_a_grid, NULL, fig_b_grid, nrow = 1, rel_widths = c(1, .05, .85),
-	      labels = c("a", "", "b"), label_size = 12)
+	      labels = c("a", "b"), label_size = 12)
 
 bottom_grid <- 
     plot_grid(fig_c_grid, NULL, fig_d_grid, nrow = 1, rel_widths = c(.85, .0, 1),
@@ -402,3 +481,4 @@ final_grid <-
 
 ggsave("fig4.png", final_grid, width = 6.5, height = 7.5, dpi = 300)
 ggsave("./high_res/fig4.png", final_grid, width = 6.5, height = 7.5, dpi = 600)
+

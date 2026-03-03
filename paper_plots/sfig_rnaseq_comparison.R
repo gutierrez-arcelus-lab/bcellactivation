@@ -2,20 +2,20 @@ library(tidyverse)
 library(ggpointdensity)
 
 dge_low <- 
-    "../bcell_lowinput/results/edger/diff_expr_all_times.tsv" |>
+    "../bcell_lowinput/results/edger/diff_expr_all_times_all_genes.tsv" |>
     read_tsv() |>
-    filter(group1 == "Unstim.0", group2 %in% c("TLR7.24", "BCR.24", "DN2.24")) |>
-    mutate(stim = str_remove(group2, "\\.\\d+"),
+    filter(contrast %in% c("TLR7.24-Unstim.0", "BCR.24-Unstim.0", "DN2.24-Unstim.0")) |>
+    mutate(stim = str_extract(contrast, "(.+)-.+", group = TRUE),
+	   stim = str_remove(stim, "\\.\\d+"),
 	   gene_id = str_remove(gene_id, "\\.\\d+")) |>
-    select(-group1, -group2, -gene_name) |>
-    select(stim, everything())
+    select(stim, gene_id, logFC:FDR)
 
 dge_high <- 
-    "../bcell_rnaseq/5-dge/results.tsv" |>
+    "../bcell_rnaseq/5-dge/results_v38.tsv" |>
     read_tsv()
 
 dge_merge <- 
-    inner_join(select(dge_low, stim, gene_id, logFC),
+    inner_join(dge_low |> filter(FDR <= 0.05) |> select(stim, gene_id, logFC),
 	       select(dge_high, stim, gene_id, logFC),
 	       join_by(stim, gene_id),
 	       suffix = c("_low", "_high")) |>
@@ -55,3 +55,26 @@ dge_plot <-
     )
 
 ggsave("./sfig_rnaseq_comparison.png", width = 5, height = 2, dpi = 300)
+
+
+select(dge_low, stim, gene_id) |> mutate(low = 1) |> count(stim)
+select(dge_high, stim, gene_id) |> mutate(high = 1) |> count(stim)
+
+
+gene_annot <-
+    "/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens/gencode.v38.primary_assembly.annotation.gtf.gz" |>
+    rtracklayer::import(feature.type = "gene") |>
+    as.data.frame() |>
+    as_tibble() |>
+    select(gene_id, gene_name, gene_type) |>
+    mutate(gene_id = str_remove(gene_id, "\\.\\d+$"))
+
+dge_merge |> 
+    filter(logFC_low < 0, logFC_high > 1) |>
+    left_join(gene_annot) |>
+    arrange(desc(abs(logFC_low - logFC_high))) |> count(stim)
+
+
+    
+
+

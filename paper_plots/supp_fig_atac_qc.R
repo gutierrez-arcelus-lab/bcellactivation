@@ -4,7 +4,7 @@ library(glue)
 
 # meta data
 samplesheet <- 
-    read_csv("./samplesheet.csv") |>
+    read_csv("../atacseq/samplesheet.csv") |>
     mutate(f1 = basename(fastq_1),
            donor_id = str_extract(f1, "20221025_([^_]+).*", group = 1),
            replic = paste0("REP", replicate)) |>
@@ -31,7 +31,7 @@ col_data <-
 
 # Count data
 dat <-
-    "./results/bwa/merged_replicate/macs2/narrow_peak/consensus/consensus_peaks.mRp.clN.featureCounts.txt" |>
+    "../atacseq/results/bwa/merged_replicate/macs2/narrow_peak/consensus/consensus_peaks.mRp.clN.featureCounts.txt" |>
     read_table(skip = 1)
 
 colnames(dat) <- gsub("\\.mLb\\.\\clN\\.sorted\\.bam", "", colnames(dat))
@@ -94,24 +94,25 @@ plot_out <-
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
     facet_grid(donor ~ condition) +
     labs(
-        title = "Replicate Consistency: Individual Donors vs. Independent Pool",
         x = "Pool Expression (rlog)",
         y = "Individual Donor Expression (rlog)"
     ) +
     theme_bw() +
-    theme(strip.background = element_rect(fill = "grey90"))
-
-ggsave("./donors_vs_pool.png", plot_out, width = 6.5, height = 4, dpi = 300)
+    theme(
+        legend.text  = element_text(size = 7),
+        legend.title = element_text(size = 8),
+        strip.background = element_rect(fill = "grey90")
+    )
 
 # plot QC metrics
 stim_colors <- 
-    read_tsv("../paper_plots/figure_colors.txt", col_names = c("stim", "timep", "col")) |>
+    read_tsv("./figure_colors.txt", col_names = c("stim", "timep", "col")) |>
     mutate(condition = glue("{stim} {timep}hrs")) |>
     select(condition, col) |>
     deframe()
 
 frip_df <- 
-    "./results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_frip_score-plot.txt" |>
+    "../atacseq/results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_frip_score-plot.txt" |>
     read_tsv() |>
     pivot_longer(-Sample) |>
     drop_na() |>
@@ -149,10 +150,8 @@ frip_plot <-
     ) +
     labs(y = "Donor", x = "FriP", title = "Fraction of reads in peaks") 
 
-ggsave("./plots/frip.png", frip_plot, height = 2, width = 3.25)
-
 peak_annot <- 
-    "./results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_peak_annotation-plot.txt" |>
+    "../atacseq/results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_peak_annotation-plot.txt" |>
     read_tsv() |>
     pivot_longer(-Sample, names_to = "annotation") |>
     left_join(unite(samplesheet, "Sample", c(condition, replic), sep = "_", remove = FALSE), join_by(Sample)) |>
@@ -206,11 +205,13 @@ annot_plot <-
     ) +
     labs(y = "Donor", x = "Percentage", title = "HOMER peak annotation") 
 
-ggsave("./plots/peak_annot.png", annot_plot, height = 2, width = 3.25)
-
 library(patchwork)
 
-ggsave("./plots/plot_qc.png", frip_plot + annot_plot, height = 2, width = 6.5)
+ggsave("atac_qc.png", 
+       free(plot_out) / (frip_plot + annot_plot) +
+           plot_layout(heights = c(2, 1)) +
+           plot_annotation(tag_levels = "A"),
+       height = 6.5, width = 6.5)
 
 
 
