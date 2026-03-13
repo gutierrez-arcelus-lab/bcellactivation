@@ -36,6 +36,34 @@ meta_qced <-
 
 write_tsv(meta_qced, "./data/metadata_qced.tsv")
 
+# Collapse technical replicates for salmon_poolreps analysis
+meta_qced_pooled <- 
+    meta |>
+    mutate_at(vars(R1:R2), basename) |>
+    mutate(R1 = str_replace(R1, "\\.fastq\\.gz", "_val_1.fq.gz"),
+	   R2 = str_replace(R2, "\\.fastq\\.gz", "_val_2.fq.gz")) |>
+    mutate_at(vars(R1:R2), ~file.path("/temp_work/ch229163/fastq/highinput", .)) |>
+    group_by(donor_id, replic_id, stim) |>
+    summarise_at(vars(R1:R2), ~paste(., collapse = ",")) |>
+    ungroup() |>
+    mutate(stim = recode(stim,
+			 "unstday0" = "unst.0", 
+			 "BCR" = "BCR.24", 
+			 "TLR7" = "TLR7.24",
+			 "DN2" = "DN2.24"),
+	   stim = factor(stim, levels = c("unst.0", "TLR7.24", "BCR.24", "DN2.24"))) |>
+    arrange(donor_id, replic_id, stim) |>
+    group_by(donor_id, stim) |>
+    summarise_at(vars(R1:R2), ~paste(., collapse = ",")) |>
+    ungroup() |>
+    unite("sample_id", c(stim, donor_id), sep = ".") |>
+    select(sample_id, R1, R2)
+    
+write_tsv(meta_qced_pooled, "./data/metadata_qced_pooled.tsv")
+
+
+
+
 # Leafcutter
 # remove sample 10028815_unstday0 because it has a low proportion of uniquely mapped reads
 # if not removed, it is an outlier in the PCA by leafviz

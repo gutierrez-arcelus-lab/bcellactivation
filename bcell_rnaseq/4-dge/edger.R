@@ -5,7 +5,7 @@ library(glue)
 
 # Transcript annotations
 gtf <- 
-    "/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens/gencode.v41.primary_assembly.annotation.gtf.gz" |>
+    "/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens/gencode.v38.primary_assembly.annotation.gtf.gz" |>
     rtracklayer::import(feature.type = "transcript")
 
 gene_tx <- 
@@ -16,7 +16,7 @@ gene_tx <-
     mutate(gene_id = str_remove(gene_id, "\\.\\d+"))
 
 sample_ids <- 
-    "../4-splicing/data/metadata_qced_pooled.tsv" |>
+    "./data/metadata_qced_pooled.tsv" |>
     read_tsv(col_types = "c--") |>
     pull(sample_id)
 
@@ -27,7 +27,7 @@ sample_table <-
     column_to_rownames("sample_id")
 
 salmon_files <- 
-    glue("../4-splicing/salmon_quant_pooled/{sample_ids}/quant.sf") |>
+    glue("./results/salmon/{sample_ids}/quant.sf") |>
     setNames(sample_ids)
 
 txi <- 
@@ -60,7 +60,7 @@ design <- model.matrix(~0 + group, data = sample_table)
 
 colnames(design) <- sub("group", "", colnames(design))
 
-keep_y <- filterByExpr(y, design, group = sample_table$group)
+keep_y <- filterByExpr(y, design, large.n = 0, min.prop = 6/15)
 y <- y[keep_y, ]
 
 # Run edgeR
@@ -95,7 +95,10 @@ res_dn2 <-
     rownames_to_column("gene_id") |>
     as_tibble()
 
-res <- bind_rows("TLR7" = res_tlr7, "BCR" = res_bcr, "DN2" = res_dn2, .id = "stim")
+res <- 
+    bind_rows("TLR7" = res_tlr7, "BCR" = res_bcr, "DN2" = res_dn2, .id = "stim") |>
+    left_join(distinct(gene_tx, gene_id, gene_name)) |>
+    select(stim, gene_id, gene_name, everything())
 
-write_tsv(res, "./results.tsv")
+write_tsv(res, "./results_v38.tsv")
 

@@ -44,3 +44,12 @@ indices/SALMON*
 *cache*
 read_mapping/*/mapping
 read_mapping/*/salmon
+./bcell_rnaseq/2-mbv/test_*
+./bcell_rnaseq/3-splicing/bam/
+./bcell_rnaseq/3-splicing/data/
+./bcell_rnaseq/3-splicing/index/
+./bcell_rnaseq/3-splicing/salmon_quant/
+./bcell_rnaseq/3-splicing/salmon_quant_pooled.slurm
+./bcell_rnaseq/3-splicing/salmon_quant_pooled/
+./bcell_rnaseq/old
+./bcell_rnaseq/old2
