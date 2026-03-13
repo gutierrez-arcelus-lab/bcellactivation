@@ -26,10 +26,10 @@ FQLIST2=( $(echo $FQ2 | tr "," " ") )
 FQLIST2=( "${FQLIST2[@]/#/${TEMP_WORK}/fastq/lowinput/}" )
 
 # Index
-INDEX=${HOME}/lupus/indices/SALMON
+INDEX=${HOME}/bcellactivation/indices/SALMON
 
 # Output
-OUT=${HOME}/lupus/bcell_lowinput/results/salmon/${PLATE}_${WELL}
+OUT=${HOME}/bcellactivation/bcell_lowinput/results/salmon/${PLATE}_${WELL}
 mkdir -p $OUT
 
 # Run Salmon quantification
