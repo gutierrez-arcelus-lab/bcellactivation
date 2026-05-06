@@ -5,11 +5,12 @@ library(cowplot)
 library(ggbeeswarm)
 library(glue)
 library(ggh4x)
+library(conflicted)
 
-slice <- dplyr::slice
-count <- dplyr::count
-select <- dplyr::select
-filter <- dplyr::filter
+conflicts_prefer(dplyr::filter())
+conflicts_prefer(dplyr::slice())
+conflicts_prefer(dplyr::count())
+conflicts_prefer(dplyr::select())
 
 stim_colors <- 
     "./figure_colors.txt" |>

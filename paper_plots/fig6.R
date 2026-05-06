@@ -27,7 +27,7 @@ tx_to_gene <-
     select(tx_id = transcript_id, gene_id, gene_name)
 
 meta <- 
-    read_tsv("../bcell_rnaseq/4-splicing/data/metadata_qced.tsv") |>
+    read_tsv("../bcell_rnaseq/3-splicing/data/metadata_qced.tsv") |>
     separate(sample_id, c("stim", "donor", "replic"), sep = "_", remove = FALSE) |>
     select(sample_id, stim, donor) |>
     mutate(stim = recode(stim, 
@@ -38,7 +38,7 @@ meta <-
 	   stim = factor(stim, levels = names(rna_colors)))
 
 salmon_files <- 
-    file.path("../bcell_rnaseq/4-splicing/salmon_quant", meta$sample_id, "quant.sf") |>
+    file.path("../bcell_rnaseq/3-splicing/salmon_quant", meta$sample_id, "quant.sf") |>
     setNames(meta$sample_id)
 
 # PCA
@@ -95,14 +95,14 @@ fig_a_grid <-
 read_leaf <- function(contrast) {
     
     sig <- 
-        glue("../bcell_rnaseq/4-splicing/results/{contrast}_cluster_significance.txt") |>
+        glue("../bcell_rnaseq/3-splicing/results/{contrast}_cluster_significance.txt") |>
         read_tsv() |>
         filter(status == "Success") |>
         separate(cluster, c("chr", "cluster"), sep = ":") |>
         select(cluster, p, padj = p.adjust, genes)
 
     eff <- 
-        glue("../bcell_rnaseq/4-splicing/results/{contrast}_effect_sizes.txt") |>
+        glue("../bcell_rnaseq/3-splicing/results/{contrast}_effect_sizes.txt") |>
         read_tsv() |>
         mutate(cluster = sub("^.*(clu.*)$", "\\1", intron)) |>
         select(intron, cluster, logef, deltapsi)
@@ -111,7 +111,7 @@ read_leaf <- function(contrast) {
 }
 
 leaf_df <- 
-    read_lines("../bcell_rnaseq/4-splicing/data/contrasts.txt") |>
+    read_lines("../bcell_rnaseq/3-splicing/data/contrasts.txt") |>
     {function(x) setNames(x, x)}() |>
     map_dfr(read_leaf, .id = "contrast") |>
     mutate(contrast = str_replace(contrast, "unstday0", "Unstim 0h"),
@@ -224,36 +224,6 @@ fig_c_grid <-
     plot_grid(labels = "c", label_size = 12)
 
 
-#### Test
-#bcr_vs_dn2 <- leaf_df |>
-#    filter(contrast == "BCRc 24h vs. DN2c 24h") |>
-#    mutate(absd = abs(deltapsi)) |>
-#    group_by(contrast, genes) |>
-#    slice_min(p) |>
-#    slice_max(absd) |>
-#    ungroup() |>
-#    distinct(contrast, genes, p, absd)
-#
-#bcr_vs_dn2_list <- 
-#    bcr_vs_dn2 |>
-#    mutate(p = -log10(p)) |>
-#    separate_rows(genes, sep = ",") |>
-#    filter(genes %in% unique(unlist(gobp))) |>
-#    select(SYMBOL = genes, stat = p) |>
-#    arrange(desc(stat)) |>
-#    deframe()
-#
-#bcr_vs_dn2_res <- 
-#    fgsea(pathways = gobp, 
-#	  stats = bcr_vs_dn2_list, 
-#	  scoreType = "pos", 
-#	  nproc = future::availableCores())
-#
-#bcr_vs_dn2_res |>
-#    as_tibble() |>
-#    arrange(padj)
-####
-
 # Fig D
 pathwaysgo <- gmtPathways("/lab-share/IM-Gutierrez-e2/Public/References/msigdb/c5.all.v2022.1.Hs.symbols.gmt.txt")
 gobp <- keep(pathwaysgo, grepl("^GOBP", names(pathwaysgo)))
@@ -334,7 +304,7 @@ make_leaf_plot <- function(contrast, cluster_lab, title_plot) {
 
     source("./plot_cluster.R")
     
-    glue("../bcell_rnaseq/4-splicing/results/{contrast}.Rdata") |>
+    glue("../bcell_rnaseq/3-splicing/results/{contrast}.Rdata") |>
         load()
 
     plot_cluster(cluster_to_plot = cluster_lab, 
@@ -357,8 +327,8 @@ library(GenomicRanges)
 ah <- AnnotationHub::AnnotationHub()
 ens_data <- ah[["AH98047"]]
 
-filter <- dplyr::filter
-select <- dplyr::select
+conflicted::conflicts_prefer(dplyr::filter)
+conflicted::conflicts_prefer(dplyr::select)
 
 tian <- 
     "../external/data/tian_splicing/41588_2024_2019_MOESM4_ESM.xlsx" |>
@@ -399,14 +369,14 @@ my_matches <-
     as.data.frame() |>
     as_tibble()
 
-leaf_df |>
-    rowid_to_column() |>
-    filter(rowid %in% my_matches$rowid, padj <= 0.05) |>
-    group_by(cluster) |>
-    mutate(m = min(p)) |>
-    ungroup() |>
-    arrange(m, intron) |> filter(abs(deltapsi) >= .05) |> print(n = Inf)
-    #filter(genes %in% c("BCL2A1", "STAT6")) |> print(width = Inf, n = Inf)
+#leaf_df |>
+#    rowid_to_column() |>
+#    filter(rowid %in% my_matches$rowid, padj <= 0.05) |>
+#    group_by(cluster) |>
+#    mutate(m = min(p)) |>
+#    ungroup() |>
+#    arrange(m, intron) |> filter(abs(deltapsi) >= .05) |> print(n = Inf)
+#    #filter(genes %in% c("BCL2A1", "STAT6")) |> print(width = Inf, n = Inf)
 
 bcl2a1_grid <- make_leaf_plot("unstday0vs.DN2", "clu_1476_-", c("DN2c 24h", "Unstim 0h"))
 stat6_grid <- make_leaf_plot("unstday0vs.DN2", "clu_13231_-", c("DN2c 24h", "Unstim 0h"))

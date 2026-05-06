@@ -438,7 +438,7 @@ results <-
 fig_d <- 
     ggplot(data = results, aes(x = set, y = gwas)) +
     geom_tile(aes(fill = tau_star)) +
-    geom_text(data = filter(results, pfdr <= 1.01),
+    geom_text(data = filter(results, pfdr <= 0.01),
 	      aes(x = set, y = gwas, label = "*"), 
 	      size = 10, fontface = "bold", size.unit = "pt", nudge_y = -.2) +
     scale_x_discrete(position = "top") +
