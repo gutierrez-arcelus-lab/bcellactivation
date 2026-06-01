@@ -1,30 +1,53 @@
-Quality Control
+CITE-seq: Demultiplexing
 ================
 
-This directory contains the scripts used to prepare standard bulk
-RNA-seq samples for analysis.
+This directory contains the pipeline for demultiplexing the pooled
+CITE-seq (scRNA-seq + ADT) data back to individual human donors. We use
+**demuxlet** to align the single-cell BAM reads against a master donor
+VCF, utilizing genetic variation (SNPs) to assign each droplet to its
+donor of origin and identify multi-donor doublets.
+
+**Important Data Download Note for External Users:** To ensure the
+relative paths in these scripts resolve correctly without modification,
+external users downloading the raw data from dbGaP should place the Cell
+Ranger outputs in a directory structure that looks like this relative to
+this folder: `../../data/cellranger/[library_ID]/`.
 
 **These scripts should be executed in the following order:**
 
-#### Step 1. `setup.R` (R Script)
+#### Step 1. `run_demuxlet.slurm` (Slurm Array Job)
 
-- **Action:** Locates all raw internal FASTQ files on the server and
-  parses their names to create a sample sheet.
-- **Output:** `metadata.tsv` (A structured sample sheet used to drive
-  the downstream SLURM array).
+- **Action:** Iterates through the three Cell Ranger library runs. For
+  each library, it evaluates the base quality of reads overlapping known
+  SNPs from the donor VCF to compute droplet assignment probabilities.
+- **Input:** Cell Ranger `possorted_genome_bam.bam`, `barcodes.tsv.gz`,
+  and the custom donor genotype `citeseq_donors.vcf.gz`.
+- **Output:** Raw probability matrices and assignment calls
+  (`results.best`) stored in library-specific subdirectories within
+  `./results/`.
 
-#### Step 2. `run_qc.slurm` (Slurm Array Job)
+#### Step 2. `compile_results.R` (R Script)
 
-- **Action:** Reads the `metadata.tsv` file line-by-line. It then runs
-  `trim_galore` to remove adapter sequences and discard reads dropping
-  below 50bp, automatically running FastQC on the resulting trimmed
-  files.
-- **Input:** `metadata.tsv` and raw `.fastq.gz` files.
-- **Output:** Trimmed FASTQ files and `.html`/`.zip` FastQC reports.
+- **Action:** Parses the raw `.best` files across all libraries and
+  aggregates them into a single master metadata table. It cleans the
+  output by explicitly flagging Doublets (DBL) and Ambiguous (AMB)
+  cells, and extracts the clean numeric donor ID for true singlets
+  (SNG).
+- **Input:** The individual library `results.best` files.
+- **Output:** A combined and formatted metadata table
+  (`demuxlet_calls.tsv`) ready for integration into the downstream
+  Seurat object.
 
 ------------------------------------------------------------------------
 
 ### R Session Information
+
+``` r
+library(tidyverse)
+library(glue)
+
+devtools::session_info()
+```
 
     ## ─ Session info ───────────────────────────────────────────────────────────────
     ##  setting  value
@@ -36,7 +59,7 @@ RNA-seq samples for analysis.
     ##  collate  en_US.UTF-8
     ##  ctype    en_US.UTF-8
     ##  tz       America/New_York
-    ##  date     2026-05-26
+    ##  date     2026-06-01
     ##  pandoc   2.19.2 @ /programs/biogrids/x86_64-linux/rstudio/2022.02.3/bin// (via rmarkdown)
     ## 
     ## ─ Packages ───────────────────────────────────────────────────────────────────
@@ -63,7 +86,7 @@ RNA-seq samples for analysis.
     ##  gargle          1.5.2      2023-07-20 [1] CRAN (R 4.1.2)
     ##  generics        0.1.3      2022-07-05 [1] CRAN (R 4.1.2)
     ##  ggplot2       * 3.5.1      2024-04-23 [1] CRAN (R 4.1.2)
-    ##  glue            1.8.0      2024-09-30 [1] CRAN (R 4.1.2)
+    ##  glue          * 1.8.0      2024-09-30 [1] CRAN (R 4.1.2)
     ##  googledrive     2.0.0      2021-07-08 [2] CRAN (R 4.1.1)
     ##  googlesheets4   1.0.1      2022-08-13 [2] CRAN (R 4.1.2)
     ##  gtable          0.3.6      2024-10-25 [1] CRAN (R 4.1.2)

@@ -1,30 +1,49 @@
-# RAM
+# ==============================================================================
+# Description:  Core processing script for the CITE-seq data. Handles multi-modal 
+#               data import (RNA/ADT/HTO), quality control, HTO-based demultiplexing 
+#               (demuxmix), integration with SNP-based demultiplexing (demuxlet), 
+#               contaminant removal, Harmony batch correction, UMAP projection, 
+#               and cluster marker identification.
+# Input:        1. ../data/cellranger/.../filtered_feature_bc_matrix (Cell Ranger)
+#               2. ../1-demultiplexing/demuxlet/results/demuxlet_calls.tsv
+#               3. ../../paper_figures/figure_colors_final.txt (Plot styling)
+# Output:       1. ./data/v4_seurat_qced.rds (Final, clean Seurat object)
+#               2. ./data/v4_umap_df.tsv (UMAP coordinates)
+#               3. ./data/v4_cluster_markers.tsv (Cluster-specific genes)
+#               4. ./plots/v4_hpcs_sdev.png & v4_umap_stim.png
+# ==============================================================================
+
+# ==============================================================================
+# 1. Environment Setup & Helper Functions
+# ==============================================================================
+
+# Increase memory limit for handling large single-cell matrices
 unix::rlimit_as(1e12)
 
-# Packages
-## single-cell data analysis
 library(Seurat)
 library(demuxmix)
 library(harmony)
-library(scGate)
-
-## Data wrangling
 library(tidyverse)
 
+# Ensure output directories exist
+if (!file.exists("data")) dir.create("data")
+if (!file.exists("plots")) dir.create("plots")
 
-# Colors
+# Import standardized publication colors for the stimulation conditions
 stim_colors <- 
-    "../paper_plots/figure_colors.txt" |>
-    read_tsv(col_names = c("stim", "timep", "color")) |>
-    unite("stim", c("stim", "timep"), sep = " ") |>
-    mutate(stim = paste0(stim, "h")) |>
+    "../../paper_figures/figure_colors_final.txt" |>
+    read_tsv() |>
+    mutate(stim = glue::glue("{Condition} {Time}h")) |>
+    select(stim, Hex) |>
     deframe()
 
-# Processing function
+# Function to import 10x multi-modal data and initialize Seurat object
 make_seurat <- function(cellranger_path, project_id, hto_names = NULL, mito_ids, ribo_ids) {
 
+    # Read the 10x hdf5/matrix files (using gene IDs as row names)
     data10x <- Read10X(cellranger_path, gene.column = 1)
 
+    # Separate ADT (surface proteins) from HTO (hashing antibodies)
     antibody_mtx <- data10x[["Antibody Capture"]] |>
         {function(x) x[!grepl("^Hashtag", rownames(x)), ]}()
 
@@ -36,10 +55,12 @@ make_seurat <- function(cellranger_path, project_id, hto_names = NULL, mito_ids,
 	rownames(hashtags_mtx) <- setNames(hto_names[rownames(hashtags_mtx)], NULL)
     }
 
+    # Initialize Seurat with RNA assay and LogNormalize
     seuratobj <- 
 	CreateSeuratObject(counts = data10x[["Gene Expression"]], project = project_id) |>
         NormalizeData(assay = "RNA", normalization.method = "LogNormalize")
 
+    # Add ADT assay and apply Centered Log Ratio (CLR) normalization
     if ( nrow(antibody_mtx) > 0 ) {
 	
 	rownames(antibody_mtx) <- sub("_prot$", "", rownames(antibody_mtx))
@@ -48,7 +69,8 @@ make_seurat <- function(cellranger_path, project_id, hto_names = NULL, mito_ids,
     
 	seuratobj <- NormalizeData(seuratobj, assay = "ADT", normalization.method = "CLR", margin = 2)
     }
-    
+   
+    # Add HTO assay and apply CLR normalization
     if (!is.null(hto_names)) {
 	
 	seuratobj[["HTO"]] <- CreateAssayObject(counts = hashtags_mtx)
@@ -56,16 +78,19 @@ make_seurat <- function(cellranger_path, project_id, hto_names = NULL, mito_ids,
 	seuratobj <- NormalizeData(seuratobj, assay = "HTO", normalization.method = "CLR", margin = 2)
     }
 
+    # Calculate mitochondrial and ribosomal percentages for QC
     seuratobj[["percent_mt"]] <- PercentageFeatureSet(seuratobj, features = mito_ids)
     seuratobj[["percent_ribo"]] <- PercentageFeatureSet(seuratobj, features = ribo_ids)
 
     seuratobj
 }
 
+# Function to demultiplex hashing antibodies using demuxmix
 run_demuxmix <- function(x) {
    
     hto <- as.matrix(x@assays$HTO@counts)
 
+    # Provide RNA feature counts to demuxmix to improve probability estimates
     rna <- x@meta.data |> 
 	select(nFeature_RNA) |>
 	as_tibble(rownames = "barcode") |>
@@ -73,6 +98,7 @@ run_demuxmix <- function(x) {
 
     rna <- rna[colnames(hto)]
     
+    # Run the demuxmix negative binomial mixture model
     dmm <- demuxmix(hto, rna = rna, maxIter = 500, tol = 1e-4)
     
     classes <- 
@@ -80,6 +106,7 @@ run_demuxmix <- function(x) {
 	as_tibble(rownames = "barcode") |>
 	select(barcode, dmm_hto_call = HTO, dmm_prob = Prob, dmm_type = Type)
     
+    # Append demultiplexing results to Seurat metadata
     x@meta.data <- 
 	x@meta.data |>
 	as_tibble(rownames = "barcode") |>
@@ -89,33 +116,31 @@ run_demuxmix <- function(x) {
     x
 }
 
-# Directories
-labshr <- "/lab-share/IM-Gutierrez-e2/Public/Lab_datasets"
+# Function to append the SNP-based demuxlet calls to Seurat metadata
+add_to_metadata <- function(x) {
+    x@meta.data <- 
+	x@meta.data |> 
+	as_tibble(rownames = "barcode") |>
+	left_join(demuxlet_df, join_by(barcode, orig.ident)) |>
+	#left_join(scrublet_df, join_by(barcode, orig.ident)) |>
+	column_to_rownames("barcode")
+	
+    x
+} 
 
-lib1984_dir <- 
-    file.path(labshr, "B_cells_citeseq",
-	      "SN0268787/broad/hptmp/curtism/bwh10x/KW10456_Maria",
-	      "221101_10X_KW10456_bcl/cellranger-6.1.1/GRCh38/BRI-1984/outs",
-	      "filtered_feature_bc_matrix")
-
-lib1988_dir <-
-    file.path(labshr, "B_cells_citeseq",
-	      "SN0273471/broad/hptmp/sgurajal/bwh10x/KW10598_mgutierrez",
-	      "221211_10X_KW10598_bcl/cellranger-6.1.1/GRCh38/BRI-1988_hashing/outs",
-	      "filtered_feature_bc_matrix")
-
-lib1990_dir <-
-    file.path(labshr, "B_cells_citeseq",
-	      "SN0273471/broad/hptmp/sgurajal/bwh10x/KW10598_mgutierrez",
-	      "221211_10X_KW10598_bcl/cellranger-6.1.1/GRCh38/BRI-1990_hashing/outs",
-	      "filtered_feature_bc_matrix")
+# ==============================================================================
+# 2. Data Initialization
+# ==============================================================================
+lib1984_dir <- "../data/cellranger/1984/filtered_feature_bc_matrix"
+lib1988_dir <- "../data/cellranger/1988/filtered_feature_bc_matrix"
+lib1990_dir <- "../data/cellranger/1990/filtered_feature_bc_matrix"
 
 # Feature IDs
-features <- file.path(lib1984_dir, "features.tsv.gz") |>
+features <- 
+    file.path(lib1984_dir, "features.tsv.gz") |>
     read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
 
-# Mitochondrial and Ribosomal protein genes
-# Gene IDs are the same across CITE-seq runs, so we'll use pilot 1.
+# Identify mitochondrial and ribosomal genes across the dataset
 mt_genes <- features |>
     filter(grepl("^MT-", gene_name)) |>
     pull(gene_id)
@@ -124,67 +149,45 @@ ribo_genes <- features |>
     filter(grepl("^RPS\\d+|^RPL\\d+", gene_name)) |>
     pull(gene_id)
 
-# Hashtag IDs
-#pilot1_stims <- 
-#    c("Hashtag1" = "BCR 72h",
-#      "Hashtag2" = "TLR7 72h",
-#      "Hashtag3" = "BCR 24h", 
-#      "Hashtag4" = "TLR7 24h",
-#      "Hashtag5" = "Unstim 24h",
-#      "Hashtag6" = "Unstim 0h")
-#
-#pilot2_stims <- 
-#    c("Hashtag1" = "Unstim 0h", 
-#      "Hashtag2" = "IL4 24h",
-#      "Hashtag3" = "BCR 24h",
-#      "Hashtag4" = "BCR-TLR7 24h",
-#      "Hashtag5" = "TLR7 24h", 
-#      "Hashtag6" = "CD40L 24h",
-#      "Hashtag7" = "TLR9 24h",
-#      "Hashtag8" = "DN2 24h",
-#      "Hashtag9" = "BCR 72h",
-#      "Hashtag10" = "BCR-TLR7 72h",
-#      "Hashtag12" = "TLR7 72h",
-#      "Hashtag13" = "CD40L 72h",
-#      "Hashtag14" = "DN2 72h",
-#      "Hashtag15" = "TLR9 72h")
-
-mgb_stims <- 
+# Map hashtag oligonucleotide (HTO) IDs to the physical stimulation conditions
+hashtags <- 
     c("Hashtag6" = "Unstim 0h",
-      "Hashtag7" = "IL4 24h",
-      "Hashtag8" = "IL4 72h",
-      "Hashtag9" = "BCR 24h",
-      "Hashtag10" = "BCR 72h",
-      "Hashtag12" = "TLR7 24h",
-      "Hashtag13" = "TLR7 72h",
-      "Hashtag14" = "DN2 24h",
-      "Hashtag15" = "DN2 72h")
+      "Hashtag7" = "IL-4c 24h",
+      "Hashtag8" = "IL-4c 72h",
+      "Hashtag9" = "BCRc 24h",
+      "Hashtag10" = "BCRc 72h",
+      "Hashtag12" = "TLR7c 24h",
+      "Hashtag13" = "TLR7c 72h",
+      "Hashtag14" = "DN2c 24h",
+      "Hashtag15" = "DN2c 72h")
 
-# Seurat objects
-# Demultiplex by HTO using demuxmix
+# Create Seurat objects and run HTO demultiplexing
 lib1984_obj <- 
     make_seurat(lib1984_dir, 
 		project_id = "1984", 
-		hto_names = mgb_stims,
+		hto_names = hashtags,
 		mito_ids = mt_genes, ribo_ids = ribo_genes) |>
     run_demuxmix()
 
 lib1988_obj <- 
     make_seurat(lib1988_dir, 
 		project_id = "1988", 
-		hto_names = mgb_stims,
+		hto_names = hashtags,
 		mito_ids = mt_genes, ribo_ids = ribo_genes) |>
     run_demuxmix()
 
 lib1990_obj <- 
     make_seurat(lib1990_dir, 
 		project_id = "1990", 
-		hto_names = mgb_stims,
+		hto_names = hashtags,
 		mito_ids = mt_genes, ribo_ids = ribo_genes) |>
     run_demuxmix()
 
+# ==============================================================================
+# 3. Quality Control & Contaminant Filtering
+# ==============================================================================
 
-# Filter out droplets with too few genes
+# A. Basic QC filtering: Keep cells with > 500 genes and < 10% mitochondrial reads
 meta_df <- 
     list(lib1984_obj, lib1988_obj, lib1990_obj) |>
     map_dfr(function(x) x@meta.data |> 
@@ -201,25 +204,11 @@ lib1984_obj <- subset(lib1984_obj, cells = good_cells[["1984"]])
 lib1988_obj <- subset(lib1988_obj, cells = good_cells[["1988"]])
 lib1990_obj <- subset(lib1990_obj, cells = good_cells[["1990"]])
 
-## Export data for Scrublet
-#DropletUtils::write10xCounts(x = lib1984_obj@assays$RNA@counts, 
-#			     path = "./data/lib1984_matrix", 
-#			     overwrite = TRUE)
-#
-#DropletUtils::write10xCounts(x = lib1988_obj@assays$RNA@counts, 
-#			     path = "./data/lib1988_matrix",
-#			     overwrite = TRUE)
-#
-#DropletUtils::write10xCounts(x = lib1990_obj@assays$RNA@counts, 
-#			     path = "./data/lib1990_matrix",
-#			     overwrite = TRUE)
-
-
-# Demultiplexing donors
+# B. Integration of SNP Demultiplexing (demuxlet)
 libs <- c("1984", "1988", "1990")
 
 demuxlet_df <-
-    "./demultiplexing/demuxlet/results/demuxlet_calls.tsv" |>
+    "../1-demultiplexing/demuxlet/results/demuxlet_calls.tsv" |>
     read_tsv() |>
     rename("orig.ident" = "batch", "demuxlet_call" = "status") |>
     mutate(orig.ident = factor(orig.ident, levels = libs)) |>
@@ -228,31 +217,11 @@ demuxlet_df <-
 				     .default = demuxlet_call)) |>
     select(-n)
 
-
-#scrublet_df <- 
-#    glue::glue("./demultiplexing/scrublet/scrublet_calls_{libs}.tsv") |>
-#    setNames(libs) |>
-#    map_dfr(read_tsv, .id = "orig.ident") |>
-#    rename("barcode" = "...1", 
-#	   "scrublet_doublet_score" = "doublet_score") |>
-#    mutate(orig.ident = factor(orig.ident, levels = libs)) |>
-#    select(barcode, orig.ident, scrublet_doublet_score)
-
-add_to_metadata <- function(x) {
-    x@meta.data <- 
-	x@meta.data |> 
-	as_tibble(rownames = "barcode") |>
-	left_join(demuxlet_df, join_by(barcode, orig.ident)) |>
-	#left_join(scrublet_df, join_by(barcode, orig.ident)) |>
-	column_to_rownames("barcode")
-	
-    x
-} 
-
 lib1984_obj <- add_to_metadata(lib1984_obj)
 lib1988_obj <- add_to_metadata(lib1988_obj)
 lib1990_obj <- add_to_metadata(lib1990_obj)
 
+# Keep confirmed singlets (Singlet by both genetics and hashtagging)
 singlet_cells <- 
     list("1984" = lib1984_obj, "1988" = lib1988_obj, "1990" = lib1990_obj) |>
     map(function(x) x@meta.data |> 
@@ -265,24 +234,25 @@ lib1984_obj <- subset(lib1984_obj, cells = singlet_cells[["1984"]])
 lib1988_obj <- subset(lib1988_obj, cells = singlet_cells[["1988"]])
 lib1990_obj <- subset(lib1990_obj, cells = singlet_cells[["1990"]])
 
-# Run PCA and Harmony to indentify outliers or contaminating cells
-mt_ribo_genes <- 
-    features |>
-    filter(phenotype == "Gene Expression") |>
-    filter(grepl("^MT-|^MRPS|^MRPL|^RPS|^RPL", gene_name))
+# ==============================================================================
+# 4. Pre-processing & Removal of Ambient Contaminants
+# ==============================================================================
 
+# Merge the three batches into a single object
 bcells <- 
     merge(lib1984_obj, y = c(lib1988_obj, lib1990_obj), 
-	  add.cell.ids = c("1984", "1988", "1990")) |>
-    JoinLayers()
+	  add.cell.ids = c("1984", "1988", "1990"))
 
 bcells@meta.data$orig.ident <- paste0("BRI-", bcells@meta.data$orig.ident)
 
+# Initial round of scaling and dimensionality reduction
 bcells <- bcells |>
     FindVariableFeatures() |>
     ScaleData(vars.to.regress = c("nCount_RNA", "percent_mt")) |>
     RunPCA()
 
+# Run Harmony. Grouping by both orig.ident (library batch) and donor_id accounts 
+# for both technical sequencing variation and baseline genetic variation.
 set.seed(1L)
 bcells <- bcells |>
     RunHarmony(group.by.vars = c("orig.ident", "donor_id"),
@@ -300,9 +270,9 @@ sdev_plot <-
     theme(panel.grid.minor = element_blank()) +
     labs(x = "Principal component", y = "Standard deviation")
 
-ggsave("./plots/hpcs_sdev.png", sdev_plot, width = 4, height = 3)
+ggsave("./plots/v4_hpcs_sdev.png", sdev_plot, width = 4, height = 3)
 
-# Umap and clustering
+# Cluster the data
 bcells <- bcells |>
     RunUMAP(reduction = "harmony", 
 	    dims = 1:30,
@@ -313,6 +283,7 @@ bcells <- bcells |>
 
 Idents(bcells) <- "RNA_snn_res.0.5"
 
+# Find broad cluster markers
 cluster_markers <- 
     FindAllMarkers(bcells, 
                    only.pos = TRUE,
@@ -320,7 +291,10 @@ cluster_markers <-
                    logfc.threshold = .5) |>
     as_tibble()
 
-# Identify contaminating cell types and MALAT1-expressing cells
+# Identify and remove clusters defined by 
+# MALAT1 (dying cells), 
+# GNLY (NK/T cells), 
+# or S100A9 (Monocytes/Neutrophils).
 bad_clusters <-
     cluster_markers |>
     left_join(filter(features, phenotype == "Gene Expression"), 
@@ -330,13 +304,15 @@ bad_clusters <-
     slice_max(avg_log2FC) |>
     pull(cluster)
 
-bad_cells <- bcells@meta.data |>
+bad_cells <- 
+    bcells@meta.data |>
     as_tibble(rownames = "barcode") |>
     filter(RNA_snn_res.0.5 %in% bad_clusters) |>
     pull(barcode)
 
 bcells <- subset(bcells, cells = bad_cells, invert = TRUE)
 
+# Strip out old reductions and metadata columns before the final processing run
 bcells <- DietSeurat(bcells, dimreducs = NULL)
 bcells@commands <- list()
 bcells@meta.data$RNA_snn_res.0.5 <- NULL
@@ -344,16 +320,21 @@ bcells@meta.data$seurat_clusters <- NULL
 
 Idents(bcells) <- "dmm_hto_call"
 
-# Rerun analysis with the final object
-# Scale and run PCAdd
-bcells <- bcells |>
+# ==============================================================================
+# 5. Final Processing of Cleaned B Cells
+# ==============================================================================
+
+# Re-run the entire scaling, PCA, Harmony, and clustering pipeline on the clean cells
+bcells <- 
+    bcells |>
     FindVariableFeatures() |>
     ScaleData(vars.to.regress = c("nCount_RNA", "percent_mt")) |>
     RunPCA()
 
 # Run Harmony correcting for batch
 set.seed(1L)
-bcells <- bcells |>
+bcells <- 
+    bcells |>
     RunHarmony(group.by.vars = c("orig.ident", "donor_id"),
 	       max_iter = 30,
 	       reduction.save = "harmony") |>
@@ -364,20 +345,17 @@ bcells <- bcells |>
 	    seed.use = 1L,
 	    reduction.name = "umap")
 
-
+# Generate UMAP visualization metadata
 umap_df <- 
     Embeddings(bcells, "umap") |>
     as_tibble(rownames = "barcode") |>
     left_join(as_tibble(bcells@meta.data, rownames = "barcode"), join_by(barcode)) |>
     select(barcode, lib = orig.ident, donor_id, hto = dmm_hto_call, cluster = RNA_snn_res.0.5,
-	   umap_1, umap_2) |>
+	   umap_1 = UMAP_1, umap_2 = UMAP_2) |>
     sample_frac(1L) |>
     mutate(barcode = fct_inorder(barcode),
 	   hto = factor(hto, levels = names(stim_colors)),
 	   cluster = factor(cluster, levels = sort(as.integer(levels(cluster)))))
-
-write_tsv(umap_df, "./data/umap_df.tsv")
-
 
 umap_stim <-
     ggplot(umap_df, aes(umap_1, umap_2)) +
@@ -393,9 +371,11 @@ umap_stim <-
     guides(color = guide_legend(title = "Stim:", 
 				override.aes = list(size = 4, alpha = 1)))
 
-ggsave("plots/umap_stim.png", umap_stim, width = 5, height = 4)
+ggsave("plots/v4_umap_stim.png", umap_stim, width = 5, height = 4)
 
-# Marker genes
+# ==============================================================================
+# 6. Final Cluster Marker Identification
+# ==============================================================================
 Idents(bcells) <- "RNA_snn_res.0.5"
 
 cluster_markers_2 <- 
@@ -407,46 +387,9 @@ cluster_markers_2 <-
     left_join(filter(features, phenotype == "Gene Expression") |> select(-phenotype), 
 	      join_by(gene == gene_id))
 
-write_tsv(cluster_markers_2, "./data/cluster_markers.tsv")
-
-
-# Gating
-naive_gate <- gating_model(name = 'naive', signature = c('IgD+', 'CD27-'))
-dn_gate <- gating_model(name = 'dn', signature = c('IgD-', 'CD27-'))
-mem_gate <- gating_model(name = 'memory', signature = c('IgD-', 'CD27+'))
-usw_gate <- gating_model(name = 'unswitch', signature = c('IgD+', 'CD27+'))
-abc_gate <- gating_model(name = 'abc', signature = c('CD11c+'))
-
-protein_gates <- 
-    list(naive = naive_gate,
-	 dn = dn_gate,
-	 mem = mem_gate,
-	 usw = usw_gate,
-	 abc = abc_gate)
-    
-bcells <- scGate(bcells, model = protein_gates, assay = "ADT", reduction = "harmony")
-
-bcells@meta.data <- 
-    bcells@meta.data |>
-    select(-starts_with("CellOntology"), -scGate_multi)
-
-plasma_gate <-
-    gating_model(name = "plasma",
-		 signature = c("ENSG00000100219+")) 
-
-prolif_gate <- 
-    gating_model(name = "prolif.",
-		 signature = c("ENSG00000148773+")) 
-
-rna_gates <- 
-    list(plasma = plasma_gate, 
-	 prolif = prolif_gate)
-
-bcells <- scGate(bcells, model = rna_gates, assay = "RNA", reduction = "harmony")
-
-bcells@meta.data <- 
-    bcells@meta.data |>
-    select(-starts_with("CellOntology"), -scGate_multi)
-
-# Save object
-write_rds(bcells, "./data/seurat_qced.rds")
+# ==============================================================================
+# 7. Data Export
+# ==============================================================================
+write_rds(bcells, "./data/v4_seurat_qced.rds")
+write_tsv(umap_df, "./data/v4_umap_df.tsv")
+write_tsv(cluster_markers_2, "./data/v4_cluster_markers.tsv")
