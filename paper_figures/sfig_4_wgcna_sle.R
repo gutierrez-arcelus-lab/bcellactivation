@@ -8,14 +8,14 @@ sle_genes <-
     mutate(topL2G = recode(topL2G, "BLTP3A" = "UHRF1BP1"))
    
 gene_annot <- 
-    "/lab-share/IM-Gutierrez-e2/Public/References/Annotations/hsapiens/gencode.v38.primary_assembly.annotation.gtf.gz" |>
+    "../01_rnaseq_lowinput/1_quantification/data/gencode.v38.primary_assembly.annotation.gtf.gz" |>
     rtracklayer::import(feature.type = "gene") |>
     as.data.frame() |>
     as_tibble() |>
     select(gene_id, gene_name)
 
 module_sizes <- 
-    read_tsv("../bcell_lowinput/wgcna/data/DN2_modules.tsv") |>
+    read_tsv("../01_rnaseq_lowinput/3_wgcna/data/DN2_modules.tsv") |>
     count(module) |>
     filter(module != "grey") |>
     arrange(desc(n)) |>
@@ -23,7 +23,7 @@ module_sizes <-
     select(module, module_ix)
     
 kme_all_df <- 
-    read_tsv("../bcell_lowinput/wgcna/data/DN2_kme.tsv") |>
+    read_tsv("../01_rnaseq_lowinput/3_wgcna/data/DN2_kme.tsv") |>
     select(-grey) |>
     pivot_longer(-gene_id, names_to = "module", values_to = "kme") |>
     left_join(module_sizes) |>
@@ -40,7 +40,7 @@ sle_genes_cormatrix <-
     select(all_of(module_sizes$module_ix)) |>
     data.matrix()
 
-png("./sfig_wgcna_sle_genes.png", units = "in", height = 6, width = 4, res = 300)
+png("./sfigs/sfig4_wgcna_sle.png", units = "in", height = 6, width = 4, res = 300)
 pheatmap(sle_genes_cormatrix,
 	 fontsize = 9, angle_col = 0, cluster_rows = TRUE, cluster_cols = FALSE, 
 	 color = colorRampPalette(rev(brewer.pal(n = 11, name ="RdYlBu")))(100),

@@ -20,20 +20,36 @@ stims <- read_lines("./data/stims.txt")
 # Dynamically construct file paths, read them, and bind them into a single dataframe
 results <-
     glue("./results/{stims}/knownResults.txt") |>
-    # Append 'c' to the stimulation names (e.g., 'BCR' -> 'BCRc') to match the 
-    # specific B cell state nomenclature used in the manuscript text.
     setNames(paste0(stims, "c")) |>
-    # Iterate over the files, read the TSVs, and append a 'stim' identifier column
     map_dfr(~read_tsv(.) |>
-	    # Standardize column names (removes spaces, special characters)
-	    janitor::clean_names() |>
-	    # HOMER appends dynamic numbers to some column names (e.g., "_of_450").
-            # This regex strips those numeric suffixes so the columns align 
-            # perfectly across all conditions when binding the rows together.
-	    {function(x) setNames(x, str_remove(names(x), "_of_\\d+$"))}(),
-	    .id = "stim")
+            janitor::clean_names() |>
+            {function(x) setNames(x, str_remove(names(x), "_of_\\d+$"))}(),
+            .id = "stim") |>
+    mutate_at(vars(starts_with("percent_of_")), parse_number) |>
+    mutate(stim = recode(stim, "IL4c" = "IL-4c"),
+	   stim = factor(stim, levels = c("IL-4c", "TLR7c", "BCRc", "DN2c")),
+           fc = percent_of_target_sequences_with_motif/percent_of_background_sequences_with_motif) |>
+    extract(motif_name,
+	    c("tf_name", "tf_family", "dataset", "db"), 
+	    "(.+?)(?:\\((.+)\\))?/([^/]+)/(.+)", 
+	    remove = FALSE) |>
+    mutate(log10p = log_p_value/log(10)) |>
+    select(stim, motif_name, tf_name, tf_family, dataset, consensus,
+           pct_target =  percent_of_target_sequences_with_motif,
+           pct_bg = percent_of_background_sequences_with_motif,
+           fc, log10p, q_value = q_value_benjamini)
 
 # ------------------------------------------------------------------------------
 # 2. Export Table
 # ------------------------------------------------------------------------------
 write_tsv(results, "./results/results.tsv")
+
+results |>
+    filter(q_value < 0.01) |>
+    write_tsv("./results/results_fdr01.tsv")
+
+results |>
+    filter(q_value < 0.01) |>
+    distinct(motif_name) |>
+    write_tsv("./results/motifs_fdr01.tsv")
+

@@ -1,16 +1,11 @@
 library(tidyverse)
+library(Seurat)
 
-cellranger_dir_1984 <- 
-    file.path("/lab-share/IM-Gutierrez-e2/Public/Lab_datasets/B_cells_citeseq",
-              "SN0268787/broad/hptmp/curtism/bwh10x/KW10456_Maria",
-              "221101_10X_KW10456_bcl/cellranger-6.1.1/GRCh38/BRI-1984/outs",
-              "filtered_feature_bc_matrix")
-
-features_df <- 
-    file.path(cellranger_dir_1984, "features.tsv.gz") |>
+features_df <-
+    "../04_citeseq/data/cellranger/1984/filtered_feature_bc_matrix/features.tsv.gz" |>
     read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
 
-bcells <- read_rds("../citeseq/data/seuratv4_qced.rds")
+bcells <- read_rds("../04_citeseq/2-processing/data/v4_seurat_qced.rds")
 
 marker_genes <- c("CTSH", "CXCR5", "IRF5", "IRF8", "MYC", "RGS1", "ZBTB38")
 
@@ -22,12 +17,11 @@ marker_genes_df <-
     mutate(gene_name = factor(gene_name, levels = marker_genes)) |>
     arrange(gene_name)
 
-
 markers_plot_data <- 
-    Seurat::DotPlot(object = bcells, 
-                    features = marker_genes_df$gene_id, 
-                    split.by = 'donor_id',
-                    cols = rep("black", 5)) |>
+    DotPlot(object = bcells, 
+	    features = marker_genes_df$gene_id, 
+	    split.by = 'donor_id',
+	    cols = rep("black", 5)) |>
     {function(x) as_tibble(x$data)}() |>
     left_join(marker_genes_df, join_by(features.plot == gene_id)) |>
     separate(id, c("cluster", "donor"), sep = "_") |>
@@ -63,7 +57,7 @@ dotplot_markers <-
                                  barwidth = .25, barheight = 3)) +
     labs(x = NULL, y = NULL, fill = "Scaled\nExpression", size = "%\nExpressed")
 
-ggsave("./fig3f_supplement.png", dotplot_markers, width = 6.5, height = 2)
+ggsave("./sfigs/sfig8_imd_sc_bydonor.png", dotplot_markers, width = 6.5, height = 2)
 
 
 

@@ -6,7 +6,7 @@ library(patchwork)
 my_stims <- c("CD40L", "TLR9", "TLR7", "BCR", "BCR-TLR7", "DN2")
  
 go_all <-
-    glue("../bcell_lowinput/wgcna/data/{my_stims}_go.tsv") |>
+    glue("../01_rnaseq_lowinput/3_wgcna/data/{my_stims}_go.tsv") |>
     setNames(my_stims) |>
     map_dfr(read_tsv, .id = "stim") |>
     mutate(log_p = -log10(pvalue),
@@ -118,7 +118,7 @@ build_module_row <- function(mod_name, modules_df, kim_df, go_res) {
 build_stim_panel <- function(stim_i) {
     
     module_sizes <-
-        glue("../bcell_lowinput/wgcna/data/{stim_i}_modules.tsv") |>
+        glue("../01_rnaseq_lowinput/3_wgcna/data/{stim_i}_modules.tsv") |>
         read_tsv() |>
         count(module) |>
         arrange(desc(n)) |>
@@ -129,7 +129,7 @@ build_stim_panel <- function(stim_i) {
         mutate(ix = fct_inorder(ix))
     
     eigengenes_df <-
-        glue("../bcell_lowinput/wgcna/data/{stim_i}_eigen.tsv") |>
+        glue("../01_rnaseq_lowinput/3_wgcna/data/{stim_i}_eigen.tsv") |>
         read_tsv() |>
         select(-MEgrey) |>
         separate(sample_name, 
@@ -151,7 +151,7 @@ build_stim_panel <- function(stim_i) {
         arrange(module_ix, time)
     
     kim_df <- 
-        glue("../bcell_lowinput/wgcna/data/{stim_i}_kim.tsv") |>
+        glue("../01_rnaseq_lowinput/3_wgcna/data/{stim_i}_kim.tsv") |>
         read_tsv() |>
         left_join(module_sizes, join_by(module)) |> 
         select(gene_id, gene_name, module, module_ix = ix, kim) |>
@@ -161,7 +161,7 @@ build_stim_panel <- function(stim_i) {
         ungroup()
     
     go_res <-
-        glue("../bcell_lowinput/wgcna/data/{stim_i}_go.tsv") |>
+        glue("../01_rnaseq_lowinput/3_wgcna/data/{stim_i}_go.tsv") |>
         read_tsv() |>
         group_by(module) |>
         slice_max(-log10(pvalue), n = 5, with_ties = FALSE) |>
@@ -198,4 +198,4 @@ final_out <-
     plot_grid(final_figure, global_legend, nrow = 1, rel_widths = c(1, 0.1)) +
     theme(plot.background = element_rect(fill = "white", color = "white"))
 
-ggsave("./modules_all_stims.png", final_out, width = 6.5, height = 8, dpi = 300)
+ggsave("./sfigs/sfig2_modules.png", final_out, width = 6.5, height = 8, dpi = 300)

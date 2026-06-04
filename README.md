@@ -5,7 +5,17 @@ for the data analysis and figure generation in the manuscript: *"A multi-omics
 resource of human B-cell activation reveals dynamic response of
 disease-associated loci"* (Aguiar, Franco, et al., 2026).
 
-## 1. System Requirements
+**Please navigate to each specific directory for detailed, step-by-step README instructions on how to run its respective pipeline.**
+
+* `01_rnaseq_lowinput/` - Pipeline for quantification and analysis of the low-input RNA-seq timecourse data.
+* `02_rnaseq_stdinput/` - Pipeline for the standard-input RNA-seq data, including differential expression and alternative splicing analyses.
+* `03_atacseq/` - Upstream processing, peak calling, and analysis of chromatin accessibility (ATAC-seq) data.
+* `04_citeseq/` - Single-cell multi-omics (CITE-seq) processing and analysis.
+* `gwas_finemapping/` - Statistical fine-mapping of SLE GWAS loci using SuSiE.
+* `paper_figures/` - R scripts to assemble, format, and export the final publication figures (e.g., Figures 1-6).
+* `supp_data/` - Supplementary datasets generation. 
+
+## 2. System Requirements
 
 ### Operating Systems
 
@@ -42,14 +52,14 @@ disease-associated loci"* (Aguiar, Franco, et al., 2026).
 	* `fgsea` v1.20.0
 	* `leafviz` v0.1.0
 
-## 2. Installation Guide
+## 3. Installation Guide
 
 * **Instructions:** This repository provides custom data analysis pipelines
   rather than a standalone software package. No formal installation is
   required. Users must independently install R and the third-party tools listed
   above according to their official documentation.
 
-## 3. Demo
+## 4. Demo
 
 * **Instructions & Expected Output:** Because this repository contains custom
   analysis scripts tailored to a specific project rather than generalized
@@ -62,7 +72,7 @@ disease-associated loci"* (Aguiar, Franco, et al., 2026).
   several hours to days). Downstream R scripts typically run in 5 to 30 minutes
   on a standard desktop computer.
 
-## 4. Instructions for Use
+## 5. Instructions for Use
 
 1.  **Download Data:** Obtain the corresponding datasets from dbGaP
 (phs004221.v1.p1) and Zenodo (https://zenodo.org/uploads/15595470)

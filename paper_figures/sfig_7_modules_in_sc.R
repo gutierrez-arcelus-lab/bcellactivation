@@ -6,7 +6,7 @@ library(glue)
 stims <- c("TLR7", "BCR", "DN2")
 
 module_sizes <-
-    glue("../bcell_lowinput/wgcna/data/{stims}_modules.tsv") |>
+    glue("../01_rnaseq_lowinput/3_wgcna/data/{stims}_modules.tsv") |>
     setNames(stims) |>
     map_dfr(~read_tsv(.) |>
 	    count(module) |>
@@ -18,7 +18,7 @@ module_sizes <-
 	    .id = "stim")
 
 module_df <- 
-    glue("../bcell_lowinput/wgcna/data/{stims}_kme.tsv") |>
+    glue("../01_rnaseq_lowinput/3_wgcna/data/{stims}_kme.tsv") |>
     setNames(stims) |>
     map_dfr(~read_tsv(.) |>
 	    mutate(gene_id = str_remove(gene_id, "\\.\\d+$")) |>
@@ -37,7 +37,7 @@ module_signatures <-
     map(~pull(., gene_id))
 
 # scRNA data
-bcells <- read_rds("../citeseq/data/seuratv4_qced.rds")
+bcells <- read_rds("../04_citeseq/2-processing/data/v4_seurat_qced.rds")
 
 # Add module score
 bcells_sig <- 
@@ -86,4 +86,4 @@ heat <-
     guides(fill = guide_colorbar(barwidth = .5)) +
     labs(x = "Module", y = "Cluster", fill = "Score")
 
-ggsave("modules_in_scRNAseq.png", heat, height = 2, width = 6.5)
+ggsave("./sfigs/sfig7_modules_in_sc.png", heat, height = 2, width = 6.5)

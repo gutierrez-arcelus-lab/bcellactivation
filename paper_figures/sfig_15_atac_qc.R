@@ -1,10 +1,11 @@
 library(DESeq2)
 library(tidyverse)
 library(glue)
+library(patchwork)
 
 # meta data
 samplesheet <- 
-    read_csv("../atacseq/samplesheet.csv") |>
+    read_csv("../03_atacseq/1-processing/data/samplesheet.csv") |>
     mutate(f1 = basename(fastq_1),
            donor_id = str_extract(f1, "20221025_([^_]+).*", group = 1),
            replic = paste0("REP", replicate)) |>
@@ -31,7 +32,7 @@ col_data <-
 
 # Count data
 dat <-
-    "../atacseq/results/bwa/merged_replicate/macs2/narrow_peak/consensus/consensus_peaks.mRp.clN.featureCounts.txt" |>
+    "../03_atacseq/1-processing/results/bwa/merged_replicate/macs2/narrow_peak/consensus/consensus_peaks.mRp.clN.featureCounts.txt" |>
     read_table(skip = 1)
 
 colnames(dat) <- gsub("\\.mLb\\.\\clN\\.sorted\\.bam", "", colnames(dat))
@@ -74,9 +75,8 @@ rlog_df <-
 
 corrs_df <- 
     rlog_df |>
-    group_by(condition, donor) |>
-    summarize(pearson_r = cor(value, REP1, method = "pearson")) |>
-    ungroup() |>
+    summarize(pearson_r = cor(value, REP1, method = "pearson"),
+	      .by = c(condition, donor)) |>
     mutate(label = paste0("R = ", round(pearson_r, 2)))
 
 plot_out <- 
@@ -106,13 +106,13 @@ plot_out <-
 
 # plot QC metrics
 stim_colors <- 
-    read_tsv("./figure_colors.txt", col_names = c("stim", "timep", "col")) |>
-    mutate(condition = glue("{stim} {timep}hrs")) |>
-    select(condition, col) |>
+    read_tsv("./figure_colors_final.txt") |>
+    mutate(stim = glue("{Condition} {Time}hrs")) |>
+    select(stim, Hex) |>
     deframe()
 
 frip_df <- 
-    "../atacseq/results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_frip_score-plot.txt" |>
+    "../03_atacseq/1-processing/results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_frip_score-plot.txt" |>
     read_tsv() |>
     pivot_longer(-Sample) |>
     drop_na() |>
@@ -151,7 +151,7 @@ frip_plot <-
     labs(y = "Donor", x = "FriP", title = "Fraction of reads in peaks") 
 
 peak_annot <- 
-    "../atacseq/results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_peak_annotation-plot.txt" |>
+    "../03_atacseq/1-processing/results/multiqc/narrow_peak/B_cell_atac_nfcore_multiqc_report_data/multiqc_mlib_peak_annotation-plot.txt" |>
     read_tsv() |>
     pivot_longer(-Sample, names_to = "annotation") |>
     left_join(unite(samplesheet, "Sample", c(condition, replic), sep = "_", remove = FALSE), join_by(Sample)) |>
@@ -205,13 +205,9 @@ annot_plot <-
     ) +
     labs(y = "Donor", x = "Percentage", title = "HOMER peak annotation") 
 
-library(patchwork)
 
-ggsave("atac_qc.png", 
+ggsave("sfigs/sfig15_atac_qc.png", 
        free(plot_out) / (frip_plot + annot_plot) +
            plot_layout(heights = c(2, 1)) +
            plot_annotation(tag_levels = "A"),
        height = 6.5, width = 6.5)
-
-
-

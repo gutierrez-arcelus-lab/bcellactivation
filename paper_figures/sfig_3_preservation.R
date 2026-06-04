@@ -19,24 +19,24 @@ library(WGCNA)
 # The top level is the condition name, containing a list with the 'data' matrix.
 multi_expr <-
     list(
-	 "CD40L"    = list(data = read_rds("./data/CD40L_counts.rds")),
-	 "TLR9"     = list(data = read_rds("./data/TLR9_counts.rds")),
-	 "TLR7"     = list(data = read_rds("./data/TLR7_counts.rds")),
-	 "BCR"      = list(data = read_rds("./data/BCR_counts.rds")),
-	 "BCR-TLR7" = list(data = read_rds("./data/BCR-TLR7_counts.rds")),
-	 "DN2"      = list(data = read_rds("./data/DN2_counts.rds"))
+	 "CD40L"    = list(data = read_rds("../01_rnaseq_lowinput/3_wgcna/data/CD40L_counts.rds")),
+	 "TLR9"     = list(data = read_rds("../01_rnaseq_lowinput/3_wgcna/data/TLR9_counts.rds")),
+	 "TLR7"     = list(data = read_rds("../01_rnaseq_lowinput/3_wgcna/data/TLR7_counts.rds")),
+	 "BCR"      = list(data = read_rds("../01_rnaseq_lowinput/3_wgcna/data/BCR_counts.rds")),
+	 "BCR-TLR7" = list(data = read_rds("../01_rnaseq_lowinput/3_wgcna/data/BCR-TLR7_counts.rds")),
+	 "DN2"      = list(data = read_rds("../01_rnaseq_lowinput/3_wgcna/data/DN2_counts.rds"))
     )
 
 # Create a matching list of named vectors containing the module color assignments 
 # for each gene in each condition.
 multi_color <- 
     list(
-	 "CD40L"    = read_tsv("./data/CD40L_modules.tsv") |> deframe(),
-	 "TLR9"     = read_tsv("./data/TLR9_modules.tsv") |> deframe(),
-	 "TLR7"     = read_tsv("./data/TLR7_modules.tsv") |> deframe(),
-	 "BCR"      = read_tsv("./data/BCR_modules.tsv") |> deframe(),
-	 "BCR-TLR7" = read_tsv("./data/BCR-TLR7_modules.tsv") |> deframe(),
-	 "DN2"      = read_tsv("./data/DN2_modules.tsv") |> deframe()
+	 "CD40L"    = read_tsv("../01_rnaseq_lowinput/3_wgcna/data/CD40L_modules.tsv") |> deframe(),
+	 "TLR9"     = read_tsv("../01_rnaseq_lowinput/3_wgcna/data/TLR9_modules.tsv") |> deframe(),
+	 "TLR7"     = read_tsv("../01_rnaseq_lowinput/3_wgcna/data/TLR7_modules.tsv") |> deframe(),
+	 "BCR"      = read_tsv("../01_rnaseq_lowinput/3_wgcna/data/BCR_modules.tsv") |> deframe(),
+	 "BCR-TLR7" = read_tsv("../01_rnaseq_lowinput/3_wgcna/data/BCR-TLR7_modules.tsv") |> deframe(),
+	 "DN2"      = read_tsv("../01_rnaseq_lowinput/3_wgcna/data/DN2_modules.tsv") |> deframe()
     )
 
 # ------------------------------------------------------------------------------
@@ -109,7 +109,6 @@ z_tidy <-
 z_plot <- 
     ggplot(z_tidy, aes(x = module_id, y = test_net)) +
     geom_tile(aes(fill = zsumm), color = "white") +
-    #scale_fill_viridis_c(option = "magma") +
     scale_fill_gradient2(low = "beige",
 			mid = "gold",
 			high = "tomato3",
@@ -134,4 +133,4 @@ z_plot <-
     guides(fill = guide_colorbar(barwidth = .5, barheight = 5)) +
     labs(x = "Module", y = NULL, fill = expression(Z[summ]))
 
-ggsave("./plots/fig_s3.png", z_plot, height = 1.75, width = 6.5)
+ggsave("./sfigs/sfig3_zsummary.png", z_plot, height = 1.75, width = 6.5)

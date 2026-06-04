@@ -2,7 +2,7 @@ library(tidyverse)
 library(ggpointdensity)
 
 dge_low <- 
-    "../bcell_lowinput/results/edger/diff_expr_all_times_all_genes.tsv" |>
+    "../01_rnaseq_lowinput/2_dge/results/edger/diff_expr_all_times_all_genes.tsv" |>
     read_tsv() |>
     filter(contrast %in% c("TLR7.24-Unstim.0", "BCR.24-Unstim.0", "DN2.24-Unstim.0")) |>
     mutate(stim = str_extract(contrast, "(.+)-.+", group = TRUE),
@@ -11,7 +11,7 @@ dge_low <-
     select(stim, gene_id, logFC:FDR)
 
 dge_high <- 
-    "../bcell_rnaseq/5-dge/results_v38.tsv" |>
+    "../02_rnaseq_stdinput/4-dge/results/edger/results_v38.tsv" |>
     read_tsv()
 
 dge_merge <- 
@@ -54,7 +54,7 @@ dge_plot <-
 	 y = "Standard-input LFC (N=16)"
     )
 
-ggsave("./sfig_rnaseq_comparison.png", width = 5, height = 2, dpi = 300)
+ggsave("./sfigs/sfig13_rnaseq_comparison.png", width = 5, height = 2, dpi = 300)
 
 
 select(dge_low, stim, gene_id) |> mutate(low = 1) |> count(stim)

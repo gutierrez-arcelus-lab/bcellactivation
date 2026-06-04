@@ -17,7 +17,7 @@ my_stims <- c("CD40L", "TLR9", "TLR7", "BCR", "BCR-TLR7", "DN2")
 # 1. Calculate Module Sizes and Generate Module IDs
 # ------------------------------------------------------------------------------
 module_sizes <-
-    glue("./data/{my_stims}_modules.tsv") |>
+    glue("../01_rnaseq_lowinput/3_wgcna/data/{my_stims}_modules.tsv") |>
     setNames(my_stims) |>
     map_dfr(~read_tsv(.) |>
 	    count(module) |>
@@ -33,7 +33,7 @@ module_sizes <-
 # 2. Import Gene Ontology Results
 # ------------------------------------------------------------------------------
 go_all <-
-    glue("./data/{my_stims}_go.tsv") |>
+    glue("../01_rnaseq_lowinput/3_wgcna/data/{my_stims}_go.tsv") |>
     setNames(my_stims) |>
     map_dfr(read_tsv, .id = "stim") |>
     select(stim, module, Description, geneID, pvalue, p.adjust, qvalue)
@@ -65,4 +65,4 @@ stab_list <-
 
 # Passing a named list to write_xlsx automatically generates an Excel workbook 
 # where each list element becomes its own named sheet.
-write_xlsx(stab_list, "./data/supplementary_data_2.xlsx")
+write_xlsx(stab_list, "./data/supplementary_data_2_modules_go.xlsx")

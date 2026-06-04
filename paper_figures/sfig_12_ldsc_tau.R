@@ -2,15 +2,15 @@ library(tidyverse)
 library(ggbeeswarm)
 
 fig_colors <-
-    "./figure_colors.txt" |>
-    read_tsv(col_names = c("stim", "timep", "col")) |>
-    filter(timep == 24,
-	   stim %in% c("IL-4c", "TLR7c", "BCRc", "DN2c")) |>
-    select(stim, col) |>
+    "./figure_colors_final.txt" |>
+    read_tsv() |>
+    filter(Time == 24,
+	   Condition %in% c("IL-4c", "TLR7c", "BCRc", "DN2c")) |>
+    select(Condition, Hex) |>
     deframe()
 
 ldsc_df <- 
-    "../atacseq/ldsc/compiled_results.tsv" |>
+    "../03_atacseq/4-heritability/compiled_results.tsv" |>
     read_tsv() |>
     mutate(set = recode(set, 
 			"IL4" = "IL-4c", 
@@ -63,4 +63,4 @@ plot_out <-
 	labs(x = NULL, y = expression(tau * "*")) +
     guides(fill = "none")
 
-ggsave("./ldsc_tau.png", plot_out, width = 2.75, height = 3)
+ggsave("./sfigs/sfig12_ldsc_tau.png", plot_out, width = 2.75, height = 3)
