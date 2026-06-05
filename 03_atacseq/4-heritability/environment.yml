@@ -1,0 +1,55 @@
+name: ldsc
+channels:
+  - bioconda
+  - defaults
+dependencies:
+  - _libgcc_mutex=0.1
+  - _openmp_mutex=5.1
+  - bedtools=2.30.0
+  - bitarray=0.8.3
+  - blas=1.0
+  - bzip2=1.0.8
+  - c-ares=1.19.1
+  - ca-certificates=2025.12.2
+  - certifi=2020.6.20
+  - curl=8.7.1
+  - intel-openmp=2023.1.0
+  - krb5=1.20.1
+  - libcurl=8.7.1
+  - libdeflate=1.0
+  - libedit=3.1.20230828
+  - libev=4.33
+  - libffi=3.4.4
+  - libgcc-ng=11.2.0
+  - libgfortran-ng=7.5.0
+  - libgfortran4=7.5.0
+  - libgomp=11.2.0
+  - libnghttp2=1.57.0
+  - libssh2=1.11.0
+  - libstdcxx-ng=11.2.0
+  - mkl=2020.2
+  - mkl-service=2.3.0
+  - mkl_fft=1.0.15
+  - mkl_random=1.1.0
+  - ncurses=6.4
+  - nose=1.3.7
+  - openssl=3.0.18
+  - pip=19.3.1
+  - pybedtools=0.7.10
+  - pysam=0.15.3
+  - python=2.7.18
+  - python-dateutil=2.8.2
+  - pytz=2021.3
+  - readline=8.2
+  - setuptools=44.0.0
+  - six=1.16.0
+  - sqlite=3.45.3
+  - tk=8.6.14
+  - wheel=0.37.1
+  - xz=5.2.10
+  - zlib=1.2.13
+  - pip:
+      - numpy==1.16.0
+      - pandas==0.20.0
+      - scipy==0.18.0
+prefix: /home/ch229163/miniconda3/envs/ldsc
