@@ -3,9 +3,9 @@
 # ==============================================================================
 # Description:  Slurm array script for performing quality control and adapter 
 #               trimming on paired-end RNA-seq data using Trim Galore & FastQC.
-# Input:        description_hsapiens_longformat.tsv (List of samples)
-#               - Column 8: Path to Read 1 (FASTQ)
-#               - Column 9: Path to Read 2 (FASTQ)
+# Input:        metadata_longformat.tsv (List of samples)
+#               - Column 2: Path to Read 1 (FASTQ)
+#               - Column 3: Path to Read 2 (FASTQ)
 # Output:       Trimmed FASTQ files and FastQC HTML reports.
 # Dependencies: Biogrids (Trim Galore, FastQC v0.11.9)
 # ==============================================================================
