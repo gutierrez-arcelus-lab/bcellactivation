@@ -11,16 +11,27 @@ quality assessment, and threshold filtering.
         reads that drop below 50bp
 
   - 2)  Runs `fastqc` on the resulting trimmed files.
-- **Input:** `description_hsapiens_longformat.tsv` (a sample sheet
-  table)
+- **Input:** `metadata_longformat.tsv` (a sample sheet table)
 - **Output:** Trimmed `.fq.gz` files and FastQC `.zip`/`.html` reports
   in the `lowinput` directory.
+
+The sample sheet file must be in **long format**. If a single biological
+sample was sequenced across multiple lanes or batches to increase depth,
+each FASTQ pair must have its own distinct row.
+
+**Expected Format (3 columns, with header):**
+
+| sample_id      | fastq_R1                    | fastq_R2                    |
+|:---------------|:----------------------------|:----------------------------|
+| 10430_1\_CD40L | `/path/to/S1_L001_R1.fq.gz` | `/path/to/S1_L001_R2.fq.gz` |
+| 10430_1\_CD40L | `/path/to/S1_L002_R1.fq.gz` | `/path/to/S1_L002_R2.fq.gz` |
+| 10431_1\_TLR9  | `/path/to/S2_L001_R1.fq.gz` | `/path/to/S2_L001_R2.fq.gz` |
 
 #### Step 2. Generate MultiQC Report (Command Line)
 
 - **Action:** Aggregates all individual FastQC reports into a single
   parsed summary table.
-- **Command:** `multiqc /path/to/fastq/lowinput/`
+- **Command:** `cd ./results; multiqc .`
 
 # R Session Information
 
@@ -34,7 +45,7 @@ quality assessment, and threshold filtering.
     ##  collate  en_US.UTF-8
     ##  ctype    en_US.UTF-8
     ##  tz       America/New_York
-    ##  date     2026-05-26
+    ##  date     2026-06-10
     ##  pandoc   2.19.2 @ /programs/biogrids/x86_64-linux/rstudio/2022.02.3/bin// (via rmarkdown)
     ## 
     ## ─ Packages ───────────────────────────────────────────────────────────────────

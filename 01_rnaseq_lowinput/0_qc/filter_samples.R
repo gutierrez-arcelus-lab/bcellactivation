@@ -13,33 +13,27 @@
 
 library(tidyverse)
 
-# Fetch the system environment variable for the working directory
-# This is where the output of FASTQ was stored
-temp_dir <- Sys.getenv("TEMP_WORK")
-
 # ------------------------------------------------------------------------------
 # 1. Parse Metadata
 # ------------------------------------------------------------------------------
 meta_long <- 
-    "../data/description_hsapiens_qc.tsv" |>
+    "./data/metadata_longformat.tsv" |>
     read_tsv() |>
     # Reshape so Read 1 and Read 2 are in the same column
     pivot_longer(fq1:fq2, names_to = "dummy", values_to = "fastq") |>
-    # Expand comma-separated FASTQ lists (from pooled lanes) into individual rows
-    separate_rows(fastq, sep = ",") |>
     mutate(
 	   # parse fastq names
 	   fastq = basename(fastq),
            fastq = sub("\\.fq\\.gz", "", fastq),
 	   # Extract the lane number using regex
-	   lane = sub("^(\\d)_.+$", "\\1", fastq)) |>
+	   lane = sub("^d?(\\d)_.+$", "\\1", fastq)) |>
     select(-barcode_seq, -dummy)
 
 # ------------------------------------------------------------------------------
 # 2. Load MultiQC Sequence Counts
 # ------------------------------------------------------------------------------
 fastqc <-
-    file.path(temp_dir, "fastq/lowinput/multiqc_data/mqc_fastqc_sequence_counts_plot_1.txt") |>
+    "results/multiqc_data/mqc_fastqc_sequence_counts_plot_1.txt" |>
     read_tsv()
 
 # ------------------------------------------------------------------------------

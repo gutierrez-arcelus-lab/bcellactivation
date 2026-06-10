@@ -43,20 +43,21 @@ cd ${SLURM_SUBMIT_DIR}
 # INPUT PARSING
 # ------------------------------------------------------------------------------
 # Define the sample sheet path
-SAMPLELIST="./data/description_hsapiens_longformat.tsv"
+SAMPLELIST="./data/metadata_longformat.tsv"
 
 # Extract the input FASTQ paths for the current array task.
 # FNR>1 skips the header row.
 # FNR==ARRID matches the Slurm Array ID to the correct row in the TSV.
-# Read 1 is extracted from column 8, Read 2 is extracted from column 9.
-FQ1=$( awk 'FNR>1' $SAMPLELIST | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $8 }')
-FQ2=$( awk 'FNR>1' $SAMPLELIST | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $9 }')
+# Read 1 is extracted from column 2, Read 2 is extracted from column 3.
+FQ1=$( awk 'FNR>1' $SAMPLELIST | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $2 }')
+FQ2=$( awk 'FNR>1' $SAMPLELIST | awk -v ARRID="$SLURM_ARRAY_TASK_ID" 'FNR==ARRID { print $3 }')
 
 # ------------------------------------------------------------------------------
 # OUTPUT DIRECTORY
 # ------------------------------------------------------------------------------
-# Ensure the TEMP_WORK environment variable is set prior to running, or hardcode it here.
-OUT=${TEMP_WORK}/fastq/lowinput
+
+# Adjust to your desired output directory
+OUT="./results"
 mkdir -p $OUT
 
 # ------------------------------------------------------------------------------

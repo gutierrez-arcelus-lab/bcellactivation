@@ -5,14 +5,25 @@ This directory contains the pipeline for building the transcriptome
 reference, running the quantification of gene expression, and compiling
 the outputs into a finalized count matrix.
 
-#### Step 1. `setup.R`
+#### Step 1. `setup.R` (R Script)
 
-- **Action:** Generates a sample sheet in the format: three columns
-  (sample_id, fastq_1, fastq_2) where the fastq columns are
-  comma-separated lists of all fastqs for a sample.
-- **Input:** Internal sample sheet file.
-- **Output:** `data/metadata.tsv` (Headerless table for Slurm array
-  parsing)
+- **Action:** Takes the minimal 3-column sample sheet from the previous
+  QC step (`0_qc`) and aggregates rows belonging to the same biological
+  sample. The resulting table concatenates multiple FASTQ paths (e.g.,
+  from multiple sequencing lanes) into a comma-separated string. This
+  specific format allows Salmon to process all reads for a single sample
+  simultaneously.
+- **Input:** `../0_qc/data/metadata_longformat.tsv` (from the `0_qc`
+  directory).
+- **Output:** `data/metadata.tsv` (A headerless 3-column table formatted
+  for Slurm array parsing).
+
+**Example Output (`metadata.tsv`):**
+
+| Column 1 (Sample_ID) | Column 2 (Comma-separated R1)                   | Column 3 (Comma-separated R2)                   |
+|:---------------------|:------------------------------------------------|:------------------------------------------------|
+| 10430_1\_CD40L       | `/path/S1_L001_R1.fq.gz,/path/S1_L002_R1.fq.gz` | `/path/S1_L001_R2.fq.gz,/path/S1_L002_R2.fq.gz` |
+| 10431_1\_TLR9        | `/path/S2_L001_R1.fq.gz`                        | `/path/S2_L001_R2.fq.gz`                        |
 
 #### Step 2. `rsem.slurm` (Slurm Job)
 
@@ -25,7 +36,7 @@ the outputs into a finalized count matrix.
 #### Step 3. `salmon_index.slurm` (Slurm Job)
 
 - **Action:** Builds the quasi-mapping index required by Salmon using
-  the transcript FASTA generated in Step 1.
+  the transcript FASTA generated in Step 2.
 - **Input:** `gencode.v38.primary_assembly.transcripts.fa`
 - **Output:** Compiled Salmon index.
 
@@ -33,7 +44,8 @@ the outputs into a finalized count matrix.
 
 - **Action:** Quantifies transcript abundance for all samples using
   Salmon.
-- **Input:** The sample sheet (`metadata.tsv`) and the Salmon index.
+- **Input:** The sample sheet (`data/metadata.tsv`) and the Salmon
+  index.
 - **Output:** Transcript quantification directories for each sample
   containing `quant.sf` files (Saved in the `/results/` subdirectory).
 
@@ -42,13 +54,15 @@ the outputs into a finalized count matrix.
 - **Action:** Imports transcript-level quantifications from the Salmon
   output directories, and aggregates the data into total gene-level read
   counts and TPMs.
-- **Input:** `quant.sf` files, `metadata.tsv`, and
+- **Input:** `quant.sf` files, `data/metadata.tsv`, and
   `gencode.v38.primary_assembly.annotation.gtf.gz`.
 - **Output:** `expression_pooled_reps.tsv` (Final gene-level counts) and
   `expression_pooled_reps_transcriptlevel.tsv` (Transcript-level
   counts).
 
-#### R Session Information
+------------------------------------------------------------------------
+
+### R Session Information
 
     ## ─ Session info ───────────────────────────────────────────────────────────────
     ##  setting  value
@@ -60,7 +74,7 @@ the outputs into a finalized count matrix.
     ##  collate  en_US.UTF-8
     ##  ctype    en_US.UTF-8
     ##  tz       America/New_York
-    ##  date     2026-05-26
+    ##  date     2026-06-10
     ##  pandoc   2.19.2 @ /programs/biogrids/x86_64-linux/rstudio/2022.02.3/bin// (via rmarkdown)
     ## 
     ## ─ Packages ───────────────────────────────────────────────────────────────────

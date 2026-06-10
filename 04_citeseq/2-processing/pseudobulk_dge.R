@@ -271,4 +271,4 @@ supp_data_igd_igm <-
 	 "RNA_cluster" = cluster_res)
 
 write_xlsx(supp_data_igd_igm, 
-	   "./data/Supplementary_Data_DGE_citeseq.xlsx")
+	   "../../supp_data/data/Supplementary_Data_DGE_citeseq.xlsx")
