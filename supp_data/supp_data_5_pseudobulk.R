@@ -4,9 +4,9 @@
 #               (both RNA and ADT) at the donor/condition level, allowing us to 
 #               use robust bulk RNA-seq statistical models (edgeR) while strictly 
 #               accounting for paired biological donor variance.
-# Input:        1. ./data/v4_seurat_qced.rds (Clean Seurat object)
-#               2. ../data/cellranger/1984/.../features.tsv.gz (Gene annotations)
-# Output:       ../supp_data/data/Supplementary_Data_DGE_citeseq.xlsx
+# Input:        1. v4_seurat_qced.rds (Clean Seurat object)
+#               2. features.tsv.gz (Gene annotations)
+# Output:       Supplementary_Data_5_DGE_citeseq.xlsx
 #               (Master Excel file containing ADT, RNA, and Cluster DGE results)
 # ==============================================================================
 
@@ -19,11 +19,11 @@ library(edgeR)
 library(writexl)
 
 # Load the finalized, QC-filtered Seurat object
-bcells <- read_rds("./data/v4_seurat_qced.rds")
+bcells <- read_rds("../04_citeseq/2-processing/data/v4_seurat_qced.rds")
 
 # Load gene annotations from the Cell Ranger output
 features <- 
-    "../data/cellranger/1984/filtered_feature_bc_matrix/features.tsv.gz" |>
+    "../04_citeseq/data/cellranger/1984/filtered_feature_bc_matrix/features.tsv.gz" |>
     read_tsv(col_names = c("gene_id", "gene_name", "phenotype"))
 
 # Standardize the order of stimulation conditions for factor levels
@@ -270,5 +270,4 @@ supp_data_igd_igm <-
 	 "RNA_condition" = rna_res, 
 	 "RNA_cluster" = cluster_res)
 
-write_xlsx(supp_data_igd_igm, 
-	   "../../supp_data/data/Supplementary_Data_DGE_citeseq.xlsx")
+write_xlsx(supp_data_igd_igm, "./data/Supplementary_Data_5_DGE_citeseq.xlsx")
