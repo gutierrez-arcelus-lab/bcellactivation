@@ -23,8 +23,8 @@
 #SBATCH --job-name=FASTQC
 #SBATCH --mail-user=vitor.aguiar@childrens.harvard.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH -o /logs/FASTQC.%A-%a.out
-#SBATCH -e /logs/FASTQC.%A-%a.err
+#SBATCH -o ./logs/FASTQC.%A-%a.out
+#SBATCH -e ./logs/FASTQC.%A-%a.err
 
 # ------------------------------------------------------------------------------
 # ENVIRONMENT SETUP
