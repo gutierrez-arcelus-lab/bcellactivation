@@ -31,8 +31,7 @@
 # ------------------------------------------------------------------------------
 # Note: Biogrids is our institutional software environment manager. 
 # If running this script on a different HPC cluster, replace the following 
-# two lines with your local equivalent (e.g., `module load fastqc/0.11.9` 
-# or `conda activate rna_seq_env`).
+# two lines with your local equivalent (e.g., `module load fastqc/0.11.9`)
 source /programs/biogrids.shrc
 export FASTQC_X=0.11.9
 
