@@ -31,8 +31,7 @@ gene_tx <-
 # ------------------------------------------------------------------------------
 # Read the sample metadata (expecting headerless: sample_id, fastq_paths)
 meta <- 
-    read_tsv("../data/metadata.tsv", col_names = c("sample_id", "fq1", "fq2")) |>
-    filter(sample_id %in% samples_pass$sample_name)
+    read_tsv("./data/metadata.tsv", col_names = c("sample_id", "fq1", "fq2"))
 
 salmon_files <- 
     sprintf("./results/%s/quant.sf", meta$sample_id) |>
